@@ -1,0 +1,48 @@
+<UserControl x:Class="ChineseChess.WPF.Views.ChessBoardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             mc:Ignorable="d" 
+             d:DataContext="{d:DesignInstance Type=vm:ChessBoardViewModel}"
+             Height="600" Width="540">
+    <UserControl.Resources>
+        <!-- Converters could be added here -->
+    </UserControl.Resources>
+    
+    <Grid>
+        <!-- Board Background (Simple Lines) -->
+        <!-- Just an Image placeholder or simple color for now -->
+        <Border Background="#F0D9B5" BorderBrush="Black" BorderThickness="2" />
+        
+        <!-- Pieces Layer -->
+        <ItemsControl ItemsSource="{Binding Squares}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Rows="10" Columns="9"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Button Command="{Binding DataContext.SquareClickCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                            CommandParameter="{Binding}"
+                            Background="Transparent" BorderThickness="0"
+                            Padding="0">
+                        <Grid>
+                            <!-- Highlight -->
+                            <Ellipse Fill="Red" Opacity="0.5" Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <Ellipse Fill="Green" Width="10" Height="10" Visibility="{Binding IsValidMove, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            
+                            <!-- Piece Visualization (Text for now to avoid assets dependency issues, can be replaced by Image) -->
+                            <TextBlock Text="{Binding Piece.Type}" 
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{Binding Piece.Color, Converter={StaticResource ColorConverter}}"
+                                       FontWeight="Bold"/>
+                        </Grid>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</UserControl>

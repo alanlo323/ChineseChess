@@ -1,0 +1,52 @@
+﻿using ChineseChess.Application.Interfaces;
+using ChineseChess.Application.Services;
+using ChineseChess.Infrastructure.AI.Search;
+using ChineseChess.WPF.ViewModels;
+using ChineseChess.WPF.Views;
+using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.Windows;
+
+namespace ChineseChess.WPF;
+
+public partial class App : System.Windows.Application
+{
+    public IServiceProvider Services { get; }
+
+    public new static App Current => (App)System.Windows.Application.Current;
+
+    public App()
+    {
+        Services = ConfigureServices();
+    }
+
+    private static IServiceProvider ConfigureServices()
+    {
+        var services = new ServiceCollection();
+
+        // Infrastructure
+        services.AddSingleton<IAiEngine, SearchEngine>();
+
+        // Application
+        services.AddSingleton<IGameService, GameService>();
+
+        // ViewModels
+        services.AddTransient<MainViewModel>();
+        services.AddTransient<ChessBoardViewModel>();
+        services.AddTransient<ControlPanelViewModel>();
+
+        // Views
+        services.AddTransient<MainWindow>();
+
+        return services.BuildServiceProvider();
+    }
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        var mainWindow = Services.GetRequiredService<MainWindow>();
+        mainWindow.DataContext = Services.GetRequiredService<MainViewModel>();
+        mainWindow.Show();
+    }
+}
