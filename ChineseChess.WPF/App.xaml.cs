@@ -2,7 +2,7 @@
 using ChineseChess.Application.Services;
 using ChineseChess.Infrastructure.AI.Search;
 using ChineseChess.WPF.ViewModels;
-using ChineseChess.WPF.Views;
+using MainWindowView = ChineseChess.WPF.Views.MainWindow;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Windows;
@@ -36,7 +36,7 @@ public partial class App : System.Windows.Application
         services.AddTransient<ControlPanelViewModel>();
 
         // Views
-        services.AddTransient<MainWindow>();
+        services.AddTransient<MainWindowView>();
 
         return services.BuildServiceProvider();
     }
@@ -45,7 +45,7 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
-        var mainWindow = Services.GetRequiredService<MainWindow>();
+        var mainWindow = Services.GetRequiredService<MainWindowView>();
         mainWindow.DataContext = Services.GetRequiredService<MainViewModel>();
         mainWindow.Show();
     }

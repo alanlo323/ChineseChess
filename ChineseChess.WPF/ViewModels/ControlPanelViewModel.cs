@@ -1,7 +1,8 @@
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.WPF.Core;
-using System.Collections.ObjectModel;
+using System;
+using System.Collections.Generic;
 using System.Windows.Input;
 
 namespace ChineseChess.WPF.ViewModels;
@@ -12,6 +13,8 @@ public class ControlPanelViewModel : ObservableObject
     private GameMode _selectedMode = GameMode.PlayerVsAi;
     private string _statusMessage = "Ready";
     private int _searchDepth = 5;
+
+    public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
     public GameMode SelectedMode
     {
@@ -46,7 +49,7 @@ public class ControlPanelViewModel : ObservableObject
         _gameService = gameService;
         StartGameCommand = new RelayCommand(async _ => await _gameService.StartGameAsync(SelectedMode));
         UndoCommand = new RelayCommand(_ => _gameService.Undo());
-        HintCommand = new RelayCommand(async _ => await _gameService.GetHintAsync()); // Handling result in MainVM or event?
+        HintCommand = new RelayCommand(async _ => await _gameService.GetHintAsync()); 
 
         _gameService.GameMessage += msg => StatusMessage = msg;
     }
