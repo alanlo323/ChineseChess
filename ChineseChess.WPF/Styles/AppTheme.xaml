@@ -14,8 +14,17 @@
     <Color x:Key="MoveHintColor">#6BBF75</Color>
     <Color x:Key="HintFromColor">#F2B632</Color>
     <Color x:Key="HintToColor">#5BC0FF</Color>
+    <Color x:Key="LastMoveColor">#F3D89B</Color>
     <Color x:Key="HighlightColor">#EACF75</Color>
-    <Color x:Key="BoardLineColor">#4A3422</Color>
+    <Color x:Key="BoardLineColor">#4A3620</Color>
+    <Color x:Key="BoardSurfaceDarkColor">#7A4E2A</Color>
+    <Color x:Key="BoardSurfaceMidColor">#95613A</Color>
+    <Color x:Key="BoardSurfaceLightColor">#AD7A50</Color>
+    <Color x:Key="BoardPatternDarkColor">#1B3C240E</Color>
+    <Color x:Key="BoardFrameColor">#533219</Color>
+    <Color x:Key="BoardGridColor">#5A3F29</Color>
+    <Color x:Key="BoardOuterBorderColor">#4A2D16</Color>
+    <Color x:Key="BoardRiverTextColor">#EEDBC5</Color>
     <Color x:Key="ButtonNormalColor">#C98B41</Color>
     <Color x:Key="ButtonHoverColor">#E1A65A</Color>
     <Color x:Key="ButtonPressedColor">#A46F2E</Color>
@@ -32,8 +41,14 @@
     <SolidColorBrush x:Key="MoveHintBrush" Color="{StaticResource MoveHintColor}" />
     <SolidColorBrush x:Key="HintFromBrush" Color="{StaticResource HintFromColor}" />
     <SolidColorBrush x:Key="HintToBrush" Color="{StaticResource HintToColor}" />
+    <SolidColorBrush x:Key="LastMoveBrush" Color="{StaticResource LastMoveColor}" />
     <SolidColorBrush x:Key="HighlightBrush" Color="{StaticResource HighlightColor}" />
     <SolidColorBrush x:Key="BoardLineBrush" Color="{StaticResource BoardLineColor}" />
+    <SolidColorBrush x:Key="BoardGridBrush" Color="{StaticResource BoardGridColor}" />
+    <SolidColorBrush x:Key="BoardPatternDarkBrush" Color="{StaticResource BoardPatternDarkColor}" />
+    <SolidColorBrush x:Key="BoardFrameBrush" Color="{StaticResource BoardFrameColor}" />
+    <SolidColorBrush x:Key="BoardOuterBrush" Color="{StaticResource BoardOuterBorderColor}" />
+    <SolidColorBrush x:Key="BoardRiverTextBrush" Color="{StaticResource BoardRiverTextColor}" />
     <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource WoodDarkColor}" />
     <SolidColorBrush x:Key="ButtonBaseBrush" Color="{StaticResource ButtonNormalColor}" />
     <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
@@ -47,10 +62,27 @@
     </LinearGradientBrush>
 
     <LinearGradientBrush x:Key="BoardSurfaceBrush" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#B27E46" Offset="0" />
-        <GradientStop Color="#8A5A30" Offset="0.6" />
-        <GradientStop Color="#7A4F2A" Offset="1" />
+        <GradientStop Color="{StaticResource BoardSurfaceDarkColor}" Offset="0" />
+        <GradientStop Color="{StaticResource BoardSurfaceMidColor}" Offset="0.48" />
+        <GradientStop Color="{StaticResource BoardSurfaceLightColor}" Offset="1" />
     </LinearGradientBrush>
+
+    <DrawingBrush x:Key="BoardPatternBrush" TileMode="Tile" Viewport="0,0,20,20" ViewportUnits="Absolute">
+        <DrawingBrush.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="{StaticResource BoardSurfaceBrush}"
+                                 Geometry="M0,0 L20,0 20,20 0,20 Z" />
+                <GeometryDrawing Brush="{StaticResource BoardPatternDarkBrush}"
+                                 Geometry="M0,0 L20,0 20,4 0,4 Z" />
+                <GeometryDrawing Brush="{StaticResource BoardPatternDarkBrush}"
+                                 Geometry="M10,10 L20,10 20,12 10,12 Z" />
+                <GeometryDrawing Brush="{StaticResource BoardPatternDarkBrush}"
+                                 Geometry="M4,0 L6,0 6,20 4,20 Z" />
+                <GeometryDrawing Brush="{StaticResource BoardPatternDarkBrush}"
+                                 Geometry="M14,0 16,0 16,20 14,20 Z" />
+            </DrawingGroup>
+        </DrawingBrush.Drawing>
+    </DrawingBrush>
 
     <Style x:Key="AppWindowStyle" TargetType="Window">
         <Setter Property="FontFamily" Value="{StaticResource ChineseClassicFont}" />

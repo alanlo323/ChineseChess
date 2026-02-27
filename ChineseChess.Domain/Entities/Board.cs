@@ -153,6 +153,21 @@ public class Board : IBoard
         }
     }
 
+    public bool TryGetLastMove(out Move move)
+    {
+        foreach (var state in _history)
+        {
+            if (!state.Move.IsNull)
+            {
+                move = state.Move;
+                return true;
+            }
+        }
+
+        move = Move.Null;
+        return false;
+    }
+
     public void MakeNullMove()
     {
         _zobristKey ^= ZobristHash.SideToMoveKey;

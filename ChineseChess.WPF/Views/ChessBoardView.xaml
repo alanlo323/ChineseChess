@@ -14,9 +14,11 @@
 
         <Style x:Key="SquareButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{StaticResource BoardLineBrush}" />
-            <Setter Property="BorderThickness" Value="0.5" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Focusable" Value="False" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="SnapsToDevicePixels" Value="True" />
             <Setter Property="Template">
@@ -57,107 +59,213 @@
     </UserControl.Resources>
 
     <Grid>
-        <Border Background="{StaticResource BoardSurfaceBrush}"
-                BorderBrush="{StaticResource BoardLineBrush}"
-                BorderThickness="3"
-                CornerRadius="8">
-            <Border Background="#22000000" Opacity="0.08" />
-        </Border>
+        <Border Background="{StaticResource BoardOuterBrush}"
+                BorderBrush="{StaticResource BoardOuterBrush}"
+                BorderThickness="0"
+                CornerRadius="10">
+            <Grid>
+                <Border Background="{StaticResource BoardPatternBrush}" CornerRadius="2" />
 
-        <ItemsControl ItemsSource="{Binding Squares}"
-                      HorizontalAlignment="Stretch"
-                      VerticalAlignment="Stretch">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <UniformGrid Rows="10" Columns="9" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Button Style="{StaticResource SquareButtonStyle}"
-                            Command="{Binding DataContext.SquareClickCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            CommandParameter="{Binding}">
-                        <Grid>
-                            <Border x:Name="SelectionRing"
-                                    Width="42"
-                                    Height="42"
-                                    BorderBrush="{StaticResource SelectedGlowBrush}"
-                                    BorderThickness="3"
-                                    CornerRadius="21"
-                                    Opacity="0.8"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <Canvas IsHitTestVisible="False">
+                    <Rectangle Width="540"
+                               Height="560"
+                               Stroke="{StaticResource BoardLineBrush}"
+                               StrokeThickness="2.2"
+                               RadiusX="2"
+                               RadiusY="2"
+                               Opacity="0.95" />
 
-                            <Border x:Name="HintFromRing"
-                                    Width="44"
-                                    Height="44"
-                                    BorderBrush="{StaticResource HintFromBrush}"
-                                    BorderThickness="3"
-                                    CornerRadius="22"
-                                    Opacity="0.9"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Visibility="{Binding IsHintFrom, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Path Stroke="{StaticResource BoardGridBrush}"
+                          StrokeThickness="1.2"
+                          StrokeLineJoin="Miter">
+                        <Path.Data>
+                            <PathGeometry Figures="
+M0,0 L0,280 M0,336 L0,560
+M60,0 L60,280 M60,336 L60,560
+M120,0 L120,280 M120,336 L120,560
+M180,0 L180,280 M180,336 L180,560
+M240,0 L240,280 M240,336 L240,560
+M300,0 L300,280 M300,336 L300,560
+M360,0 L360,280 M360,336 L360,560
+M420,0 L420,280 M420,336 L420,560
+M480,0 L480,280 M480,336 L480,560
+M540,0 L540,280 M540,336 L540,560" />
+                        </Path.Data>
+                    </Path>
 
-                            <Border x:Name="HintToRing"
+                    <Path Stroke="{StaticResource BoardGridBrush}"
+                          StrokeThickness="1.2"
+                          StrokeLineJoin="Miter">
+                        <Path.Data>
+                            <PathGeometry Figures="
+M0,0 L540,0
+M0,56 L540,56
+M0,112 L540,112
+M0,168 L540,168
+M0,224 L540,224
+M0,336 L540,336
+M0,392 L540,392
+M0,448 L540,448
+M0,504 L540,504
+M0,560 L540,560" />
+                        </Path.Data>
+                    </Path>
+
+                    <Path Stroke="{StaticResource BoardGridBrush}"
+                          StrokeThickness="1.8">
+                        <Path.Data>
+                            <PathGeometry Figures="
+M180,0 L360,168
+M360,0 L180,168
+M180,392 L360,560
+M360,392 L180,560" />
+                        </Path.Data>
+                    </Path>
+
+                    <TextBlock Text="楚 河"
+                               FontFamily="{StaticResource ChineseClassicFont}"
+                               FontWeight="SemiBold"
+                               FontSize="22"
+                               Foreground="{StaticResource BoardRiverTextBrush}"
+                               Opacity="0.95"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform Angle="-2" />
+                        </TextBlock.RenderTransform>
+                        <TextBlock.Effect>
+                            <DropShadowEffect BlurRadius="1.5" ShadowDepth="0" Opacity="0.2" />
+                        </TextBlock.Effect>
+                        <TextBlock.Margin>
+                            <Thickness>220,270,0,0</Thickness>
+                        </TextBlock.Margin>
+                    </TextBlock>
+
+                    <TextBlock Text="漢 界"
+                               FontFamily="{StaticResource ChineseClassicFont}"
+                               FontSize="22"
+                               FontWeight="Semibold"
+                               Foreground="{StaticResource BoardRiverTextBrush}"
+                               Opacity="0.95"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform Angle="2" />
+                        </TextBlock.RenderTransform>
+                        <TextBlock.Effect>
+                            <DropShadowEffect BlurRadius="1.5" ShadowDepth="0" Opacity="0.2" />
+                        </TextBlock.Effect>
+                        <TextBlock.Margin>
+                            <Thickness>285,270,0,0</Thickness>
+                        </TextBlock.Margin>
+                    </TextBlock>
+                </Canvas>
+
+                <ItemsControl ItemsSource="{Binding Squares}"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="10" Columns="9" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource SquareButtonStyle}"
+                                    Command="{Binding DataContext.SquareClickCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}">
+                                <Grid>
+                                    <Border x:Name="SelectionRing"
+                                            Width="42"
+                                            Height="42"
+                                            BorderBrush="{StaticResource SelectedGlowBrush}"
+                                            BorderThickness="3"
+                                            CornerRadius="21"
+                                            Opacity="0.85"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                            <Border x:Name="LastMoveRing"
                                     Width="46"
                                     Height="46"
-                                    BorderBrush="{StaticResource HintToBrush}"
+                                    BorderBrush="{StaticResource LastMoveBrush}"
                                     BorderThickness="2"
                                     CornerRadius="23"
-                                    Opacity="0.85"
+                                    Opacity="0.65"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    Visibility="{Binding IsLastMove, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                            <Ellipse Width="14"
-                                     Height="14"
-                                     Fill="{StaticResource MoveHintBrush}"
-                                     Opacity="0.75"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center"
-                                     Visibility="{Binding IsValidMove, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Border x:Name="HintFromRing"
+                                            Width="44"
+                                            Height="44"
+                                            BorderBrush="{StaticResource HintFromBrush}"
+                                            BorderThickness="3"
+                                            CornerRadius="22"
+                                            Opacity="0.9"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding IsHintFrom, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                            <Ellipse Width="18"
-                                     Height="18"
-                                     Fill="{StaticResource HintToBrush}"
-                                     Opacity="0.8"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center"
-                                     Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Border x:Name="HintToRing"
+                                            Width="46"
+                                            Height="46"
+                                            BorderBrush="{StaticResource HintToBrush}"
+                                            BorderThickness="2"
+                                            CornerRadius="23"
+                                            Opacity="0.85"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                            <TextBlock Text="{Binding Piece, Converter={StaticResource PieceTextConverter}}"
-                                       Foreground="{Binding Piece.Color, Converter={StaticResource ColorConverter}}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="FontFamily" Value="{StaticResource ChineseClassicFont}" />
-                                        <Setter Property="FontSize" Value="30" />
-                                        <Setter Property="FontWeight" Value="SemiBold" />
-                                        <Setter Property="Visibility" Value="Visible" />
-                                        <Setter Property="TextAlignment" Value="Center" />
-                                        <Setter Property="HorizontalAlignment" Value="Center" />
-                                        <Setter Property="VerticalAlignment" Value="Center" />
-                                        <Setter Property="Effect">
-                                            <Setter.Value>
-                                                <DropShadowEffect BlurRadius="3"
-                                                                  ShadowDepth="0"
-                                                                  Opacity="0.35"
-                                                                  Color="#000000" />
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Piece.IsNone}" Value="True">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Grid>
-                    </Button>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                                    <Ellipse Width="14"
+                                             Height="14"
+                                             Fill="{StaticResource MoveHintBrush}"
+                                             Opacity="0.75"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             Visibility="{Binding IsValidMove, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                                    <Ellipse Width="18"
+                                             Height="18"
+                                             Fill="{StaticResource HintToBrush}"
+                                             Opacity="0.8"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                                    <TextBlock Text="{Binding Piece, Converter={StaticResource PieceTextConverter}}"
+                                               Foreground="{Binding Piece.Color, Converter={StaticResource ColorConverter}}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="FontFamily" Value="{StaticResource ChineseClassicFont}" />
+                                                <Setter Property="FontSize" Value="30" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Setter Property="TextAlignment" Value="Center" />
+                                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                                <Setter Property="VerticalAlignment" Value="Center" />
+                                                <Setter Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect BlurRadius="3"
+                                                                          ShadowDepth="0"
+                                                                          Opacity="0.35"
+                                                                          Color="#000000" />
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Piece.IsNone}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

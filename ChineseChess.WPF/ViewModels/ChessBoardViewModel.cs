@@ -76,6 +76,8 @@ public class ChessBoardViewModel : ObservableObject
     private int? _hintFrom;
     private int? _hintTo;
     private string? _hintBoardFen;
+    private int? _lastMoveFrom;
+    private int? _lastMoveTo;
 
     public ObservableCollection<SquareViewModel> Squares { get; } = new ObservableCollection<SquareViewModel>();
     
@@ -115,7 +117,7 @@ public class ChessBoardViewModel : ObservableObject
             _hintFrom = null;
             _hintTo = null;
             _hintBoardFen = null;
-            ClearAllHighlights();
+            ClearHintHighlights();
 
             if (hint.BestMove.IsNull) return;
             var from = hint.BestMove.From;
@@ -139,8 +141,17 @@ public class ChessBoardViewModel : ObservableObject
         {
             Squares[i].Piece = board.GetPiece(i);
             Squares[i].IsSelected = false;
-            // TODO: 若歷史紀錄可用，會高亮上一手棋
         }
+
+        _lastMoveFrom = null;
+        _lastMoveTo = null;
+        if (_gameService.LastMove is { } lastMove)
+        {
+            _lastMoveFrom = lastMove.From;
+            _lastMoveTo = lastMove.To;
+        }
+
+        ApplyLastMoveHighlights();
 
         if (_hintBoardFen != null && _hintBoardFen == currentFen)
         {
@@ -227,10 +238,32 @@ public class ChessBoardViewModel : ObservableObject
         }
     }
 
+    private void ClearLastMoveHighlights()
+    {
+        foreach (var s in Squares)
+        {
+            s.IsLastMove = false;
+        }
+    }
+
     private void ClearAllHighlights()
     {
         ClearMoveHighlights();
         ClearHintHighlights();
+        ClearLastMoveHighlights();
+    }
+
+    private void ApplyLastMoveHighlights()
+    {
+        if (_lastMoveFrom.HasValue && _lastMoveFrom.Value >= 0 && _lastMoveFrom.Value < 90)
+        {
+            Squares[_lastMoveFrom.Value].IsLastMove = true;
+        }
+
+        if (_lastMoveTo.HasValue && _lastMoveTo.Value >= 0 && _lastMoveTo.Value < 90)
+        {
+            Squares[_lastMoveTo.Value].IsLastMove = true;
+        }
     }
 
     private void ApplyHintHighlights()

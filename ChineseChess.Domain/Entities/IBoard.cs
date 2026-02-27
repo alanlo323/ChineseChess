@@ -17,6 +17,7 @@ public interface IBoard
     void UnmakeMove(Move move);
     void MakeNullMove();
     void UnmakeNullMove();
+    bool TryGetLastMove(out Move move);
     
     // 狀態查詢
     bool IsCheck(PieceColor color);

@@ -11,6 +11,7 @@ public interface IGameService
     IBoard CurrentBoard { get; }
     GameMode CurrentMode { get; }
     bool IsThinking { get; }
+    Move? LastMove { get; }
     
     event Action BoardUpdated;
     event Action<string> GameMessage; // Check、Win 等訊息

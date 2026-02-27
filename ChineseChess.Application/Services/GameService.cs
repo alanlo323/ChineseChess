@@ -23,6 +23,7 @@ public class GameService : IGameService
     public IBoard CurrentBoard => _board;
     public GameMode CurrentMode => _currentMode;
     public bool IsThinking => _isThinking;
+    public Move? LastMove => _board.TryGetLastMove(out var lastMove) ? lastMove : null;
 
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
