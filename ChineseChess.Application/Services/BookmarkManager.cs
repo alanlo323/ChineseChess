@@ -6,7 +6,7 @@ namespace ChineseChess.Application.Services;
 
 public class BookmarkManager
 {
-    private readonly Dictionary<string, string> _bookmarks = new Dictionary<string, string>(); // Name -> FEN
+    private readonly Dictionary<string, string> _bookmarks = new Dictionary<string, string>(); // 書籤名稱 -> FEN
 
     public void AddBookmark(string name, string fen)
     {

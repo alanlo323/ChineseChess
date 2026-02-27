@@ -12,7 +12,7 @@ public class MainViewModel : ObservableObject
     public ChessBoardViewModel ChessBoard { get; }
     public ControlPanelViewModel ControlPanel { get; }
     
-    // Analysis Panel Data
+    // 分析面板資料
     private string _analysisText = "Waiting for analysis...";
     public string AnalysisText
     {
@@ -29,8 +29,8 @@ public class MainViewModel : ObservableObject
         gameService.HintReady += hint => OnHintReady(hint);
         gameService.ThinkingProgress += progress => OnThinkingProgress(progress);
 
-        // Listen to Service for Analysis updates if available
-        // Ideally GameService should expose analysis events or properties
+        // 若有提供，監聽 Service 的分析更新事件
+        // 理想上 GameService 應提供分析事件或可綁定屬性
     }
 
     private void OnThinkingProgress(string progress)

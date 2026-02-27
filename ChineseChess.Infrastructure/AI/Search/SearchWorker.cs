@@ -10,9 +10,9 @@ using System.Threading;
 namespace ChineseChess.Infrastructure.AI.Search;
 
 /// <summary>
-/// A single search worker for the Lazy SMP scheme.
-/// Each worker owns its own IBoard copy, killer/history tables, and node counter.
-/// The TranspositionTable and IEvaluator are shared (thread-safe) across all workers.
+/// 用於 Lazy SMP 架構的單一搜尋 worker。
+/// 每個 worker 各自持有 IBoard 複本、killer/history 表與節點計數器。
+/// TranspositionTable 與 IEvaluator 在所有 worker 間共用（thread-safe）。
 /// </summary>
 internal sealed class SearchWorker
 {
@@ -46,8 +46,8 @@ internal sealed class SearchWorker
     }
 
     /// <summary>
-    /// Run iterative deepening from depth 1 up to targetDepth.
-    /// Returns the best result found at the deepest completed depth.
+    /// 從深度 1 持續進行迭代加深到 targetDepth。
+    /// 回傳在已完成的最深層深度中找到的最佳結果。
     /// </summary>
     public SearchResult Search(int targetDepth)
     {
@@ -79,15 +79,15 @@ internal sealed class SearchWorker
         }
         catch (OperationCanceledException)
         {
-            // Return best result so far
+            // 回傳目前為止最佳結果
         }
 
         return result;
     }
 
     /// <summary>
-    /// Search a single depth and return the score. Does not run iterative deepening.
-    /// Used by the coordinator to drive per-depth iteration for the main worker.
+    /// 搜尋單一深度並回傳分數，不執行迭代加深。
+    /// 由主 worker 的外部協調器逐深度驅動時使用。
     /// </summary>
     public int SearchSingleDepth(int depth)
     {
@@ -101,7 +101,7 @@ internal sealed class SearchWorker
         return Move.Null;
     }
 
-    // --- Core Search ---
+    // --- 核心搜尋流程 ---
 
     private int Negamax(int depth, int ply, int alpha, int beta, bool skipNullMove)
     {
@@ -111,7 +111,7 @@ internal sealed class SearchWorker
 
         bool isPvNode = (beta - alpha) > 1;
 
-        // 1. TT Probe
+        // 1. TT 探測
         Move ttMove = Move.Null;
         if (_tt.Probe(_board.ZobristKey, out var entry))
         {
@@ -125,7 +125,7 @@ internal sealed class SearchWorker
             ttMove = entry.BestMove;
         }
 
-        // 2. Leaf node — drop into quiescence
+        // 2. 葉節點：進入 quiescence
         if (depth <= 0)
         {
             return Quiescence(alpha, beta, 0);
@@ -133,7 +133,7 @@ internal sealed class SearchWorker
 
         bool inCheck = _board.IsCheck(_board.Turn);
 
-        // 3. Razor Pruning (depth == 3, not in check, not PV)
+        // 3. Razor 剪枝（depth == 3，且不在將軍/非 PV）
         if (depth == 3 && !inCheck && !isPvNode)
         {
             int staticEval = _evaluator.Evaluate(_board);
@@ -144,7 +144,7 @@ internal sealed class SearchWorker
             }
         }
 
-        // 4. Null-Move Pruning
+        // 4. Null-Move 剪枝
         if (depth >= 3 && !inCheck && !skipNullMove && HasSufficientMaterial())
         {
             int R = depth > 6 ? 3 : 2;
@@ -154,7 +154,7 @@ internal sealed class SearchWorker
             if (nullScore >= beta) return beta;
         }
 
-        // 5. Futility pruning flag
+        // 5. Futility 剪枝旗標
         bool futilityPruning = false;
         if (depth <= 2 && !inCheck && !isPvNode)
         {
@@ -165,7 +165,7 @@ internal sealed class SearchWorker
             }
         }
 
-        // 6. Generate & order moves
+        // 6. 產生並排序著法
         var moves = _board.GenerateLegalMoves().ToList();
 
         if (moves.Count == 0)
@@ -186,7 +186,7 @@ internal sealed class SearchWorker
             bool isCapture = !_board.GetPiece(move.To).IsNone;
             bool isKiller = IsKillerMove(ply, move);
 
-            // 7. Futility pruning — skip quiet moves when hopeless
+            // 7. Futility 剪枝：若無望則略過靜態著法
             if (futilityPruning && i > 0 && !isCapture && !isKiller)
             {
                 continue;
@@ -194,13 +194,13 @@ internal sealed class SearchWorker
 
             _board.MakeMove(move);
 
-            // 8. Check Extension
+            // 8. 將軍延伸（Check Extension）
             bool givesCheck = _board.IsCheck(_board.Turn);
             int extension = givesCheck ? 1 : 0;
 
             int score;
 
-            // 9. Late Move Reductions (LMR)
+            // 9. 後序著法減枝（LMR）
             int reduction = 0;
             if (i >= 4 && depth >= 3 && !isCapture && !givesCheck && !isKiller && !inCheck)
             {
@@ -285,7 +285,7 @@ internal sealed class SearchWorker
         return alpha;
     }
 
-    // --- Move Ordering ---
+    // --- 著法排序 ---
 
     private void OrderMoves(List<Move> moves, Move ttMove, int ply)
     {
@@ -353,7 +353,7 @@ internal sealed class SearchWorker
         return move == _killerMoves[ply, 0] || move == _killerMoves[ply, 1];
     }
 
-    // --- Helpers ---
+    // --- 輔助邏輯 ---
 
     private bool HasSufficientMaterial()
     {

@@ -38,10 +38,10 @@ public class SearchEngine : IAiEngine
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var token = linkedCts.Token;
 
-            // --- Create main worker ---
+            // --- 建立主 worker ---
             var mainWorker = new SearchWorker(board.Clone(), _evaluator, _tt, token);
 
-            // --- Launch helper workers (each runs independent iterative deepening) ---
+            // --- 啟動輔助 worker（各自獨立執行迭代加深） ---
             var helperWorkers = new SearchWorker[threadCount - 1];
             var helperTasks = new Task[threadCount - 1];
 
@@ -58,7 +58,7 @@ public class SearchEngine : IAiEngine
                     TaskScheduler.Default);
             }
 
-            // --- Main worker: iterative deepening with progress reporting ---
+            // --- 主 worker：以迭代加深並回報進度 ---
             var result = new SearchResult();
             var stopwatch = Stopwatch.StartNew();
             var progressState = new SearchProgressState();
@@ -119,7 +119,7 @@ public class SearchEngine : IAiEngine
                 {
                     if (token.IsCancellationRequested) return;
                     try { ReportProgress(true, 0, 0, null); }
-                    catch { /* Ignore background progress report failures. */ }
+                    catch { /* 忽略背景進度回報可忽略的失敗。 */ }
                 };
                 heartbeatTimer.Start();
                 ReportProgress(true, 0, 0, null);
@@ -152,18 +152,18 @@ public class SearchEngine : IAiEngine
             }
             catch (OperationCanceledException)
             {
-                // Return best result so far
+            // 回傳目前為止的最佳結果
             }
             finally
             {
                 stopwatch.Stop();
 
-                // Signal all helpers to stop
+                // 通知所有輔助 worker 停止
                 linkedCts.Cancel();
 
-                // Wait for helpers to finish gracefully
+                // 等待輔助 worker 平順結束
                 try { Task.WaitAll(helperTasks); }
-                catch { /* Helpers throw OperationCanceledException — expected */ }
+                catch { /* Helper 可能拋出 OperationCanceledException，屬於預期狀況 */ }
 
                 if (heartbeatTimer != null)
                 {

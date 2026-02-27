@@ -7,7 +7,7 @@ public readonly struct Move : IEquatable<Move>
     public byte From { get; }
     public byte To { get; }
     
-    // For Move Ordering (not strictly part of the move identity, but useful)
+    // 用於 Move Ordering（不屬於 move 身分識別核心，但有實作上的用途）
     public int Score { get; } 
 
     public Move(byte from, byte to, int score = 0)

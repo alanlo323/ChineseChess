@@ -5,17 +5,17 @@ namespace ChineseChess.Domain.Helpers;
 
 public static class ZobristHash
 {
-    // 90 board positions, 14 piece types (7 types * 2 colors)
-    // Index mapping: (Color - 1) * 7 + (Type - 1)
-    // Red: 0-6, Black: 7-13
+    // 90 個棋格、14 種棋子（7 種*2 顏色）
+    // 索引對應： (Color - 1) * 7 + (Type - 1)
+    // Red：0-6、Black：7-13
     private static readonly ulong[,] PieceKeys = new ulong[90, 14];
     public static readonly ulong SideToMoveKey;
 
     static ZobristHash()
     {
-        var rng = new Random(12345); // Fixed seed for reproducibility
+        var rng = new Random(12345); // 固定 seed 以保持可重現性
 
-        // Initialize piece keys
+        // 初始化各棋子雜湊鍵
         for (int i = 0; i < 90; i++)
         {
             for (int j = 0; j < 14; j++)

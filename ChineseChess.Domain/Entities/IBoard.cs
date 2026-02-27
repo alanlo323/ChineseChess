@@ -9,20 +9,20 @@ public interface IBoard
     PieceColor Turn { get; }
     ulong ZobristKey { get; }
     
-    // Move Generation
+    // 走法產生
     IEnumerable<Move> GenerateLegalMoves();
     
-    // State Manipulation
+    // 狀態變更
     void MakeMove(Move move);
     void UnmakeMove(Move move);
     void MakeNullMove();
     void UnmakeNullMove();
     
-    // Status
+    // 狀態查詢
     bool IsCheck(PieceColor color);
     bool IsCheckmate(PieceColor color);
     
-    // Utilities
+    // 工具方法
     string ToFen();
     IBoard Clone();
 }

@@ -17,7 +17,7 @@ public class Board : IBoard
     private PieceColor _turn;
     private ulong _zobristKey;
     
-    // History for Undo
+    // Undo 用的歷史紀錄
     private readonly Stack<GameState> _history = new Stack<GameState>();
 
     private struct GameState
@@ -33,16 +33,16 @@ public class Board : IBoard
 
     public Board()
     {
-        // Initialize empty
+        // 初始化空棋盤
         for (int i = 0; i < BoardSize; i++) _pieces[i] = Piece.None;
         _turn = PieceColor.Red;
         _zobristKey = 0;
         
-        // Initial Zobrist for Turn (if we include it)
-        // _zobristKey ^= ZobristHash.SideToMoveKey; // If Red starts and we XOR for Black, or vice versa. 
-        // Let's say Key includes SideToMoveKey if it's Black's turn?
-        // Usually: Key ^= SideToMoveKey when switching turns.
-        // If start is Red, we don't XOR. If Black, we XOR.
+        // Turn 的初始 Zobrist（若要納入 Turn）
+        // _zobristKey ^= ZobristHash.SideToMoveKey; // 若紅方先手且要對黑方 XOR，反之亦然。
+        // 假設 Turn 在黑方時將 SideToMoveKey 包進 Key？
+        // 通常在換手時會做：Key ^= SideToMoveKey。
+        // 開局若為紅方，通常不 XOR；若為黑方，才 XOR。
     }
 
     public Board(string fen) : this()
@@ -56,46 +56,46 @@ public class Board : IBoard
         return _pieces[index];
     }
     
-    // --- State Manipulation ---
+    // --- 狀態變更 ---
 
     public void MakeMove(Move move)
     {
         var piece = _pieces[move.From];
         var target = _pieces[move.To];
 
-        // Update Zobrist - Remove Piece at From
+        // 更新 Zobrist：移除 From 的棋子
         _zobristKey ^= ZobristHash.GetPieceKey(move.From, piece.Color, piece.Type);
         
-        // Update Zobrist - Remove Target at To (Capture)
+        // 更新 Zobrist：移除 To 位置的目標棋子（吃子）
         if (!target.IsNone)
         {
             _zobristKey ^= ZobristHash.GetPieceKey(move.To, target.Color, target.Type);
         }
 
-        // Update Board
+        // 更新棋盤
         _pieces[move.To] = piece;
         _pieces[move.From] = Piece.None;
 
-        // Update Zobrist - Add Piece at To
+        // 更新 Zobrist：新增 Piece 到 To
         _zobristKey ^= ZobristHash.GetPieceKey(move.To, piece.Color, piece.Type);
 
-        // Switch Turn
+        // 交換行棋方
         _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
         _zobristKey ^= ZobristHash.SideToMoveKey;
 
-        // Push History
+        // 推入歷史紀錄
         _history.Push(new GameState
         {
             Move = move,
             CapturedPiece = target,
-            ZobristKey = _zobristKey // Store the NEW key? Or OLD? Usually store state to restore.
-            // Wait, if I store Key in history, I should store the OLD key to restore it easily, 
-            // OR I can re-calculate the XORs (reversible).
-            // Storing the old key is safer if we have irreversible state. 
-            // Actually, Zobrist is fully reversible with XORs.
-            // Let's store the key BEFORE the move to be safe/simple? 
-            // But if I rely on XORs, I don't need to store it.
-            // Let's store the Old Key for verification/simplicity.
+            ZobristKey = _zobristKey // 儲存的是「新 key」或「舊 key」？通常保留可還原狀態。
+            // 注意：若將 Key 存入歷史，通常要存「舊」的 key 才能快速還原，
+            // 或者改用可逆的 XOR 再計算也能還原。
+            // 如果有不可逆狀態，保留舊 key 會更安全。
+            // 其實 Zobrist 全程使用 XOR 可逆。
+            // 為求保險，建議存入走棋前的 key。
+            // 但若改用 XOR 還原，則其實不必存它。
+            // 這裡選擇存入舊 Key，方便驗證與實作單純化。
         });
     }
 
@@ -104,37 +104,37 @@ public class Board : IBoard
         if (_history.Count == 0) throw new InvalidOperationException("No history to undo.");
         
         var state = _history.Pop();
-        // Verify move matches?
+        // 確認走法是否一致？
         if (state.Move != move) 
         {
-            // For safety, just trust the stack if called correctly. 
-            // Ideally UnmakeMove() shouldn't take args if it uses stack.
-            // But if interface requires it... I'll ignore the arg or check it.
+            // 為求安全，假設呼叫端傳入正確參數時信任歷史堆疊即可。
+            // 理想上若使用堆疊，UnmakeMove() 不需要帶參數。
+            // 若介面要求保留參數，這裡保留接收但先忽略比對或僅做最小驗證。
         }
 
-        // 1. Switch Turn Back
+        // 1. 回復行棋方
         _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
-        // _zobristKey ^= ZobristHash.SideToMoveKey; // Handled by restoring or XORing back
+        // _zobristKey ^= ZobristHash.SideToMoveKey; // 透過還原或再 XOR 可恢復
 
-        // 2. Restore Pieces
+        // 2. 還原棋子
         var movedPiece = _pieces[state.Move.To];
         var capturedPiece = state.CapturedPiece;
 
         _pieces[state.Move.From] = movedPiece;
         _pieces[state.Move.To] = capturedPiece;
 
-        // 3. Restore Zobrist (Re-XORing is cleaner than storing if we trust the logic, 
-        // but restoring from state is robust against bugs)
-        // Let's re-XOR to prove correctness or just restore.
-        // Since I didn't store the OLD key in the struct above (I stored the NEW one in the comment logic, let's fix that).
-        
-        // Let's change MakeMove to store the PREVIOUS key or just re-calculate.
-        // Re-calculation:
-        // Key is currently Key_After.
-        // Key ^= SideToMove (Back to previous turn side)
-        // Remove Piece at To
-        // Add Piece at From
-        // Add Captured at To (if any)
+        // 3. 還原 Zobrist
+        // 若邏輯正確，Re-XOR 通常比直接存值來得精簡，但保留 state 回存可降低錯誤風險。
+        // 以下以 Re-XOR 驗證正確性或直接還原皆可。
+        // 因為上方註解原先是存「新 Key」，這裡順手修正認知即可。
+
+        // 可改為在 MakeMove 存 PREVIOUS key，或直接重算還原。
+        // 重算流程：
+        // Key 目前是 Key_After。
+        // Key ^= SideToMove（回到上一個行棋方）
+        // 移除 To 的棋子
+        // 復原 From 的棋子
+        // 若有被吃掉棋子，放回 To
         
         _zobristKey ^= ZobristHash.SideToMoveKey;
         _zobristKey ^= ZobristHash.GetPieceKey(state.Move.To, movedPiece.Color, movedPiece.Type);
@@ -176,18 +176,18 @@ public class Board : IBoard
         _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
     }
 
-    // --- FEN ---
+        // --- FEN ---
     
     public void ParseFen(string fen)
     {
-        // Very basic parser
-        // Example: rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1
+        // 簡易 FEN 解析器
+        // 範例：rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1
         var parts = fen.Split(' ');
         var rows = parts[0].Split('/');
         
         if (rows.Length != 10) throw new ArgumentException("Invalid FEN rows");
 
-        // Clear board
+        // 清空棋盤
         for (int i = 0; i < BoardSize; i++) _pieces[i] = Piece.None;
         _zobristKey = 0;
 
@@ -211,10 +211,10 @@ public class Board : IBoard
             }
         }
 
-        _turn = parts[1] == "w" || parts[1] == "r" ? PieceColor.Red : PieceColor.Black; // 'w' is standard, 'r' sometimes used
+        _turn = parts[1] == "w" || parts[1] == "r" ? PieceColor.Red : PieceColor.Black; // 'w' 為標準表示，'r' 可能也會被使用
         if (_turn == PieceColor.Black) _zobristKey ^= ZobristHash.SideToMoveKey;
         
-        // TODO: Move clocks/counters parsing
+        // TODO：解析著法時計數（move clocks / counters）
     }
 
     public string ToFen()
@@ -245,7 +245,7 @@ public class Board : IBoard
         }
         
         sb.Append(_turn == PieceColor.Red ? " w" : " b");
-        sb.Append(" - - 0 1"); // Dummy counters
+        sb.Append(" - - 0 1"); // 暫存計數器（原本以便用於後續欄位）
         return sb.ToString();
     }
 
@@ -257,10 +257,10 @@ public class Board : IBoard
         {
             'k' => PieceType.King,
             'a' => PieceType.Advisor,
-            'b' => PieceType.Elephant, // FEN standard uses 'b' for Elephant (Bishop equivalent)
-            'e' => PieceType.Elephant, // Support 'e' as well
-            'n' => PieceType.Horse,    // 'n' for Knight/Horse
-            'h' => PieceType.Horse,    // Support 'h'
+            'b' => PieceType.Elephant, // FEN 預設用 'b' 表示象（象）
+            'e' => PieceType.Elephant, // 也支援 'e'
+            'n' => PieceType.Horse,    // 'n' 表示馬（horse）
+            'h' => PieceType.Horse,    // 也支援 'h'
             'r' => PieceType.Rook,
             'c' => PieceType.Cannon,
             'p' => PieceType.Pawn,
@@ -269,7 +269,7 @@ public class Board : IBoard
         return new Piece(color, type);
     }
 
-    // --- Placeholder Move Gen ---
+        // --- 預留的著法產生（占位） ---
 
     public IEnumerable<Move> GenerateLegalMoves()
     {
@@ -525,7 +525,7 @@ public class Board : IBoard
         int targetRow = targetIndex / Width;
         int targetCol = targetIndex % Width;
 
-        // Face-to-face king rule: if kings in same file with no blockers, they attack each other.
+        // 將軍面對面規則：同一個列上若無阻擋，雙方將互相將對方視為被將。
         int kingIndex = GetKingIndex(byColor);
         if (kingIndex >= 0 && _pieces[targetIndex].Type == PieceType.King)
         {
@@ -681,7 +681,7 @@ public class Board : IBoard
         Array.Copy(_pieces, b._pieces, BoardSize);
         b._turn = _turn;
         b._zobristKey = _zobristKey;
-        // History not cloned usually for search, but deep clone might need it
+        // 搜尋時通常不複製歷史堆疊；若要做深度複製（deep clone）才需要它
         return b;
     }
 }

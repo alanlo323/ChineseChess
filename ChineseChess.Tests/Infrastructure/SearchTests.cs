@@ -105,7 +105,7 @@ public class SearchTests
         Assert.True(deeper.Depth > shallow.Depth);
     }
 
-    // --- PST Tests ---
+    // --- PST 測試 ---
 
     [Fact]
     public void PST_RedHorseCenterScoresHigherThanCorner()
@@ -134,7 +134,7 @@ public class SearchTests
         Assert.Equal(redCenter, blackMirror);
     }
 
-    // --- Evaluator Tests ---
+    // --- Evaluator 測試 ---
 
     [Fact]
     public void Evaluator_MissingAdvisor_PenalizesKingSafety()
@@ -149,7 +149,7 @@ public class SearchTests
         Assert.True(fullScore > missingScore);
     }
 
-    // --- Null Move / Board Tests ---
+    // --- Null-Move / 棋盤測試 ---
 
     [Fact]
     public void Board_MakeNullMove_SwitchesTurnAndZobrist()
@@ -169,7 +169,7 @@ public class SearchTests
         Assert.Equal(keyBefore, board.ZobristKey);
     }
 
-    // --- Check Extension Test ---
+    // --- Check Extension（檢查延伸）測試 ---
 
     [Fact]
     public async Task Search_CheckPosition_ShouldFindBestResponse()
@@ -183,12 +183,12 @@ public class SearchTests
         Assert.False(result.BestMove.IsNull);
     }
 
-    // --- MVV-LVA Ordering Test ---
+    // --- MVV-LVA 排序測試 ---
 
     [Fact]
     public async Task Search_ShouldPreferCapturingHighValuePiece()
     {
-        // Red rook can capture black rook or black pawn — should prefer the rook
+        // 紅方車可吃黑車或黑兵，應優先選擇吃車
         var board = new Board("4k4/9/9/9/4r4/3RP4/9/9/9/4K4 w - - 0 1");
         var engine = new SearchEngine();
         var settings = new SearchSettings { Depth = 1, TimeLimitMs = 3000, ThreadCount = 1 };

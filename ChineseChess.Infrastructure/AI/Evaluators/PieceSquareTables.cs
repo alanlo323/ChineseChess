@@ -3,14 +3,14 @@ using ChineseChess.Domain.Enums;
 namespace ChineseChess.Infrastructure.AI.Evaluators;
 
 /// <summary>
-/// 90-square Piece-Square Tables for Chinese Chess (Xiangqi).
-/// Defined from Red's perspective (row 0 = Black's back rank, row 9 = Red's back rank).
-/// Black's values are obtained by mirroring the index (89 - index).
+/// 中文象棋（Xiangqi）使用的 90 格子方格型 Piece-Square Table。
+/// 以紅方視角定義（row 0 為黑方底線，row 9 為紅方底線）。
+/// 黑方分數會透過 index 對稱（89 - index）取得。
 /// </summary>
 public static class PieceSquareTables
 {
-    // Board: 10 rows x 9 cols, index = row * 9 + col
-    // Row 0-4 = Black's territory, Row 5-9 = Red's territory
+    // 棋盤：10 列 x 9 欄，index = row * 9 + col
+    // row 0-4 為黑方領域，row 5-9 為紅方領域
 
     private static readonly int[] KingTable =
     {
@@ -115,9 +115,9 @@ public static class PieceSquareTables
 
     static PieceSquareTables()
     {
-        // Index by PieceType enum value (0=None, 1=King, ..., 7=Pawn)
+        // 依 PieceType 列舉值建立索引（0=None，1=King，…，7=Pawn）
         Tables = new int[8][];
-        Tables[0] = new int[90]; // None — unused
+        Tables[0] = new int[90]; // None（未使用）
         Tables[(int)PieceType.King] = KingTable;
         Tables[(int)PieceType.Advisor] = AdvisorTable;
         Tables[(int)PieceType.Elephant] = ElephantTable;

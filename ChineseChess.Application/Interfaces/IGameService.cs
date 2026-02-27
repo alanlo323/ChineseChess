@@ -13,20 +13,20 @@ public interface IGameService
     bool IsThinking { get; }
     
     event Action BoardUpdated;
-    event Action<string> GameMessage; // Check, Win, etc.
-    event Action<SearchResult>? HintReady; // AI hint/analysis result
+    event Action<string> GameMessage; // Check、Win 等訊息
+    event Action<SearchResult>? HintReady; // AI 提示/分析結果
     event Action<string>? ThinkingProgress;
 
-    // Control
+    // 控制
     Task StartGameAsync(GameMode mode);
     Task StopGameAsync();
     
-    // Gameplay
-    Task HumanMoveAsync(Move move); // Player move
+    // 遊戲流程
+    Task HumanMoveAsync(Move move); // Player 操作
     void Undo();
-    void Redo(); // Optional
+    void Redo(); // 非必要（Optional，可選功能）
     
-    // Bookmarks
+    // 書籤
     void AddBookmark(string name);
     void LoadBookmark(string name);
     void DeleteBookmark(string name);
@@ -34,5 +34,5 @@ public interface IGameService
     
     // AI
     void SetDifficulty(int depth, int timeMs, int threadCount = 0);
-    Task<SearchResult> GetHintAsync(); // Get analysis for current position
+    Task<SearchResult> GetHintAsync(); // 取得目前局面的分析結果
 }

@@ -21,8 +21,8 @@ public class SquareViewModel : ObservableObject
     public int Row { get; }
     public int Col { get; }
     
-    // Canvas Positioning (Relative to board size, handled in View or here if pixel based)
-    // For UniformGrid, order matters.
+    // 棋盤座標定位（相對於棋盤尺寸，若採像素模式可在這裡處理）
+    // UniformGrid 下順序很重要。
     
     public Piece Piece
     {
@@ -36,7 +36,7 @@ public class SquareViewModel : ObservableObject
         set => SetProperty(ref _isSelected, value);
     }
 
-    public bool IsValidMove // For highlighting dots
+    public bool IsValidMove // 用於高亮可走點
     {
         get => _isValidMove;
         set => SetProperty(ref _isValidMove, value);
@@ -96,15 +96,15 @@ public class ChessBoardViewModel : ObservableObject
     {
         for (int i = 0; i < 90; i++)
         {
-            // Board Index 0..89. 
-            // Row 0 is Top.
+            // 棋盤 Index 範圍 0..89。
+            // Row 0 為上方。
             Squares.Add(new SquareViewModel(i, i / 9, i % 9));
         }
     }
 
     private void OnBoardUpdated()
     {
-        // Must run on UI thread
+        // 必須在 UI 執行緒執行
         System.Windows.Application.Current?.Dispatcher.Invoke(RefreshBoard);
     }
 
@@ -139,7 +139,7 @@ public class ChessBoardViewModel : ObservableObject
         {
             Squares[i].Piece = board.GetPiece(i);
             Squares[i].IsSelected = false;
-            // TODO: Highlight last move from history if available
+            // TODO: 若歷史紀錄可用，會高亮上一手棋
         }
 
         if (_hintBoardFen != null && _hintBoardFen == currentFen)
@@ -163,7 +163,7 @@ public class ChessBoardViewModel : ObservableObject
 
         if (_selectedSquare == null)
         {
-            // Select piece of current turn
+            // 選取目前行棋方的棋子
             if (!square.Piece.IsNone && square.Piece.Color == _gameService.CurrentBoard.Turn)
             {
                 ClearMoveHighlights();
@@ -174,7 +174,7 @@ public class ChessBoardViewModel : ObservableObject
         }
         else
         {
-            // Move or Deselect
+            // 移動或取消選取
             if (square == _selectedSquare)
             {
                 _selectedSquare.IsSelected = false;
@@ -183,10 +183,10 @@ public class ChessBoardViewModel : ObservableObject
                 return;
             }
 
-            // Attempt Move
+                // 嘗試移動
             if (square.Piece.Color == _gameService.CurrentBoard.Turn)
             {
-                // Switch selection
+                // 切換選取
                 _selectedSquare.IsSelected = false;
                 ClearMoveHighlights();
                 
@@ -196,10 +196,10 @@ public class ChessBoardViewModel : ObservableObject
             }
             else
             {
-                // Move to empty or capture
+                // 移動到空位或吃子
                 var from = _selectedSquare.Index;
                 var move = new Move(from, square.Index);
-                // Validate via service/board? Service handles it.
+                // 交由 service/board 驗證，實際由 service 負責
                 
                 ClearMoveHighlights();
                 _selectedSquare.IsSelected = false;

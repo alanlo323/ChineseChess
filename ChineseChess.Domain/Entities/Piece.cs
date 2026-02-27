@@ -25,11 +25,11 @@ public readonly struct Piece : IEquatable<Piece>
 
     public override string ToString() => $"{Color} {Type}";
     
-    // Character representation (optional helper)
+    // 字元表示（可選輔助方法）
     public char ToChar()
     {
         if (IsNone) return '.';
-        // Simple mapping, can be expanded
+        // 簡單對應，可依需求擴充
         return Type switch
         {
             PieceType.King => Color == PieceColor.Red ? 'K' : 'k',

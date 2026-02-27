@@ -33,14 +33,14 @@ public class GameService : IGameService
     {
         _aiEngine = aiEngine;
         _bookmarkManager = new BookmarkManager();
-        _board = new Board(); // Start position
+        _board = new Board(); // 初始局面
     }
 
     public async Task StartGameAsync(GameMode mode)
     {
         _currentMode = mode;
         _aiCts?.Cancel();
-        _board = new Board(); // Reset to standard start
+        _board = new Board(); // 重置為標準初始局
         _board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
         
         NotifyUpdate();
@@ -48,8 +48,8 @@ public class GameService : IGameService
 
         if (_currentMode == GameMode.AiVsAi || (_currentMode == GameMode.PlayerVsAi && _board.Turn == PieceColor.Black)) 
         {
-            // If AI starts (e.g. customized FEN or AiVsAi), trigger it.
-            // For standard start, Red (Player) moves first in PvAI unless configured otherwise.
+            // 若 AI 先手（例如自訂 FEN 或 AiVsAi），就觸發 AI 下棋。
+            // 一般標準局面在 PvAI 下，紅方（Player）預設先行，除非有其他設定。
             if (_currentMode == GameMode.AiVsAi)
             {
                 await RunAiSearchAsync(applyBestMove: true);
@@ -144,7 +144,7 @@ public class GameService : IGameService
                 
                 if (applyBestMove && !CheckGameOver() && _currentMode == GameMode.AiVsAi)
                 {
-                    // Continue loop
+                    // 繼續執行下一輪
                     continueAiLoop = true;
                 }
             }
@@ -176,9 +176,9 @@ public class GameService : IGameService
 
     private bool CheckGameOver()
     {
-        // Check Mate or Stalemate
+        // 檢查將死（Checkmate）或和局（Stalemate）
         // var moves = _board.GenerateLegalMoves();
-        // if (!moves.Any()) { ... Win/Draw logic ... return true; }
+        // if (!moves.Any()) { ... 勝負/和局邏輯 ... return true; }
         return false;
     }
 
@@ -188,7 +188,7 @@ public class GameService : IGameService
         try
         {
             _board.UndoMove();
-            // If PvAI, undo twice to get back to player turn?
+            // PvAI 模式下可能需要 Undo 兩步才能回到玩家回合
             if (_currentMode == GameMode.PlayerVsAi)
             {
                 _board.UndoMove();
@@ -200,7 +200,7 @@ public class GameService : IGameService
 
     public void Redo()
     {
-        // Requires separate history stack in GameService
+        // 需要在 GameService 補上獨立歷史堆疊
         throw new NotImplementedException();
     }
 

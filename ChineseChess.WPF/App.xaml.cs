@@ -1,4 +1,4 @@
-﻿using ChineseChess.Application.Interfaces;
+using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Services;
 using ChineseChess.Infrastructure.AI.Search;
 using ChineseChess.WPF.ViewModels;
@@ -24,18 +24,18 @@ public partial class App : System.Windows.Application
     {
         var services = new ServiceCollection();
 
-        // Infrastructure
+        // 基礎設施（Infrastructure）
         services.AddSingleton<IAiEngine, SearchEngine>();
 
-        // Application
+        // 應用層（Application）
         services.AddSingleton<IGameService, GameService>();
 
-        // ViewModels
+        // ViewModel 層
         services.AddTransient<MainViewModel>();
         services.AddTransient<ChessBoardViewModel>();
         services.AddTransient<ControlPanelViewModel>();
 
-        // Views
+        // 視圖層（Views）
         services.AddTransient<MainWindowView>();
 
         return services.BuildServiceProvider();

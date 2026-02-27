@@ -20,7 +20,7 @@ public class HandcraftedEvaluator : IEvaluator
         270,    // Horse
         600,    // Rook
         285,    // Cannon
-        30      // Pawn (base — PST adds positional value)
+        30      // Pawn（基礎分，PST 再加位置加成）
     };
 
     public int Evaluate(IBoard board)
@@ -41,10 +41,10 @@ public class HandcraftedEvaluator : IEvaluator
 
             int sign = p.Color == PieceColor.Red ? 1 : -1;
 
-            // Material
+        // 材料分
             score += sign * PieceValues[(int)p.Type];
 
-            // PST
+        // PST（位置分）
             score += sign * PieceSquareTables.GetScore(p.Type, p.Color, i);
 
             switch (p.Type)
@@ -76,19 +76,19 @@ public class HandcraftedEvaluator : IEvaluator
             }
         }
 
-        // --- King Safety ---
+        // --- 王將安全性 ---
         score += EvaluateKingSafety(board, PieceColor.Red, redKingIndex, redAdvisors, redElephants);
         score -= EvaluateKingSafety(board, PieceColor.Black, blackKingIndex, blackAdvisors, blackElephants);
 
-        // --- Piece Structure ---
+        // --- 棋子結構 ---
         score += EvaluateRookStructure(board, PieceColor.Red, redRook1, redRook2, redRookCount);
         score -= EvaluateRookStructure(board, PieceColor.Black, blackRook1, blackRook2, blackRookCount);
 
-        // --- Mobility (lightweight: count legal moves for side to move) ---
+        // --- 機動力（輕量：統計當前可走著法） ---
         int mobility = board.GenerateLegalMoves().Count();
         score += (board.Turn == PieceColor.Red ? 1 : -1) * mobility * 2;
 
-        // Return from side-to-move perspective
+        // 以輪到行動的一方為觀點回傳分數
         return board.Turn == PieceColor.Red ? score : -score;
     }
 
@@ -99,11 +99,11 @@ public class HandcraftedEvaluator : IEvaluator
 
         int bonus = 0;
 
-        // Penalty for missing palace defenders
+        // 少了宮廷防守棋子的懲罰
         if (advisorCount < 2) bonus -= (2 - advisorCount) * 20;
         if (elephantCount < 2) bonus -= (2 - elephantCount) * 10;
 
-        // Exposed king penalty: check if king's file is open toward the enemy
+        // 曝露 king 懲罰：檢查皇帝/將所在直列是否對敵方敞開
         int kingCol = kingIndex % BoardWidth;
         int kingRow = kingIndex / BoardWidth;
         int direction = color == PieceColor.Red ? -1 : 1;
@@ -129,7 +129,7 @@ public class HandcraftedEvaluator : IEvaluator
 
         int bonus = 0;
 
-        // Connected rooks bonus (same rank or file)
+        // 雙車連線加分（同排或同列）
         if (rookCount == 2 && rook1 >= 0 && rook2 >= 0)
         {
             int r1Row = rook1 / BoardWidth, r1Col = rook1 % BoardWidth;
@@ -137,7 +137,7 @@ public class HandcraftedEvaluator : IEvaluator
             if (r1Row == r2Row || r1Col == r2Col) bonus += 15;
         }
 
-        // Rook on open file bonus (no friendly pawn in same column)
+        // 車站在空列上的加分（同一欄位無己方棋子）
         for (int ri = 0; ri < rookCount; ri++)
         {
             int rookIdx = ri == 0 ? rook1 : rook2;

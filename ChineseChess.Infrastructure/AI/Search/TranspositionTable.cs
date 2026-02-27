@@ -25,9 +25,9 @@ public struct TTEntry
 }
 
 /// <summary>
-/// Lock-free transposition table using the XOR verification trick.
-/// Two aligned ulong arrays (_keys and _data) ensure atomic 8-byte reads/writes on x64.
-/// _keys[i] stores (zobristKey ^ packedData) so that torn reads are detected.
+/// 使用 XOR 驗證技巧的 lock-free transposition table。
+/// 以兩個對齊的 ulong 陣列（_keys 與 _data）確保 x64 上 8 bytes 原子性讀寫。
+/// _keys[i] 存放 (zobristKey ^ packedData)，可偵測到被撕裂讀取的狀況。
 /// </summary>
 public class TranspositionTable
 {
@@ -36,18 +36,18 @@ public class TranspositionTable
     private readonly ulong _size;
     private byte _generation;
 
-    // Pack layout (64 bits):
-    //   bits  0-15 : score       (16 bits, signed via cast)
-    //   bits 16-23 : depth       (8 bits)
-    //   bits 24-25 : flag        (2 bits)
-    //   bits 26-32 : from        (7 bits, max 89)
-    //   bits 33-39 : to          (7 bits, max 89)
-    //   bits 40-47 : generation  (8 bits)
+    // Pack 版面（共 64 位元）：
+    //   bits  0-15 : score      （16 位元，透過 cast 轉為有號）
+    //   bits 16-23 : depth      （8 位元）
+    //   bits 24-25 : flag       （2 位元）
+    //   bits 26-32 : from       （7 位元，最大值 89）
+    //   bits 33-39 : to         （7 位元，最大值 89）
+    //   bits 40-47 : generation  （8 位元）
 
     public TranspositionTable(int sizeMb)
     {
         long bytes = (long)sizeMb * 1024 * 1024;
-        long entrySize = 2 * sizeof(ulong); // key + data
+        long entrySize = 2 * sizeof(ulong); // key 與 data 兩欄位
         _size = (ulong)(bytes / entrySize);
         if (_size < 1024) _size = 1024;
 
@@ -100,12 +100,12 @@ public class TranspositionTable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ulong Pack(short score, byte depth, TTFlag flag, int from, int to, byte generation)
     {
-        ulong packed = (ulong)(ushort)score;                 // bits  0-15
-        packed |= (ulong)depth << 16;                        // bits 16-23
-        packed |= (ulong)((byte)flag & 0x3) << 24;           // bits 24-25
-        packed |= (ulong)(from & 0x7F) << 26;                // bits 26-32
-        packed |= (ulong)(to & 0x7F) << 33;                  // bits 33-39
-        packed |= (ulong)generation << 40;                    // bits 40-47
+        ulong packed = (ulong)(ushort)score;                 // 位元 0-15：分數
+        packed |= (ulong)depth << 16;                        // 位元 16-23：深度
+        packed |= (ulong)((byte)flag & 0x3) << 24;           // 位元 24-25：旗標
+        packed |= (ulong)(from & 0x7F) << 26;                // 位元 26-32：from
+        packed |= (ulong)(to & 0x7F) << 33;                  // 位元 33-39：to
+        packed |= (ulong)generation << 40;                    // 位元 40-47：generation
         return packed;
     }
 
