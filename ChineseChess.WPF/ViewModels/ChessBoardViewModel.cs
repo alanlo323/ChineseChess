@@ -130,9 +130,7 @@ public class ChessBoardViewModel : ObservableObject
             {
                 _selectedSquare = square;
                 square.IsSelected = true;
-                // Highlight moves (fake for now or use generator)
-                // var moves = _gameService.CurrentBoard.GenerateLegalMoves();
-                // foreach(var m in moves.Where(m => m.From == square.Index)) Squares[m.To].IsValidMove = true;
+                HighlightLegalMoves(square.Index);
             }
         }
         else
@@ -155,11 +153,13 @@ public class ChessBoardViewModel : ObservableObject
                 
                 _selectedSquare = square;
                 square.IsSelected = true;
+                HighlightLegalMoves(square.Index);
             }
             else
             {
                 // Move to empty or capture
-                var move = new Move(_selectedSquare.Index, square.Index);
+                var from = _selectedSquare.Index;
+                var move = new Move(from, square.Index);
                 // Validate via service/board? Service handles it.
                 
                 ClearHighlights();
@@ -174,5 +174,15 @@ public class ChessBoardViewModel : ObservableObject
     private void ClearHighlights()
     {
         foreach (var s in Squares) s.IsValidMove = false;
+    }
+
+    private void HighlightLegalMoves(int fromIndex)
+    {
+        ClearHighlights();
+        var moves = _gameService.CurrentBoard.GenerateLegalMoves().Where(m => m.From == fromIndex);
+        foreach (var move in moves)
+        {
+            Squares[move.To].IsValidMove = true;
+        }
     }
 }

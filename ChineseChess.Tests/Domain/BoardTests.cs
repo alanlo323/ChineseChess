@@ -61,4 +61,61 @@ public class BoardTests
 
         Assert.True(board.GenerateLegalMoves().Any());
     }
+
+    [Fact]
+    public void GenerateLegalMoves_ShouldNotAllowMovesLeavingKingInCheck()
+    {
+        // Red cannon can move out of the blocking column in normal move-generation,
+        // but this would expose the red king to the black rook directly above.
+        var board = new Board("k3r4/9/9/9/9/4C4/9/9/9/4K4 w - - 0 1");
+
+        var pseudoMoves = board.GeneratePseudoLegalMoves().ToList();
+        var illegalMove = new Move(49, 50);
+
+        Assert.True(pseudoMoves.Any(m => m.From == illegalMove.From && m.To == illegalMove.To));
+        Assert.False(board.IsCheck(PieceColor.Red));
+        Assert.False(board.GenerateLegalMoves().Any(m => m.From == illegalMove.From && m.To == illegalMove.To));
+    }
+
+    [Fact]
+    public void IsCheck_DetectsCheckFromRook()
+    {
+        var board = new Board("k3r4/9/9/9/9/9/9/9/9/4K4 w - - 0 1");
+
+        Assert.True(board.IsCheck(PieceColor.Red));
+        Assert.False(board.IsCheck(PieceColor.Black));
+    }
+
+    [Fact]
+    public void GenerateLegalMoves_ShouldAllowMoveWhenCannonWouldHaveNoScreen()
+    {
+        // Black cannon should be able to slide horizontally to an empty square.
+        var board = new Board("4k4/9/9/9/9/9/9/4C4/9/4K4 w - - 0 1");
+        var move = new Move(67, 68);
+
+        Assert.False(board.IsCheck(PieceColor.Red));
+
+        var pseudoMoves = board.GeneratePseudoLegalMoves().ToList();
+        Assert.True(pseudoMoves.Any(m => m.From == move.From && m.To == move.To));
+        Assert.True(board.GenerateLegalMoves().Any(m => m.From == move.From && m.To == move.To));
+    }
+
+    [Fact]
+    public void GeneratePseudoLegalMoves_CannonCannotSlideAfterScreenButCanCaptureOverScreen()
+    {
+        // Black cannon has a blocking piece at c5 and an enemy piece at c6, so it can capture c6 but
+        // cannot move to empty squares beyond the screen.
+        var board = new Board("4k4/9/9/9/9/9/9/4cPR2/9/4K4 b - - 0 1");
+
+        var pseudoMoves = board.GeneratePseudoLegalMoves().ToList();
+        var legalMoves = board.GenerateLegalMoves().ToList();
+
+        var blockedSlide = new Move(67, 70);
+        var legalCapture = new Move(67, 69);
+
+        Assert.True(pseudoMoves.Any(m => m.From == legalCapture.From && m.To == legalCapture.To));
+        Assert.False(pseudoMoves.Any(m => m.From == blockedSlide.From && m.To == blockedSlide.To));
+        Assert.True(legalMoves.Any(m => m.From == legalCapture.From && m.To == legalCapture.To));
+        Assert.False(legalMoves.Any(m => m.From == blockedSlide.From && m.To == blockedSlide.To));
+    }
 }

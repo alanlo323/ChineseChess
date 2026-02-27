@@ -2,6 +2,7 @@ using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace ChineseChess.Domain.Entities;
@@ -249,6 +250,25 @@ public class Board : IBoard
 
     public IEnumerable<Move> GenerateLegalMoves()
     {
+        var legalMoves = new List<Move>();
+        var pseudoMoves = GeneratePseudoLegalMoves().ToList();
+
+        foreach (var move in pseudoMoves)
+        {
+            var movingColor = _turn;
+            MakeMove(move);
+            if (!IsCheck(movingColor))
+            {
+                legalMoves.Add(move);
+            }
+            UnmakeMove(move);
+        }
+
+        return legalMoves;
+    }
+
+    public IEnumerable<Move> GeneratePseudoLegalMoves()
+    {
         var moves = new List<Move>();
 
         bool IsInsideBoard(int row, int col) => row >= 0 && row < Height && col >= 0 && col < Width;
@@ -378,7 +398,7 @@ public class Board : IBoard
 
                                 if (target.IsNone)
                                 {
-                                    if (!isCannon)
+                                    if (!isCannon || !screenHit)
                                     {
                                         TryAddMove(from, to);
                                     }
@@ -446,31 +466,190 @@ public class Board : IBoard
         return moves;
     }
     
-    public IEnumerable<Move> GeneratePseudoLegalMoves()
-    {
-        var moves = new List<Move>();
-        // Iterate pieces of current turn
-        for (int i = 0; i < BoardSize; i++)
-        {
-            var p = _pieces[i];
-            if (p.Color == _turn)
-            {
-                // Generate moves for this piece
-                // This requires logic for each piece type
-            }
-        }
-        return moves;
-    }
-
     public bool IsCheck(PieceColor color)
     {
-        // TODO: Find King, check attacks
-        return false;
+        int kingIndex = GetKingIndex(color);
+        if (kingIndex < 0) return false;
+
+        var attacker = color == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
+        return IsSquareAttacked(kingIndex, attacker);
     }
 
     public bool IsCheckmate(PieceColor color)
     {
+        if (!IsCheck(color)) return false;
+
+        return !GenerateLegalMoves().Any();
+    }
+
+    private int GetKingIndex(PieceColor color)
+    {
+        for (int i = 0; i < BoardSize; i++)
+        {
+            if (_pieces[i].Color == color && _pieces[i].Type == PieceType.King)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private bool IsSquareAttacked(int targetIndex, PieceColor byColor)
+    {
+        if (targetIndex < 0 || targetIndex >= BoardSize) return false;
+        if (_pieces[targetIndex].Type == PieceType.None) return false;
+
+        int targetRow = targetIndex / Width;
+        int targetCol = targetIndex % Width;
+
+        // Face-to-face king rule: if kings in same file with no blockers, they attack each other.
+        int kingIndex = GetKingIndex(byColor);
+        if (kingIndex >= 0 && _pieces[targetIndex].Type == PieceType.King)
+        {
+            int kingRow = kingIndex / Width;
+            int kingCol = kingIndex % Width;
+            if (kingCol == targetCol)
+            {
+                int rowStep = targetRow > kingRow ? 1 : -1;
+                bool blocked = false;
+                for (int row = kingRow + rowStep; row != targetRow; row += rowStep)
+                {
+                    if (!_pieces[row * Width + kingCol].IsNone)
+                    {
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (!blocked) return true;
+            }
+        }
+
+        for (int from = 0; from < BoardSize; from++)
+        {
+            var piece = _pieces[from];
+            if (piece.Color != byColor) continue;
+
+            if (AttacksSquare(from, piece, targetIndex, targetRow, targetCol))
+            {
+                return true;
+            }
+        }
+
         return false;
+    }
+
+    private bool AttacksSquare(int attackerIndex, Piece attacker, int targetIndex, int targetRow, int targetCol)
+    {
+        if (attacker.IsNone) return false;
+        if (attackerIndex == targetIndex) return false;
+
+        int attackerRow = attackerIndex / Width;
+        int attackerCol = attackerIndex % Width;
+        int dr = targetRow - attackerRow;
+        int dc = targetCol - attackerCol;
+
+        bool IsInsideBoard(int row, int col) => row >= 0 && row < Height && col >= 0 && col < Width;
+        bool InSamePalace(int row, int col, PieceColor color)
+        {
+            if (col < 3 || col > 5) return false;
+            return color == PieceColor.Red ? row >= 7 && row <= 9 : row >= 0 && row <= 2;
+        }
+        bool IsCrossedRiver(Piece piece, int row)
+        {
+            return piece.Color == PieceColor.Red ? row <= 4 : row >= 5;
+        }
+
+        switch (attacker.Type)
+        {
+            case PieceType.King:
+                if (Math.Abs(dr) + Math.Abs(dc) != 1) return false;
+                return InSamePalace(targetRow, targetCol, attacker.Color);
+
+            case PieceType.Advisor:
+                if (Math.Abs(dr) != 1 || Math.Abs(dc) != 1) return false;
+                return InSamePalace(targetRow, targetCol, attacker.Color);
+
+            case PieceType.Elephant:
+                if (Math.Abs(dr) != 2 || Math.Abs(dc) != 2) return false;
+                if (IsCrossedRiver(attacker, targetRow)) return false;
+                int elephantBlockRow = attackerRow + dr / 2;
+                int elephantBlockCol = attackerCol + dc / 2;
+                int elephantBlockIndex = elephantBlockRow * Width + elephantBlockCol;
+                return _pieces[elephantBlockIndex].IsNone;
+
+            case PieceType.Horse:
+                int[][] horseDirs =
+                {
+                    new int[] { 2, 1, 1, 0 }, new int[] { 2, -1, 1, 0 }, new int[] { -2, 1, -1, 0 }, new int[] { -2, -1, -1, 0 },
+                    new int[] { 1, 2, 0, 1 }, new int[] { 1, -2, 0, -1 }, new int[] { -1, 2, 0, 1 }, new int[] { -1, -2, 0, -1 }
+                };
+
+                for (int i = 0; i < horseDirs.Length; i++)
+                {
+                    int expectedDr = horseDirs[i][0];
+                    int expectedDc = horseDirs[i][1];
+                    if (dr != expectedDr || dc != expectedDc) continue;
+
+                    int blockRow = attackerRow + horseDirs[i][2];
+                    int blockCol = attackerCol + horseDirs[i][3];
+                    int blockIndex = blockRow * Width + blockCol;
+                    return IsInsideBoard(blockRow, blockCol) && _pieces[blockIndex].IsNone;
+                }
+                return false;
+
+            case PieceType.Rook:
+            case PieceType.Cannon:
+                if (dr != 0 && dc != 0) return false;
+                if (dr == 0 && dc == 0) return false;
+
+                int dirRow = Math.Sign(dr);
+                int dirCol = Math.Sign(dc);
+                int row = attackerRow + dirRow;
+                int col = attackerCol + dirCol;
+                int blockers = 0;
+
+                while (IsInsideBoard(row, col))
+                {
+                    int current = row * Width + col;
+                    if (current == targetIndex)
+                    {
+                        if (attacker.Type == PieceType.Rook)
+                        {
+                            return blockers == 0;
+                        }
+
+                        if (attacker.Type == PieceType.Cannon)
+                        {
+                            return blockers == 1;
+                        }
+
+                        return false;
+                    }
+
+                    if (!_pieces[current].IsNone)
+                    {
+                        blockers++;
+
+                        if (attacker.Type == PieceType.Rook || blockers >= 2)
+                        {
+                            return false;
+                        }
+                    }
+
+                    row += dirRow;
+                    col += dirCol;
+                }
+                return false;
+
+            case PieceType.Pawn:
+                int forward = attacker.Color == PieceColor.Red ? -1 : 1;
+                if (dr == forward && dc == 0) return true;
+                if (!IsCrossedRiver(attacker, attackerRow)) return false;
+                return dr == 0 && Math.Abs(dc) == 1;
+
+            default:
+                return false;
+        }
     }
 
     public IBoard Clone()

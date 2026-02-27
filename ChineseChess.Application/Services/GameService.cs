@@ -65,12 +65,19 @@ public class GameService : IGameService
     {
         if (_isThinking) return;
         if (_currentMode == GameMode.AiVsAi) return;
+        if (move.From >= Board.BoardSize || move.To >= Board.BoardSize || move.From == move.To)
+        {
+            GameMessage?.Invoke("非法落子：走法資料不完整");
+            return;
+        }
 
-        // 1. Validate (In real app, check against GenerateLegalMoves)
-        // var legalMoves = _board.GenerateLegalMoves();
-        // if (!legalMoves.Contains(move)) { ... return; }
-        
-        // Trust UI for now or assume valid
+        var legalMoves = _board.GenerateLegalMoves();
+        if (!legalMoves.Contains(move))
+        {
+            GameMessage?.Invoke("非法落子：這不是合法著法");
+            return;
+        }
+
         _board.MakeMove(move);
         NotifyUpdate();
 
