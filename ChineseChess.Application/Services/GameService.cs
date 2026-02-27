@@ -26,6 +26,7 @@ public class GameService : IGameService
 
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
+    public event Action<SearchResult>? HintReady;
 
     public GameService(IAiEngine aiEngine)
     {
@@ -175,7 +176,20 @@ public class GameService : IGameService
 
     public Task<SearchResult> GetHintAsync()
     {
-        return _aiEngine.SearchAsync(_board.Clone(), _aiSettings, CancellationToken.None);
+        if (_isThinking)
+        {
+            GameMessage?.Invoke("AI is thinking, please wait for the move to finish.");
+            return Task.FromResult(new SearchResult { BestMove = Move.Null });
+        }
+
+        return GetHintInternalAsync();
+    }
+
+    private async Task<SearchResult> GetHintInternalAsync()
+    {
+        var result = await _aiEngine.SearchAsync(_board.Clone(), _aiSettings, CancellationToken.None);
+        HintReady?.Invoke(result);
+        return result;
     }
 
     private void NotifyUpdate() => BoardUpdated?.Invoke();

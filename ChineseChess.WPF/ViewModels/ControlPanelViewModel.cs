@@ -49,7 +49,27 @@ public class ControlPanelViewModel : ObservableObject
         _gameService = gameService;
         StartGameCommand = new RelayCommand(async _ => await _gameService.StartGameAsync(SelectedMode));
         UndoCommand = new RelayCommand(_ => _gameService.Undo());
-        HintCommand = new RelayCommand(async _ => await _gameService.GetHintAsync()); 
+        HintCommand = new RelayCommand(async _ =>
+        {
+            try
+            {
+                StatusMessage = "提示走法中...";
+                var hint = await _gameService.GetHintAsync();
+
+                if (hint.BestMove.IsNull)
+                {
+                    StatusMessage = "目前沒有可用提示";
+                }
+                else
+                {
+                    StatusMessage = $"提示完成：{hint.BestMove}";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"提示失敗：{ex.Message}";
+            }
+        });
 
         _gameService.GameMessage += msg => StatusMessage = msg;
     }

@@ -14,6 +14,7 @@ public interface IGameService
     
     event Action BoardUpdated;
     event Action<string> GameMessage; // Check, Win, etc.
+    event Action<SearchResult>? HintReady; // AI hint/analysis result
 
     // Control
     Task StartGameAsync(GameMode mode);

@@ -68,6 +68,7 @@ public class ChessBoardViewModel : ObservableObject
     {
         _gameService = gameService;
         _gameService.BoardUpdated += OnBoardUpdated;
+        _gameService.HintReady += OnHintReady;
         SquareClickCommand = new RelayCommand(OnSquareClick);
 
         InitializeBoard();
@@ -88,6 +89,20 @@ public class ChessBoardViewModel : ObservableObject
     {
         // Must run on UI thread
         System.Windows.Application.Current?.Dispatcher.Invoke(RefreshBoard);
+    }
+
+    private void OnHintReady(SearchResult hint)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            ClearHighlights();
+            if (hint.BestMove.IsNull) return;
+            var from = hint.BestMove.From;
+            var to = hint.BestMove.To;
+
+            if (from < 90) Squares[from].IsValidMove = true;
+            if (to < 90) Squares[to].IsValidMove = true;
+        });
     }
 
     private void RefreshBoard()
