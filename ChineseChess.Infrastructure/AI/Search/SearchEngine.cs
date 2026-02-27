@@ -2,6 +2,7 @@ using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Infrastructure.AI.Evaluators;
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +17,14 @@ public class SearchEngine : IAiEngine
     private CancellationToken _ct;
     private const int Infinity = 30000;
     private const int MateScore = 20000;
+    private const int HeartbeatIntervalMs = 500;
+
+    private sealed class SearchProgressState
+    {
+        public int CurrentDepth;
+        public int Score;
+        public string? BestMove;
+    }
 
     public SearchEngine()
     {
@@ -33,6 +42,73 @@ public class SearchEngine : IAiEngine
 
             var result = new SearchResult();
             int currentDepth = 0;
+            var stopwatch = Stopwatch.StartNew();
+            var progressState = new SearchProgressState();
+            var progressStateLock = new object();
+            System.Timers.Timer? heartbeatTimer = null;
+
+            void ReportProgress(bool isHeartbeat, int depth, int score, string? bestMove)
+            {
+                if (progress == null)
+                {
+                    return;
+                }
+
+                int reportDepth = depth;
+                int reportScore = score;
+                string? reportBestMove = bestMove;
+
+                if (isHeartbeat)
+                {
+                    lock (progressStateLock)
+                    {
+                        reportDepth = progressState.CurrentDepth;
+                        reportScore = progressState.Score;
+                        reportBestMove = progressState.BestMove;
+                    }
+                }
+
+                long nodes = Interlocked.Read(ref _nodesVisited);
+                long elapsedMs = stopwatch.ElapsedMilliseconds;
+                long nodesPerSecond = elapsedMs > 0 ? (nodes * 1000L) / elapsedMs : 0;
+
+                progress.Report(new SearchProgress
+                {
+                    CurrentDepth = reportDepth,
+                    MaxDepth = settings.Depth,
+                    Nodes = nodes,
+                    Score = reportScore,
+                    BestMove = reportBestMove,
+                    ElapsedMs = elapsedMs,
+                    NodesPerSecond = nodesPerSecond,
+                    IsHeartbeat = isHeartbeat,
+                    Message = isHeartbeat ? "Heartbeat report" : $"Depth {depth}/{settings.Depth} computed"
+                });
+            }
+
+            if (progress != null)
+            {
+                heartbeatTimer = new System.Timers.Timer(HeartbeatIntervalMs);
+                heartbeatTimer.Elapsed += (_, _) =>
+                {
+                    if (_ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        ReportProgress(true, currentDepth, 0, null);
+                    }
+                    catch
+                    {
+                        // Ignore background progress report failures.
+                    }
+                };
+                heartbeatTimer.Start();
+
+                ReportProgress(true, 0, 0, null);
+            }
 
             try
             {
@@ -53,22 +129,30 @@ public class SearchEngine : IAiEngine
                     result.BestMove = bestMove;
                     result.Score = score;
                     result.Depth = depth;
-                    result.Nodes = _nodesVisited;
+                    result.Nodes = Interlocked.Read(ref _nodesVisited);
 
-                    progress?.Report(new SearchProgress
+                    lock (progressStateLock)
                     {
-                        CurrentDepth = currentDepth,
-                        MaxDepth = settings.Depth,
-                        Nodes = _nodesVisited,
-                        Score = score,
-                        BestMove = bestMove.ToString(),
-                        Message = $"Depth {currentDepth}/{settings.Depth} computed"
-                    });
+                        progressState.CurrentDepth = depth;
+                        progressState.Score = score;
+                        progressState.BestMove = bestMove.ToString();
+                    }
+
+                    ReportProgress(false, depth, score, bestMove.ToString());
                 }
             }
             catch (OperationCanceledException)
             {
                 // Return best result so far
+            }
+            finally
+            {
+                stopwatch.Stop();
+                if (heartbeatTimer != null)
+                {
+                    heartbeatTimer.Stop();
+                    heartbeatTimer.Dispose();
+                }
             }
 
             return result;
@@ -77,7 +161,7 @@ public class SearchEngine : IAiEngine
 
     private int Negamax(IBoard board, int depth, int ply, int alpha, int beta)
     {
-        _nodesVisited++;
+        Interlocked.Increment(ref _nodesVisited);
         if (_nodesVisited % 2000 == 0 && _ct.IsCancellationRequested) throw new OperationCanceledException();
 
         // 1. TT Probe
@@ -157,7 +241,7 @@ public class SearchEngine : IAiEngine
 
     private int Quiescence(IBoard board, int alpha, int beta)
     {
-        _nodesVisited++;
+        Interlocked.Increment(ref _nodesVisited);
         
         // Stand-pat
         int eval = _evaluator.Evaluate(board);

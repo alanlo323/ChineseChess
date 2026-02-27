@@ -11,6 +11,9 @@ public class SearchProgress
     public long Nodes { get; set; }
     public int Score { get; set; }
     public string? BestMove { get; set; }
+    public long ElapsedMs { get; set; }
+    public long NodesPerSecond { get; set; }
+    public bool IsHeartbeat { get; set; }
     public string? Message { get; set; }
 }
 

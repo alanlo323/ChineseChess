@@ -230,7 +230,16 @@ public class GameService : IGameService
 
     private string FormatThinkingProgress(SearchProgress progress)
     {
-        return $"AI 思考中：深度 {progress.CurrentDepth}/{progress.MaxDepth}，節點 {progress.Nodes}，分數 {progress.Score}，建議 {progress.BestMove}";
+        var elapsedSeconds = progress.ElapsedMs > 0
+            ? $"{(progress.ElapsedMs / 1000.0):0.0}s"
+            : "0.0s";
+        var speed = progress.NodesPerSecond > 0
+            ? $"{progress.NodesPerSecond:N0} nodes/s"
+            : "n/a";
+        var bestMove = string.IsNullOrWhiteSpace(progress.BestMove) ? "待更新" : progress.BestMove;
+        var mode = progress.IsHeartbeat ? "（即時）" : "（階段）";
+
+        return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {progress.Score}，建議 {bestMove}";
     }
 
     private static string FormatHintProgress(SearchResult result)
