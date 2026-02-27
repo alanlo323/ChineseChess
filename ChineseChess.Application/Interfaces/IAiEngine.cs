@@ -4,6 +4,16 @@ using System.Threading.Tasks;
 
 namespace ChineseChess.Application.Interfaces;
 
+public class SearchProgress
+{
+    public int CurrentDepth { get; set; }
+    public int MaxDepth { get; set; }
+    public long Nodes { get; set; }
+    public int Score { get; set; }
+    public string? BestMove { get; set; }
+    public string? Message { get; set; }
+}
+
 public class SearchResult
 {
     public Move BestMove { get; set; }
@@ -21,5 +31,5 @@ public class SearchSettings
 
 public interface IAiEngine
 {
-    Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default);
+    Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null);
 }

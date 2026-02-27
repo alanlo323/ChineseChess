@@ -23,45 +23,56 @@ public class SearchEngine : IAiEngine
         _tt = new TranspositionTable(64); // 64MB default
     }
 
-    public async Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct)
+    public Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
     {
-        _nodesVisited = 0;
-        _ct = ct;
-        _tt.Clear(); // Optional: Keep TT between moves? Usually yes, but for now clear to avoid stale data issues.
-
-        var result = new SearchResult();
-        int currentDepth = 0;
-
-        // Iterative Deepening
-        try
+        return Task.Run(() =>
         {
-            for (int depth = 1; depth <= settings.Depth; depth++)
+            _nodesVisited = 0;
+            _ct = ct;
+            _tt.Clear(); // Optional: Keep TT between moves? Usually yes, but for now clear to avoid stale data issues.
+
+            var result = new SearchResult();
+            int currentDepth = 0;
+
+            try
             {
-                currentDepth = depth;
-                if (_ct.IsCancellationRequested) break;
-
-                int score = Negamax(board, depth, 0, -Infinity, Infinity);
-                
-                // Get PV from TT
-                var bestMove = Move.Null;
-                if (_tt.Probe(board.ZobristKey, out var entry))
+                for (int depth = 1; depth <= settings.Depth; depth++)
                 {
-                    bestMove = entry.BestMove;
+                    currentDepth = depth;
+                    if (_ct.IsCancellationRequested) break;
+
+                    int score = Negamax(board, depth, 0, -Infinity, Infinity);
+
+                    // Get PV from TT
+                    var bestMove = Move.Null;
+                    if (_tt.Probe(board.ZobristKey, out var entry))
+                    {
+                        bestMove = entry.BestMove;
+                    }
+
+                    result.BestMove = bestMove;
+                    result.Score = score;
+                    result.Depth = depth;
+                    result.Nodes = _nodesVisited;
+
+                    progress?.Report(new SearchProgress
+                    {
+                        CurrentDepth = currentDepth,
+                        MaxDepth = settings.Depth,
+                        Nodes = _nodesVisited,
+                        Score = score,
+                        BestMove = bestMove.ToString(),
+                        Message = $"Depth {currentDepth}/{settings.Depth} computed"
+                    });
                 }
-
-                result.BestMove = bestMove;
-                result.Score = score;
-                result.Depth = depth;
-                result.Nodes = _nodesVisited;
-                // result.PvLine = GetPvLine(board);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // Return best result so far
-        }
+            catch (OperationCanceledException)
+            {
+                // Return best result so far
+            }
 
-        return result;
+            return result;
+        }, ct);
     }
 
     private int Negamax(IBoard board, int depth, int ply, int alpha, int beta)

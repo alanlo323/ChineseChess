@@ -27,6 +27,7 @@ public class GameService : IGameService
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
     public event Action<SearchResult>? HintReady;
+    public event Action<string>? ThinkingProgress;
 
     public GameService(IAiEngine aiEngine)
     {
@@ -38,6 +39,7 @@ public class GameService : IGameService
     public async Task StartGameAsync(GameMode mode)
     {
         _currentMode = mode;
+        _aiCts?.Cancel();
         _board = new Board(); // Reset to standard start
         _board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
         
@@ -50,7 +52,7 @@ public class GameService : IGameService
             // For standard start, Red (Player) moves first in PvAI unless configured otherwise.
             if (_currentMode == GameMode.AiVsAi)
             {
-                await TriggerAiMove();
+                await RunAiSearchAsync(applyBestMove: true);
             }
         }
     }
@@ -58,6 +60,7 @@ public class GameService : IGameService
     public Task StopGameAsync()
     {
         _aiCts?.Cancel();
+        ThinkingProgress?.Invoke("AI 思考已停止");
         return Task.CompletedTask;
     }
 
@@ -85,51 +88,89 @@ public class GameService : IGameService
 
         if (_currentMode == GameMode.PlayerVsAi)
         {
-            await TriggerAiMove();
+            await RunAiSearchAsync(applyBestMove: true);
         }
     }
 
-    private async Task TriggerAiMove()
+    private async Task<SearchResult?> RunAiSearchAsync(bool applyBestMove)
     {
-        if (_isThinking) return;
+        if (_isThinking) return null;
         _isThinking = true;
-        NotifyUpdate(); // Update UI to show thinking status
+        ThinkingProgress?.Invoke("AI 思考中...");
 
         _aiCts = new CancellationTokenSource();
+        var cts = _aiCts;
+        var boardSnapshot = _board.Clone();
+        SearchResult? result = null;
+        var continueAiLoop = false;
+        var progress = new Progress<SearchProgress>(p =>
+        {
+            ThinkingProgress?.Invoke(FormatThinkingProgress(p));
+        });
         
         try
         {
-            // Delay slightly to let UI update
-            await Task.Delay(100);
-
-            var result = await _aiEngine.SearchAsync(_board.Clone(), _aiSettings, _aiCts.Token);
+            result = await _aiEngine.SearchAsync(
+                boardSnapshot,
+                _aiSettings,
+                cts.Token,
+                progress);
+            
+            if (cts.Token.IsCancellationRequested) return null;
             
             if (result.BestMove.IsNull)
             {
-                GameMessage?.Invoke("AI Resigns (No moves)");
+                ThinkingProgress?.Invoke("AI 思考完成：目前無可用著法");
+                if (applyBestMove)
+                {
+                    GameMessage?.Invoke("AI Resigns (No moves)");
+                }
             }
             else
             {
-                _board.MakeMove(result.BestMove);
-                NotifyUpdate();
-                GameMessage?.Invoke($"AI played {result.BestMove} (Score: {result.Score})");
+                if (applyBestMove)
+                {
+                    _board.MakeMove(result.BestMove);
+                    NotifyUpdate();
+                    GameMessage?.Invoke($"AI played {result.BestMove} (Score: {result.Score})");
+                    ThinkingProgress?.Invoke(FormatHintProgress(result));
+                }
+                else
+                {
+                    HintReady?.Invoke(result);
+                    ThinkingProgress?.Invoke(FormatHintProgress(result));
+                }
                 
-                if (!CheckGameOver() && _currentMode == GameMode.AiVsAi)
+                if (applyBestMove && !CheckGameOver() && _currentMode == GameMode.AiVsAi)
                 {
                     // Continue loop
-                    _ = TriggerAiMove(); // Fire and forget to avoid stack overflow recursion in Task
+                    continueAiLoop = true;
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            GameMessage?.Invoke("AI Search Canceled");
+            ThinkingProgress?.Invoke("AI 思考已取消");
+            if (applyBestMove)
+            {
+                GameMessage?.Invoke("AI Search Canceled");
+            }
         }
         finally
         {
             _isThinking = false;
-            NotifyUpdate();
+            if (applyBestMove)
+            {
+                NotifyUpdate();
+            }
         }
+
+        if (continueAiLoop)
+        {
+            _ = RunAiSearchAsync(applyBestMove: true);
+        }
+
+        return result;
     }
 
     private bool CheckGameOver()
@@ -181,22 +222,25 @@ public class GameService : IGameService
         _aiSettings.TimeLimitMs = timeMs;
     }
 
-    public Task<SearchResult> GetHintAsync()
+    public async Task<SearchResult> GetHintAsync()
     {
-        if (_isThinking)
-        {
-            GameMessage?.Invoke("AI is thinking, please wait for the move to finish.");
-            return Task.FromResult(new SearchResult { BestMove = Move.Null });
-        }
-
-        return GetHintInternalAsync();
+        var result = await RunAiSearchAsync(applyBestMove: false);
+        return result ?? new SearchResult { BestMove = Move.Null };
     }
 
-    private async Task<SearchResult> GetHintInternalAsync()
+    private string FormatThinkingProgress(SearchProgress progress)
     {
-        var result = await _aiEngine.SearchAsync(_board.Clone(), _aiSettings, CancellationToken.None);
-        HintReady?.Invoke(result);
-        return result;
+        return $"AI 思考中：深度 {progress.CurrentDepth}/{progress.MaxDepth}，節點 {progress.Nodes}，分數 {progress.Score}，建議 {progress.BestMove}";
+    }
+
+    private static string FormatHintProgress(SearchResult result)
+    {
+        if (result.BestMove.IsNull)
+        {
+            return "提示：目前局面沒有可行的最佳走法";
+        }
+
+        return $"提示完成：{result.BestMove} | 分數: {result.Score} | 深度: {result.Depth} | 節點: {result.Nodes}";
     }
 
     private void NotifyUpdate() => BoardUpdated?.Invoke();

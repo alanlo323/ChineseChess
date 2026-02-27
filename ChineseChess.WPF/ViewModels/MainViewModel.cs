@@ -23,9 +23,24 @@ public class MainViewModel : ObservableObject
         ControlPanel = new ControlPanelViewModel(gameService);
 
         gameService.HintReady += hint => OnHintReady(hint);
+        gameService.ThinkingProgress += progress => OnThinkingProgress(progress);
 
         // Listen to Service for Analysis updates if available
         // Ideally GameService should expose analysis events or properties
+    }
+
+    private void OnThinkingProgress(string progress)
+    {
+        if (global::System.Windows.Application.Current == null)
+        {
+            AnalysisText = progress;
+            return;
+        }
+
+        global::System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            AnalysisText = progress;
+        });
     }
 
     private void OnHintReady(SearchResult hint)

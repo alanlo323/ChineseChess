@@ -59,6 +59,9 @@ public class ChessBoardViewModel : ObservableObject
 {
     private readonly IGameService _gameService;
     private SquareViewModel? _selectedSquare;
+    private int? _hintFrom;
+    private int? _hintTo;
+    private string? _hintBoardFen;
 
     public ObservableCollection<SquareViewModel> Squares { get; } = new ObservableCollection<SquareViewModel>();
     
@@ -95,19 +98,27 @@ public class ChessBoardViewModel : ObservableObject
     {
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
+            _hintFrom = null;
+            _hintTo = null;
+            _hintBoardFen = null;
             ClearHighlights();
+
             if (hint.BestMove.IsNull) return;
             var from = hint.BestMove.From;
             var to = hint.BestMove.To;
 
-            if (from < 90) Squares[from].IsValidMove = true;
-            if (to < 90) Squares[to].IsValidMove = true;
+            if (from < 90) _hintFrom = from;
+            if (to < 90) _hintTo = to;
+            _hintBoardFen = _gameService.CurrentBoard.ToFen();
+            ApplyHintHighlights();
         });
     }
 
     private void RefreshBoard()
     {
         var board = _gameService.CurrentBoard;
+        var currentFen = board.ToFen();
+
         for (int i = 0; i < 90; i++)
         {
             Squares[i].Piece = board.GetPiece(i);
@@ -115,6 +126,18 @@ public class ChessBoardViewModel : ObservableObject
             Squares[i].IsValidMove = false;
             // TODO: Highlight last move from history if available
         }
+
+        if (_hintBoardFen != null && _hintBoardFen == currentFen)
+        {
+            ApplyHintHighlights();
+        }
+        else
+        {
+            _hintFrom = null;
+            _hintTo = null;
+            _hintBoardFen = null;
+        }
+
         _selectedSquare = null;
     }
 
@@ -174,6 +197,19 @@ public class ChessBoardViewModel : ObservableObject
     private void ClearHighlights()
     {
         foreach (var s in Squares) s.IsValidMove = false;
+    }
+
+    private void ApplyHintHighlights()
+    {
+        if (_hintFrom.HasValue && _hintFrom.Value < 90 && _hintFrom.Value >= 0)
+        {
+            Squares[_hintFrom.Value].IsValidMove = true;
+        }
+
+        if (_hintTo.HasValue && _hintTo.Value < 90 && _hintTo.Value >= 0)
+        {
+            Squares[_hintTo.Value].IsValidMove = true;
+        }
     }
 
     private void HighlightLegalMoves(int fromIndex)
