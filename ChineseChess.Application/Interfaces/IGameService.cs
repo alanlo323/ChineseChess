@@ -33,6 +33,6 @@ public interface IGameService
     IEnumerable<string> GetBookmarks();
     
     // AI
-    void SetDifficulty(int depth, int timeMs);
+    void SetDifficulty(int depth, int timeMs, int threadCount = 0);
     Task<SearchResult> GetHintAsync(); // Get analysis for current position
 }

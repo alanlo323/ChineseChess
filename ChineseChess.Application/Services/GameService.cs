@@ -217,10 +217,11 @@ public class GameService : IGameService
     public void DeleteBookmark(string name) => _bookmarkManager.DeleteBookmark(name);
     public IEnumerable<string> GetBookmarks() => _bookmarkManager.GetBookmarkNames();
 
-    public void SetDifficulty(int depth, int timeMs)
+    public void SetDifficulty(int depth, int timeMs, int threadCount = 0)
     {
         _aiSettings.Depth = depth;
         _aiSettings.TimeLimitMs = timeMs;
+        if (threadCount > 0) _aiSettings.ThreadCount = threadCount;
     }
 
     public async Task<SearchResult> GetHintAsync()

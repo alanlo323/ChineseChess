@@ -17,11 +17,11 @@ public class GameServiceTests
     public async Task Hint_ShouldMatchDirectSearchResultInPlayerVsAiMode()
     {
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 3000 };
+        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 3000, ThreadCount = 1 };
         var directResult = await engine.SearchAsync(new Board(InitialFen), settings, CancellationToken.None);
 
         var gameService = new GameService(engine);
-        gameService.SetDifficulty(settings.Depth, settings.TimeLimitMs);
+        gameService.SetDifficulty(settings.Depth, settings.TimeLimitMs, settings.ThreadCount);
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
 
         var hint = await gameService.GetHintAsync();
@@ -34,14 +34,14 @@ public class GameServiceTests
     public async Task AiVsAiFirstMove_ShouldMatchDirectSearchResult()
     {
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 3000 };
+        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 3000, ThreadCount = 1 };
         var directResult = await engine.SearchAsync(new Board(InitialFen), settings, CancellationToken.None);
 
         var expectedBoard = new Board(InitialFen);
         expectedBoard.MakeMove(directResult.BestMove);
 
         var gameService = new GameService(engine);
-        gameService.SetDifficulty(settings.Depth, settings.TimeLimitMs);
+        gameService.SetDifficulty(settings.Depth, settings.TimeLimitMs, settings.ThreadCount);
         await gameService.StartGameAsync(GameMode.AiVsAi);
 
         Assert.Equal(expectedBoard.ToFen(), gameService.CurrentBoard.ToFen());

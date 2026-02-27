@@ -1,4 +1,5 @@
 using ChineseChess.Domain.Entities;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,6 +16,7 @@ public class SearchProgress
     public long NodesPerSecond { get; set; }
     public bool IsHeartbeat { get; set; }
     public string? Message { get; set; }
+    public int ThreadCount { get; set; }
 }
 
 public class SearchResult
@@ -30,6 +32,7 @@ public class SearchSettings
 {
     public int Depth { get; set; } = 5;
     public int TimeLimitMs { get; set; } = 3000;
+    public int ThreadCount { get; set; } = Environment.ProcessorCount;
 }
 
 public interface IAiEngine

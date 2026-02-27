@@ -20,7 +20,7 @@ public class SearchTests
     {
         var board = new Board(InitialFen);
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 1, TimeLimitMs = 1000 };
+        var settings = new SearchSettings { Depth = 1, TimeLimitMs = 1000, ThreadCount = 1 };
 
         var result = await engine.SearchAsync(board, settings, CancellationToken.None);
 
@@ -34,7 +34,7 @@ public class SearchTests
     {
         var board = new Board(InitialFen);
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000 };
+        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000, ThreadCount = 1 };
         var reports = new List<SearchProgress>();
 
         var result = await engine.SearchAsync(
@@ -56,7 +56,7 @@ public class SearchTests
     {
         var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABN1 w - - 0 1");
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000 };
+        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000, ThreadCount = 1 };
 
         var result = await engine.SearchAsync(board, settings, CancellationToken.None);
 
@@ -69,7 +69,7 @@ public class SearchTests
     {
         var board = new Board(InitialFen);
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000 };
+        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000, ThreadCount = 1 };
 
         var first = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
         var second = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
@@ -82,7 +82,7 @@ public class SearchTests
     {
         var board = new Board("4k4/9/9/9/4p4/4P4/9/9/9/4K4 w - - 0 1");
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 1, TimeLimitMs = 3000 };
+        var settings = new SearchSettings { Depth = 1, TimeLimitMs = 3000, ThreadCount = 1 };
 
         var result = await engine.SearchAsync(board, settings, CancellationToken.None);
 
@@ -97,9 +97,9 @@ public class SearchTests
         var engine1 = new SearchEngine();
         var engine2 = new SearchEngine();
 
-        var shallow = await engine1.SearchAsync(board, new SearchSettings { Depth = 1 }, CancellationToken.None);
+        var shallow = await engine1.SearchAsync(board, new SearchSettings { Depth = 1, ThreadCount = 1 }, CancellationToken.None);
         var deeper = await engine2.SearchAsync(
-            new Board(InitialFen), new SearchSettings { Depth = 3 }, CancellationToken.None);
+            new Board(InitialFen), new SearchSettings { Depth = 3, ThreadCount = 1 }, CancellationToken.None);
 
         Assert.True(deeper.Nodes > shallow.Nodes);
         Assert.True(deeper.Depth > shallow.Depth);
@@ -176,7 +176,7 @@ public class SearchTests
     {
         var board = new Board("3ak4/9/9/9/9/9/9/9/4r4/4K4 w - - 0 1");
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 3, TimeLimitMs = 5000 };
+        var settings = new SearchSettings { Depth = 3, TimeLimitMs = 5000, ThreadCount = 1 };
 
         var result = await engine.SearchAsync(board, settings, CancellationToken.None);
 
@@ -191,7 +191,7 @@ public class SearchTests
         // Red rook can capture black rook or black pawn — should prefer the rook
         var board = new Board("4k4/9/9/9/4r4/3RP4/9/9/9/4K4 w - - 0 1");
         var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 1, TimeLimitMs = 3000 };
+        var settings = new SearchSettings { Depth = 1, TimeLimitMs = 3000, ThreadCount = 1 };
 
         var result = await engine.SearchAsync(board, settings, CancellationToken.None);
 
