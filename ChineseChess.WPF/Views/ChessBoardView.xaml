@@ -34,10 +34,14 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="SquareFrame" Property="Background" Value="{StaticResource BoardHoverBrush}" />
+                                <Setter TargetName="SquareFrame" Property="Background" Value="Transparent" />
+                                <Setter TargetName="SquareFrame" Property="BorderBrush" Value="{StaticResource BoardHoverBrush}" />
+                                <Setter TargetName="SquareFrame" Property="BorderThickness" Value="1.2" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="SquareFrame" Property="Background" Value="{StaticResource BoardPressedBrush}" />
+                                <Setter TargetName="SquareFrame" Property="BorderBrush" Value="{StaticResource BoardPressedBrush}" />
+                                <Setter TargetName="SquareFrame" Property="BorderThickness" Value="1.2" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="SquareFrame" Property="Opacity" Value="0.9" />
