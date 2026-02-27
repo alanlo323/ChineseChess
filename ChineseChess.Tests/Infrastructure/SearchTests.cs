@@ -19,8 +19,7 @@ public class SearchTests
         var result = await engine.SearchAsync(board, settings, CancellationToken.None);
 
         Assert.NotNull(result);
-        // Since GenerateLegalMoves is empty, BestMove will be Null
-        Assert.True(result.BestMove.IsNull); 
+        Assert.False(result.BestMove.IsNull);
         Assert.True(result.Nodes >= 0);
     }
 }

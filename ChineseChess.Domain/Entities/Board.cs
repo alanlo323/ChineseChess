@@ -249,9 +249,201 @@ public class Board : IBoard
 
     public IEnumerable<Move> GenerateLegalMoves()
     {
-        // TODO: Full implementation
-        // For now return empty or simple
-        return new List<Move>(); 
+        var moves = new List<Move>();
+
+        bool IsInsideBoard(int row, int col) => row >= 0 && row < Height && col >= 0 && col < Width;
+        bool IsOwnPiece(int index) => _pieces[index].Color == _turn;
+
+        void TryAddMove(int from, int to)
+        {
+            if (to < 0 || to >= BoardSize) return;
+            if (IsOwnPiece(to)) return;
+            moves.Add(new Move((byte)from, (byte)to));
+        }
+
+        bool InSamePalace(int row, int col, PieceColor color)
+        {
+            if (col < 3 || col > 5) return false;
+            return color == PieceColor.Red ? row >= 7 && row <= 9 : row >= 0 && row <= 2;
+        }
+
+        bool IsCrossedRiver(Piece piece, int row)
+        {
+            return piece.Color == PieceColor.Red ? row <= 4 : row >= 5;
+        }
+
+        for (int from = 0; from < BoardSize; from++)
+        {
+            var piece = _pieces[from];
+            if (piece.Color != _turn) continue;
+            if (piece.IsNone) continue;
+
+            int fromRow = from / Width;
+            int fromCol = from % Width;
+
+            switch (piece.Type)
+            {
+                case PieceType.King:
+                    {
+                        int[,] kingDirs = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
+                        for (int i = 0; i < 4; i++)
+                        {
+                            int toRow = fromRow + kingDirs[i, 0];
+                            int toCol = fromCol + kingDirs[i, 1];
+                            if (!IsInsideBoard(toRow, toCol)) continue;
+                            if (!InSamePalace(toRow, toCol, piece.Color)) continue;
+                            TryAddMove(from, toRow * Width + toCol);
+                        }
+                        break;
+                    }
+
+                case PieceType.Advisor:
+                    {
+                        int[,] advisorDirs = { { -1, -1 }, { -1, 1 }, { 1, -1 }, { 1, 1 } };
+                        for (int i = 0; i < 4; i++)
+                        {
+                            int toRow = fromRow + advisorDirs[i, 0];
+                            int toCol = fromCol + advisorDirs[i, 1];
+                            if (!IsInsideBoard(toRow, toCol)) continue;
+                            if (!InSamePalace(toRow, toCol, piece.Color)) continue;
+                            TryAddMove(from, toRow * Width + toCol);
+                        }
+                        break;
+                    }
+
+                case PieceType.Elephant:
+                    {
+                        int[,] elephantDirs = { { -2, -2 }, { -2, 2 }, { 2, -2 }, { 2, 2 } };
+                        for (int i = 0; i < 4; i++)
+                        {
+                            int toRow = fromRow + elephantDirs[i, 0];
+                            int toCol = fromCol + elephantDirs[i, 1];
+                            if (!IsInsideBoard(toRow, toCol)) continue;
+                            if (!IsCrossedRiver(piece, toRow)) continue;
+                            int blockRow = fromRow + elephantDirs[i, 0] / 2;
+                            int blockCol = fromCol + elephantDirs[i, 1] / 2;
+                            int blockIndex = blockRow * Width + blockCol;
+                            if (_pieces[blockIndex].IsNone)
+                            {
+                                TryAddMove(from, toRow * Width + toCol);
+                            }
+                        }
+                        break;
+                    }
+
+                case PieceType.Horse:
+                    {
+                        int[][] horseDirs =
+                        {
+                            new int[] { 2, 1, 1, 0 }, new int[] { 2, -1, 1, 0 }, new int[] { -2, 1, -1, 0 }, new int[] { -2, -1, -1, 0 },
+                            new int[] { 1, 2, 0, 1 }, new int[] { 1, -2, 0, -1 }, new int[] { -1, 2, 0, 1 }, new int[] { -1, -2, 0, -1 }
+                        };
+
+                        for (int i = 0; i < horseDirs.Length; i++)
+                        {
+                            int toRow = fromRow + horseDirs[i][0];
+                            int toCol = fromCol + horseDirs[i][1];
+                            if (!IsInsideBoard(toRow, toCol)) continue;
+
+                            int blockRow = fromRow + horseDirs[i][2];
+                            int blockCol = fromCol + horseDirs[i][3];
+                            int blockIndex = blockRow * Width + blockCol;
+
+                            if (_pieces[blockIndex].IsNone)
+                            {
+                                TryAddMove(from, toRow * Width + toCol);
+                            }
+                        }
+                        break;
+                    }
+
+                case PieceType.Rook:
+                case PieceType.Cannon:
+                    {
+                        bool isCannon = piece.Type == PieceType.Cannon;
+                        int[,] slideDirs = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
+
+                        for (int dir = 0; dir < 4; dir++)
+                        {
+                            int dRow = slideDirs[dir, 0];
+                            int dCol = slideDirs[dir, 1];
+
+                            bool screenHit = false;
+                            int toRow = fromRow + dRow;
+                            int toCol = fromCol + dCol;
+                            while (IsInsideBoard(toRow, toCol))
+                            {
+                                int to = toRow * Width + toCol;
+                                var target = _pieces[to];
+
+                                if (target.IsNone)
+                                {
+                                    if (!isCannon)
+                                    {
+                                        TryAddMove(from, to);
+                                    }
+                                }
+                                else
+                                {
+                                    if (!isCannon)
+                                    {
+                                        TryAddMove(from, to);
+                                        break;
+                                    }
+
+                                    if (!screenHit)
+                                    {
+                                        screenHit = true;
+                                    }
+                                    else
+                                    {
+                                        if (target.Color != piece.Color)
+                                        {
+                                            TryAddMove(from, to);
+                                        }
+                                        break;
+                                    }
+                                }
+
+                                toRow += dRow;
+                                toCol += dCol;
+                            }
+                        }
+
+                        break;
+                    }
+
+                case PieceType.Pawn:
+                    {
+                        int forward = piece.Color == PieceColor.Red ? -1 : 1;
+
+                        int forwardRow = fromRow + forward;
+                        int forwardCol = fromCol;
+                        if (IsInsideBoard(forwardRow, forwardCol))
+                        {
+                            TryAddMove(from, forwardRow * Width + forwardCol);
+                        }
+
+                        if (IsCrossedRiver(piece, fromRow))
+                        {
+                            int[] sideCols = { fromCol - 1, fromCol + 1 };
+                            foreach (var sideCol in sideCols)
+                            {
+                                if (IsInsideBoard(fromRow, sideCol))
+                                {
+                                    TryAddMove(from, fromRow * Width + sideCol);
+                                }
+                            }
+                        }
+                        break;
+                    }
+
+                default:
+                    break;
+            }
+        }
+
+        return moves;
     }
     
     public IEnumerable<Move> GeneratePseudoLegalMoves()

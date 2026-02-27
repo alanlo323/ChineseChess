@@ -1,5 +1,6 @@
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
+using System.Linq;
 using Xunit;
 
 namespace ChineseChess.Tests.Domain;
@@ -50,5 +51,14 @@ public class BoardTests
         Assert.Equal(PieceType.None, board.GetPiece(64).Type);
         Assert.Equal(PieceType.Cannon, board.GetPiece(65).Type);
         Assert.Equal(PieceColor.Black, board.Turn);
+    }
+
+    [Fact]
+    public void InitialPosition_GeneratesMoves()
+    {
+        var board = new Board();
+        board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+
+        Assert.True(board.GenerateLegalMoves().Any());
     }
 }
