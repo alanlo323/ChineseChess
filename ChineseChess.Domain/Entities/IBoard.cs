@@ -14,7 +14,9 @@ public interface IBoard
     
     // State Manipulation
     void MakeMove(Move move);
-    void UnmakeMove(Move move); // Or Undo() if we track history internally
+    void UnmakeMove(Move move);
+    void MakeNullMove();
+    void UnmakeNullMove();
     
     // Status
     bool IsCheck(PieceColor color);

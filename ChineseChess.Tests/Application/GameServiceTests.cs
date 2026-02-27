@@ -1,4 +1,5 @@
 using ChineseChess.Application.Enums;
+using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Services;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Infrastructure.AI.Search;

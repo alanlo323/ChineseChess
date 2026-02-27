@@ -1,15 +1,17 @@
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
+using System;
 using System.Linq;
 
 namespace ChineseChess.Infrastructure.AI.Evaluators;
 
 public class HandcraftedEvaluator : IEvaluator
 {
+    private const int BoardSize = 90;
     private const int BoardWidth = 9;
+    private const int BoardHeight = 10;
 
-    // Basic material values
-    private static readonly int[] PieceValues = new int[]
+    private static readonly int[] PieceValues =
     {
         0,      // None
         10000,  // King
@@ -18,62 +20,142 @@ public class HandcraftedEvaluator : IEvaluator
         270,    // Horse
         600,    // Rook
         285,    // Cannon
-        30      // Pawn (avg)
+        30      // Pawn (base — PST adds positional value)
     };
 
     public int Evaluate(IBoard board)
     {
         int score = 0;
-        int mobilityBonus = board.GenerateLegalMoves().Count() * 2;
-        
-        // Material & PST
-        for (int i = 0; i < 90; i++)
+
+        int redKingIndex = -1, blackKingIndex = -1;
+        int redAdvisors = 0, blackAdvisors = 0;
+        int redElephants = 0, blackElephants = 0;
+        int redRookCount = 0, blackRookCount = 0;
+        int redRook1 = -1, redRook2 = -1;
+        int blackRook1 = -1, blackRook2 = -1;
+
+        for (int i = 0; i < BoardSize; i++)
         {
             var p = board.GetPiece(i);
             if (p.IsNone) continue;
 
-            int val = PieceValues[(int)p.Type];
-            
-            // Simple PST bonus (center control, river crossing) - placeholder
-            // if (p.Type == PieceType.Pawn && crossedRiver) val += 30;
+            int sign = p.Color == PieceColor.Red ? 1 : -1;
 
-            if (p.Color == PieceColor.Red) score += val;
-            else score -= val;
+            // Material
+            score += sign * PieceValues[(int)p.Type];
 
-            int row = i / BoardWidth;
-            int col = i % BoardWidth;
+            // PST
+            score += sign * PieceSquareTables.GetScore(p.Type, p.Color, i);
 
-            // Pawn development bonus: pawn crossing river and more advanced pieces
-            if (p.Type == PieceType.Pawn)
+            switch (p.Type)
             {
-                if (p.Color == PieceColor.Red)
-                {
-                    if (row <= 4) score += 12; // already crossed river
-                    score += Math.Max(0, 4 - row); // keep advancing toward home side
-                }
-                else
-                {
-                    if (row >= 5) score += 12;
-                    score += Math.Max(0, row - 5);
-                }
-            }
-
-            // Light center control bonus for active pieces
-            if (col == 4)
-            {
-                if (p.Type == PieceType.Horse || p.Type == PieceType.Rook || p.Type == PieceType.Cannon)
-                {
-                    if (p.Color == PieceColor.Red) score += 4;
-                    else score -= 4;
-                }
+                case PieceType.King:
+                    if (p.Color == PieceColor.Red) redKingIndex = i;
+                    else blackKingIndex = i;
+                    break;
+                case PieceType.Advisor:
+                    if (p.Color == PieceColor.Red) redAdvisors++;
+                    else blackAdvisors++;
+                    break;
+                case PieceType.Elephant:
+                    if (p.Color == PieceColor.Red) redElephants++;
+                    else blackElephants++;
+                    break;
+                case PieceType.Rook:
+                    if (p.Color == PieceColor.Red)
+                    {
+                        if (redRookCount == 0) redRook1 = i; else redRook2 = i;
+                        redRookCount++;
+                    }
+                    else
+                    {
+                        if (blackRookCount == 0) blackRook1 = i; else blackRook2 = i;
+                        blackRookCount++;
+                    }
+                    break;
             }
         }
 
-        // Current side mobility bonus (positive for side-to-move)
-        if (board.Turn == PieceColor.Red) score += mobilityBonus;
-        else score -= mobilityBonus;
+        // --- King Safety ---
+        score += EvaluateKingSafety(board, PieceColor.Red, redKingIndex, redAdvisors, redElephants);
+        score -= EvaluateKingSafety(board, PieceColor.Black, blackKingIndex, blackAdvisors, blackElephants);
 
-        // Perspective: positive for current turn
+        // --- Piece Structure ---
+        score += EvaluateRookStructure(board, PieceColor.Red, redRook1, redRook2, redRookCount);
+        score -= EvaluateRookStructure(board, PieceColor.Black, blackRook1, blackRook2, blackRookCount);
+
+        // --- Mobility (lightweight: count legal moves for side to move) ---
+        int mobility = board.GenerateLegalMoves().Count();
+        score += (board.Turn == PieceColor.Red ? 1 : -1) * mobility * 2;
+
+        // Return from side-to-move perspective
         return board.Turn == PieceColor.Red ? score : -score;
+    }
+
+    private static int EvaluateKingSafety(IBoard board, PieceColor color, int kingIndex,
+        int advisorCount, int elephantCount)
+    {
+        if (kingIndex < 0) return 0;
+
+        int bonus = 0;
+
+        // Penalty for missing palace defenders
+        if (advisorCount < 2) bonus -= (2 - advisorCount) * 20;
+        if (elephantCount < 2) bonus -= (2 - elephantCount) * 10;
+
+        // Exposed king penalty: check if king's file is open toward the enemy
+        int kingCol = kingIndex % BoardWidth;
+        int kingRow = kingIndex / BoardWidth;
+        int direction = color == PieceColor.Red ? -1 : 1;
+        bool exposed = true;
+        for (int r = kingRow + direction; r >= 0 && r < BoardHeight; r += direction)
+        {
+            var p = board.GetPiece(r * BoardWidth + kingCol);
+            if (!p.IsNone)
+            {
+                exposed = false;
+                break;
+            }
+        }
+        if (exposed) bonus -= 40;
+
+        return bonus;
+    }
+
+    private static int EvaluateRookStructure(IBoard board, PieceColor color,
+        int rook1, int rook2, int rookCount)
+    {
+        if (rookCount == 0) return 0;
+
+        int bonus = 0;
+
+        // Connected rooks bonus (same rank or file)
+        if (rookCount == 2 && rook1 >= 0 && rook2 >= 0)
+        {
+            int r1Row = rook1 / BoardWidth, r1Col = rook1 % BoardWidth;
+            int r2Row = rook2 / BoardWidth, r2Col = rook2 % BoardWidth;
+            if (r1Row == r2Row || r1Col == r2Col) bonus += 15;
+        }
+
+        // Rook on open file bonus (no friendly pawn in same column)
+        for (int ri = 0; ri < rookCount; ri++)
+        {
+            int rookIdx = ri == 0 ? rook1 : rook2;
+            if (rookIdx < 0) continue;
+            int rookCol = rookIdx % BoardWidth;
+            bool openFile = true;
+            for (int r = 0; r < BoardHeight; r++)
+            {
+                var p = board.GetPiece(r * BoardWidth + rookCol);
+                if (p.Type == PieceType.Pawn && p.Color == color)
+                {
+                    openFile = false;
+                    break;
+                }
+            }
+            if (openFile) bonus += 10;
+        }
+
+        return bonus;
     }
 }

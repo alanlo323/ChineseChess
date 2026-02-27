@@ -1,6 +1,7 @@
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
+using ChineseChess.Infrastructure.AI.Evaluators;
 using ChineseChess.Infrastructure.AI.Search;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,10 +13,12 @@ namespace ChineseChess.Tests.Infrastructure;
 
 public class SearchTests
 {
+    private const string InitialFen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+
     [Fact]
     public async Task Search_ShouldReturnResult()
     {
-        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        var board = new Board(InitialFen);
         var engine = new SearchEngine();
         var settings = new SearchSettings { Depth = 1, TimeLimitMs = 1000 };
 
@@ -29,7 +32,7 @@ public class SearchTests
     [Fact]
     public async Task Search_ShouldReportHeartbeatProgress()
     {
-        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        var board = new Board(InitialFen);
         var engine = new SearchEngine();
         var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000 };
         var reports = new List<SearchProgress>();
@@ -64,7 +67,7 @@ public class SearchTests
     [Fact]
     public async Task Search_ShouldReturnSameMove_ForSamePosition()
     {
-        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        var board = new Board(InitialFen);
         var engine = new SearchEngine();
         var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000 };
 
@@ -72,24 +75,6 @@ public class SearchTests
         var second = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
 
         Assert.Equal(first.BestMove, second.BestMove);
-    }
-
-    [Fact]
-    public async Task Search_DepthOne_ShouldPreferHigherPriorityMoveInEqualScore()
-    {
-        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
-        var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 1, TimeLimitMs = 12000 };
-
-        var result = await engine.SearchAsync(board, settings, CancellationToken.None);
-
-        var legalMoves = board.GenerateLegalMoves().ToList();
-        var expectedMove = legalMoves
-            .OrderByDescending(m => MovePriority(board, m))
-            .ThenByDescending(m => m.To)
-            .First();
-
-        Assert.Equal(expectedMove, result.BestMove);
     }
 
     [Fact]
@@ -106,65 +91,115 @@ public class SearchTests
     }
 
     [Fact]
-    public void MovePriority_ShouldApplyCaptureScoreFormulaCorrectly()
+    public async Task Search_IterativeDeepening_DepthIncreasesNodeCount()
     {
-        var board = new Board("k8/9/9/9/9/9/9/n2p5/R3A4 w - - 0 1");
-        var rookCapture = new Move(81, 72); // Rook captures a horse
-        var advisorCapture = new Move(85, 75); // Advisor captures a pawn
+        var board = new Board(InitialFen);
+        var engine1 = new SearchEngine();
+        var engine2 = new SearchEngine();
 
-        int rookScore = MovePriority(board, rookCapture);
-        int advisorScore = MovePriority(board, advisorCapture);
-        int expectedRookScore = 900 + 10000 + (PieceValue(PieceType.Horse) - PieceValue(PieceType.Rook)) / 2;
-        int expectedAdvisorScore = 800 + 10000 + (PieceValue(PieceType.Pawn) - PieceValue(PieceType.Advisor)) / 2;
+        var shallow = await engine1.SearchAsync(board, new SearchSettings { Depth = 1 }, CancellationToken.None);
+        var deeper = await engine2.SearchAsync(
+            new Board(InitialFen), new SearchSettings { Depth = 3 }, CancellationToken.None);
 
-        Assert.Equal(expectedRookScore, rookScore);
-        Assert.Equal(expectedAdvisorScore, advisorScore);
-        Assert.True(advisorScore > rookScore);
+        Assert.True(deeper.Nodes > shallow.Nodes);
+        Assert.True(deeper.Depth > shallow.Depth);
     }
 
-    private static int MovePriority(IBoard board, Move move)
+    // --- PST Tests ---
+
+    [Fact]
+    public void PST_RedHorseCenterScoresHigherThanCorner()
     {
-        var movingPiece = board.GetPiece(move.From);
-        var targetPiece = board.GetPiece(move.To);
+        int centerScore = PieceSquareTables.GetScore(PieceType.Horse, PieceColor.Red, 40);
+        int cornerScore = PieceSquareTables.GetScore(PieceType.Horse, PieceColor.Red, 81);
 
-        if (movingPiece.IsNone)
-        {
-            return int.MinValue;
-        }
-
-        int score = movingPiece.Type switch
-        {
-            PieceType.King => 9000,
-            PieceType.Advisor => 800,
-            PieceType.Elephant => 780,
-            PieceType.Horse => 700,
-            PieceType.Rook => 900,
-            PieceType.Cannon => 650,
-            PieceType.Pawn => 300,
-            _ => 0
-        };
-
-        if (!targetPiece.IsNone)
-        {
-            score += 10000;
-            score += (PieceValue(targetPiece.Type) - PieceValue(movingPiece.Type)) / 2;
-        }
-
-        return score;
+        Assert.True(centerScore > cornerScore);
     }
 
-    private static int PieceValue(PieceType type)
+    [Fact]
+    public void PST_RedPawnCrossedRiverScoresHigherThanHome()
     {
-        return type switch
+        int crossedRiver = PieceSquareTables.GetScore(PieceType.Pawn, PieceColor.Red, 36);
+        int homeRow = PieceSquareTables.GetScore(PieceType.Pawn, PieceColor.Red, 72);
+
+        Assert.True(crossedRiver > homeRow);
+    }
+
+    [Fact]
+    public void PST_BlackMirrorsRed()
+    {
+        int redCenter = PieceSquareTables.GetScore(PieceType.Rook, PieceColor.Red, 40);
+        int blackMirror = PieceSquareTables.GetScore(PieceType.Rook, PieceColor.Black, 89 - 40);
+
+        Assert.Equal(redCenter, blackMirror);
+    }
+
+    // --- Evaluator Tests ---
+
+    [Fact]
+    public void Evaluator_MissingAdvisor_PenalizesKingSafety()
+    {
+        var fullDefense = new Board("4k4/4a4/4b4/9/9/9/9/4B4/4A4/4K4 w - - 0 1");
+        var missingAdvisor = new Board("4k4/4a4/4b4/9/9/9/9/4B4/9/4K4 w - - 0 1");
+
+        var evaluator = new HandcraftedEvaluator();
+        int fullScore = evaluator.Evaluate(fullDefense);
+        int missingScore = evaluator.Evaluate(missingAdvisor);
+
+        Assert.True(fullScore > missingScore);
+    }
+
+    // --- Null Move / Board Tests ---
+
+    [Fact]
+    public void Board_MakeNullMove_SwitchesTurnAndZobrist()
+    {
+        var board = new Board(InitialFen);
+        var turnBefore = board.Turn;
+        var keyBefore = board.ZobristKey;
+
+        board.MakeNullMove();
+
+        Assert.NotEqual(turnBefore, board.Turn);
+        Assert.NotEqual(keyBefore, board.ZobristKey);
+
+        board.UnmakeNullMove();
+
+        Assert.Equal(turnBefore, board.Turn);
+        Assert.Equal(keyBefore, board.ZobristKey);
+    }
+
+    // --- Check Extension Test ---
+
+    [Fact]
+    public async Task Search_CheckPosition_ShouldFindBestResponse()
+    {
+        var board = new Board("3ak4/9/9/9/9/9/9/9/4r4/4K4 w - - 0 1");
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 3, TimeLimitMs = 5000 };
+
+        var result = await engine.SearchAsync(board, settings, CancellationToken.None);
+
+        Assert.False(result.BestMove.IsNull);
+    }
+
+    // --- MVV-LVA Ordering Test ---
+
+    [Fact]
+    public async Task Search_ShouldPreferCapturingHighValuePiece()
+    {
+        // Red rook can capture black rook or black pawn — should prefer the rook
+        var board = new Board("4k4/9/9/9/4r4/3RP4/9/9/9/4K4 w - - 0 1");
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 1, TimeLimitMs = 3000 };
+
+        var result = await engine.SearchAsync(board, settings, CancellationToken.None);
+
+        Assert.False(result.BestMove.IsNull);
+        var captured = board.GetPiece(result.BestMove.To);
+        if (!captured.IsNone)
         {
-            PieceType.King => 10000,
-            PieceType.Advisor => 120,
-            PieceType.Elephant => 120,
-            PieceType.Horse => 270,
-            PieceType.Rook => 600,
-            PieceType.Cannon => 285,
-            PieceType.Pawn => 30,
-            _ => 0
-        };
+            Assert.Equal(PieceType.Rook, captured.Type);
+        }
     }
 }

@@ -25,7 +25,7 @@ public class Board : IBoard
         public Move Move;
         public Piece CapturedPiece;
         public ulong ZobristKey;
-        // Can add more like Rule50, etc.
+        public bool IsNullMove;
     }
 
     public PieceColor Turn => _turn;
@@ -151,6 +151,29 @@ public class Board : IBoard
         {
             UnmakeMove(_history.Peek().Move);
         }
+    }
+
+    public void MakeNullMove()
+    {
+        _zobristKey ^= ZobristHash.SideToMoveKey;
+        _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
+
+        _history.Push(new GameState
+        {
+            Move = Move.Null,
+            CapturedPiece = Piece.None,
+            ZobristKey = _zobristKey,
+            IsNullMove = true
+        });
+    }
+
+    public void UnmakeNullMove()
+    {
+        if (_history.Count == 0) throw new InvalidOperationException("No history to undo.");
+        _history.Pop();
+
+        _zobristKey ^= ZobristHash.SideToMoveKey;
+        _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
     }
 
     // --- FEN ---
@@ -339,7 +362,7 @@ public class Board : IBoard
                             int toRow = fromRow + elephantDirs[i, 0];
                             int toCol = fromCol + elephantDirs[i, 1];
                             if (!IsInsideBoard(toRow, toCol)) continue;
-                            if (!IsCrossedRiver(piece, toRow)) continue;
+                            if (IsCrossedRiver(piece, toRow)) continue;
                             int blockRow = fromRow + elephantDirs[i, 0] / 2;
                             int blockCol = fromCol + elephantDirs[i, 1] / 2;
                             int blockIndex = blockRow * Width + blockCol;
