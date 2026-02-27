@@ -1,5 +1,6 @@
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
+using ChineseChess.Domain.Enums;
 using ChineseChess.Infrastructure.AI.Evaluators;
 using System;
 using System.Diagnostics;
@@ -18,6 +19,8 @@ public class SearchEngine : IAiEngine
     private const int Infinity = 30000;
     private const int MateScore = 20000;
     private const int HeartbeatIntervalMs = 500;
+    private const int QuiescenceMaxPly = 8;
+    private static readonly int[] PieceValues = { 0, 10000, 120, 120, 270, 600, 285, 30 };
 
     private sealed class SearchProgressState
     {
@@ -180,7 +183,7 @@ public class SearchEngine : IAiEngine
 
         if (depth <= 0)
         {
-            return Quiescence(board, alpha, beta);
+            return Quiescence(board, alpha, beta, 0);
         }
 
         // 2. Null Move Pruning (TODO: Condition check - not in Check, enough material)
@@ -200,7 +203,11 @@ public class SearchEngine : IAiEngine
 
         // 4. Move Ordering
         // Order: TT Move, Captures (MVV-LVA), Killer, History...
-        moves = moves.OrderByDescending(m => m == ttMove ? 100000 : 0).ToList();
+        moves = moves
+            .Select(move => new { Move = move, Priority = GetMovePriority(board, move, move == ttMove) })
+            .OrderByDescending(x => x.Priority)
+            .Select(x => x.Move)
+            .ToList();
 
         int bestScore = -Infinity;
         Move bestMove = Move.Null;
@@ -217,7 +224,11 @@ public class SearchEngine : IAiEngine
             int score = -Negamax(board, depth - 1, ply + 1, -beta, -alpha);
             board.UnmakeMove(move);
 
-            if (score > bestScore)
+            bool shouldUpdateBestMove =
+                score > bestScore ||
+                (score == bestScore && IsPreferredMove(board, move, bestMove));
+
+            if (shouldUpdateBestMove)
             {
                 bestScore = score;
                 bestMove = move;
@@ -239,7 +250,7 @@ public class SearchEngine : IAiEngine
         return bestScore;
     }
 
-    private int Quiescence(IBoard board, int alpha, int beta)
+    private int Quiescence(IBoard board, int alpha, int beta, int ply)
     {
         Interlocked.Increment(ref _nodesVisited);
         
@@ -248,16 +259,25 @@ public class SearchEngine : IAiEngine
         if (eval >= beta) return beta;
         if (eval > alpha) alpha = eval;
 
+        if (ply >= QuiescenceMaxPly) return alpha;
+
         // Generate Captures Only
-        // var captures = board.GenerateCaptures();
-        var captures = board.GenerateLegalMoves(); // Should filter captures
+        var captures = board.GenerateLegalMoves()
+            .Where(m => !board.GetPiece(m.To).IsNone)
+            .Select(m => new { Move = m, Priority = GetMovePriority(board, m) })
+            .OrderByDescending(x => x.Priority)
+            .Select(x => x.Move)
+            .ToList();
+
+        if (captures.Count == 0) return alpha;
 
         foreach (var move in captures)
         {
             // SEE (Static Exchange Evaluation) pruning could go here
-            
+            if (_ct.IsCancellationRequested) throw new OperationCanceledException();
+
             board.MakeMove(move);
-            int score = -Quiescence(board, -beta, -alpha);
+            int score = -Quiescence(board, -beta, -alpha, ply + 1);
             board.UnmakeMove(move);
 
             if (score >= beta) return beta;
@@ -265,5 +285,44 @@ public class SearchEngine : IAiEngine
         }
 
         return alpha;
+    }
+
+    private static int GetMovePriority(IBoard board, Move move, bool isPrincipal = false)
+    {
+        int score = isPrincipal ? 1000000 : 0;
+
+        var movingPiece = board.GetPiece(move.From);
+        var targetPiece = board.GetPiece(move.To);
+
+        if (movingPiece.IsNone)
+        {
+            return int.MinValue;
+        }
+
+        score += movingPiece.Type switch
+        {
+            PieceType.King => 9000,
+            PieceType.Advisor => 800,
+            PieceType.Elephant => 780,
+            PieceType.Horse => 700,
+            PieceType.Rook => 900,
+            PieceType.Cannon => 650,
+            PieceType.Pawn => 300,
+            _ => 0
+        };
+
+        if (!targetPiece.IsNone)
+        {
+            score += 10000;
+            score += PieceValues[(int)targetPiece.Type] - PieceValues[(int)movingPiece.Type] / 2;
+        }
+
+        return score;
+    }
+
+    private static bool IsPreferredMove(IBoard board, Move candidate, Move currentBest)
+    {
+        if (currentBest.IsNull) return true;
+        return GetMovePriority(board, candidate) > GetMovePriority(board, currentBest);
     }
 }
