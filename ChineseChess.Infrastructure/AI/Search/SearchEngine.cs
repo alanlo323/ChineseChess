@@ -314,7 +314,7 @@ public class SearchEngine : IAiEngine
         if (!targetPiece.IsNone)
         {
             score += 10000;
-            score += PieceValues[(int)targetPiece.Type] - PieceValues[(int)movingPiece.Type] / 2;
+            score += (PieceValues[(int)targetPiece.Type] - PieceValues[(int)movingPiece.Type]) / 2;
         }
 
         return score;

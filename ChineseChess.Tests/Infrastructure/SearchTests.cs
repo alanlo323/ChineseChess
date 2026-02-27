@@ -92,6 +92,23 @@ public class SearchTests
         Assert.False(result.BestMove.IsNull);
     }
 
+    [Fact]
+    public void MovePriority_ShouldApplyCaptureScoreFormulaCorrectly()
+    {
+        var board = new Board("k8/9/9/9/9/9/9/n2p5/R3A4 w - - 0 1");
+        var rookCapture = new Move(81, 72); // Rook captures a horse
+        var advisorCapture = new Move(85, 75); // Advisor captures a pawn
+
+        int rookScore = MovePriority(board, rookCapture);
+        int advisorScore = MovePriority(board, advisorCapture);
+        int expectedRookScore = 900 + 10000 + (PieceValue(PieceType.Horse) - PieceValue(PieceType.Rook)) / 2;
+        int expectedAdvisorScore = 800 + 10000 + (PieceValue(PieceType.Pawn) - PieceValue(PieceType.Advisor)) / 2;
+
+        Assert.Equal(expectedRookScore, rookScore);
+        Assert.Equal(expectedAdvisorScore, advisorScore);
+        Assert.True(advisorScore > rookScore);
+    }
+
     private static int MovePriority(IBoard board, Move move)
     {
         var movingPiece = board.GetPiece(move.From);
@@ -117,7 +134,7 @@ public class SearchTests
         if (!targetPiece.IsNone)
         {
             score += 10000;
-            score += PieceValue(targetPiece.Type) - PieceValue(movingPiece.Type) / 2;
+            score += (PieceValue(targetPiece.Type) - PieceValue(movingPiece.Type)) / 2;
         }
 
         return score;
