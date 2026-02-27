@@ -74,13 +74,13 @@
                     <Rectangle Width="540"
                                Height="560"
                                Stroke="{StaticResource BoardLineBrush}"
-                               StrokeThickness="2.2"
+                               StrokeThickness="2.8"
                                RadiusX="2"
                                RadiusY="2"
                                Opacity="0.95" />
 
                     <Path Stroke="{StaticResource BoardGridBrush}"
-                          StrokeThickness="1.2"
+                          StrokeThickness="1.8"
                           StrokeLineJoin="Miter">
                         <Path.Data>
                             <PathGeometry Figures="
@@ -98,7 +98,7 @@ M540,0 L540,280 M540,336 L540,560" />
                     </Path>
 
                     <Path Stroke="{StaticResource BoardGridBrush}"
-                          StrokeThickness="1.2"
+                          StrokeThickness="1.8"
                           StrokeLineJoin="Miter">
                         <Path.Data>
                             <PathGeometry Figures="
@@ -116,13 +116,75 @@ M0,560 L540,560" />
                     </Path>
 
                     <Path Stroke="{StaticResource BoardGridBrush}"
-                          StrokeThickness="1.8">
+                          StrokeThickness="2.2">
                         <Path.Data>
                             <PathGeometry Figures="
 M180,0 L360,168
 M360,0 L180,168
 M180,392 L360,560
 M360,392 L180,560" />
+                        </Path.Data>
+                    </Path>
+
+                    <Path Stroke="{StaticResource BoardGridBrush}"
+                          StrokeThickness="1.5"
+                          StrokeStartLineCap="Square"
+                          StrokeEndLineCap="Square">
+                        <Path.Data>
+                            <PathGeometry Figures="
+M72,132 L82,132 M82,132 L82,122
+M98,132 L108,132 M98,132 L98,122
+M72,148 L82,148 M82,148 L82,158
+M98,148 L108,148 M98,148 L98,158
+
+M432,132 L442,132 M442,132 L442,122
+M458,132 L468,132 M458,132 L458,122
+M432,148 L442,148 M442,148 L442,158
+M458,148 L468,148 M458,148 L458,158
+
+M72,412 L82,412 M82,412 L82,402
+M98,412 L108,412 M98,412 L98,402
+M72,428 L82,428 M82,428 L82,438
+M98,428 L108,428 M98,428 L98,438
+
+M432,412 L442,412 M442,412 L442,402
+M458,412 L468,412 M458,412 L458,402
+M432,428 L442,428 M442,428 L442,438
+M458,428 L468,428 M458,428 L458,438
+
+M38,188 L48,188 M38,188 L38,178
+M38,204 L48,204 M38,204 L38,214
+M132,188 L142,188 M142,188 L142,178
+M158,188 L168,188 M158,188 L158,178
+M132,204 L142,204 M142,204 L142,214
+M158,204 L168,204 M158,204 L158,214
+M252,188 L262,188 M262,188 L262,178
+M278,188 L288,188 M278,188 L278,178
+M252,204 L262,204 M262,204 L262,214
+M278,204 L288,204 M278,204 L278,214
+M372,188 L382,188 M382,188 L382,178
+M398,188 L408,188 M398,188 L398,178
+M372,204 L382,204 M382,204 L382,214
+M398,204 L408,204 M398,204 L398,214
+M492,188 L502,188 M502,188 L502,178
+M492,204 L502,204 M502,204 L502,214
+
+M38,356 L48,356 M38,356 L38,346
+M38,372 L48,372 M38,372 L38,382
+M132,356 L142,356 M142,356 L142,346
+M158,356 L168,356 M158,356 L158,346
+M132,372 L142,372 M142,372 L142,382
+M158,372 L168,372 M158,372 L158,382
+M252,356 L262,356 M262,356 L262,346
+M278,356 L288,356 M278,356 L278,346
+M252,372 L262,372 M262,372 L262,382
+M278,372 L288,372 M278,372 L278,382
+M372,356 L382,356 M382,356 L382,346
+M398,356 L408,356 M398,356 L398,346
+M372,372 L382,372 M382,372 L382,382
+M398,372 L408,372 M398,372 L398,382
+M492,356 L502,356 M502,356 L502,346
+M492,372 L502,372 M502,372 L502,382" />
                         </Path.Data>
                     </Path>
 
