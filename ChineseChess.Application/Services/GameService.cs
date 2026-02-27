@@ -130,15 +130,16 @@ public class GameService : IGameService
             {
                 if (applyBestMove)
                 {
+                    var searchTurn = _board.Turn;
                     _board.MakeMove(result.BestMove);
                     NotifyUpdate();
-                    GameMessage?.Invoke($"AI played {result.BestMove} (Score: {result.Score})");
-                    ThinkingProgress?.Invoke(FormatHintProgress(result));
+                    GameMessage?.Invoke($"AI played {result.BestMove} (Score: {FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方")})");
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn));
                 }
                 else
                 {
                     HintReady?.Invoke(result);
-                    ThinkingProgress?.Invoke(FormatHintProgress(result));
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, _board.Turn));
                 }
                 
                 if (applyBestMove && !CheckGameOver() && _currentMode == GameMode.AiVsAi)
@@ -236,20 +237,42 @@ public class GameService : IGameService
         var speed = progress.NodesPerSecond > 0
             ? $"{progress.NodesPerSecond:N0} nodes/s"
             : "n/a";
+        var turnLabel = _board.Turn == PieceColor.Red ? "紅方" : "黑方";
+        var scoreText = FormatScore(progress.Score, turnLabel);
         var bestMove = string.IsNullOrWhiteSpace(progress.BestMove) ? "待更新" : progress.BestMove;
         var mode = progress.IsHeartbeat ? "（即時）" : "（階段）";
 
-        return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {progress.Score}，建議 {bestMove}";
+        return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {scoreText}，建議 {bestMove}";
     }
 
-    private static string FormatHintProgress(SearchResult result)
+    private static string FormatHintProgress(SearchResult result, PieceColor searchTurn)
     {
         if (result.BestMove.IsNull)
         {
             return "提示：目前局面沒有可行的最佳走法";
         }
 
-        return $"提示完成：{result.BestMove} | 分數: {result.Score} | 深度: {result.Depth} | 節點: {result.Nodes}";
+        var turnLabel = searchTurn == PieceColor.Red ? "紅方" : "黑方";
+        var scoreText = FormatScore(result.Score, turnLabel);
+
+        return $"提示完成：{result.BestMove} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes}";
+    }
+
+    private static string FormatScore(int score, string turnLabel)
+    {
+        string signedScore = score switch
+        {
+            > 0 => $"+{score}",
+            < 0 => score.ToString(),
+            _ => "0"
+        };
+
+        if (Math.Abs(score) >= 15000)
+        {
+            return $"{signedScore}（{turnLabel}，高分）";
+        }
+
+        return $"{signedScore}（{turnLabel}）";
     }
 
     private void NotifyUpdate() => BoardUpdated?.Invoke();

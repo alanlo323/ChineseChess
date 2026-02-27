@@ -13,6 +13,8 @@ public class SquareViewModel : ObservableObject
     private Piece _piece;
     private bool _isSelected;
     private bool _isValidMove;
+    private bool _isHintFrom;
+    private bool _isHintTo;
     private bool _isLastMove;
     
     public int Index { get; }
@@ -38,6 +40,18 @@ public class SquareViewModel : ObservableObject
     {
         get => _isValidMove;
         set => SetProperty(ref _isValidMove, value);
+    }
+
+    public bool IsHintFrom
+    {
+        get => _isHintFrom;
+        set => SetProperty(ref _isHintFrom, value);
+    }
+
+    public bool IsHintTo
+    {
+        get => _isHintTo;
+        set => SetProperty(ref _isHintTo, value);
     }
 
     public bool IsLastMove
@@ -101,7 +115,7 @@ public class ChessBoardViewModel : ObservableObject
             _hintFrom = null;
             _hintTo = null;
             _hintBoardFen = null;
-            ClearHighlights();
+            ClearAllHighlights();
 
             if (hint.BestMove.IsNull) return;
             var from = hint.BestMove.From;
@@ -119,11 +133,12 @@ public class ChessBoardViewModel : ObservableObject
         var board = _gameService.CurrentBoard;
         var currentFen = board.ToFen();
 
+        ClearAllHighlights();
+
         for (int i = 0; i < 90; i++)
         {
             Squares[i].Piece = board.GetPiece(i);
             Squares[i].IsSelected = false;
-            Squares[i].IsValidMove = false;
             // TODO: Highlight last move from history if available
         }
 
@@ -151,6 +166,7 @@ public class ChessBoardViewModel : ObservableObject
             // Select piece of current turn
             if (!square.Piece.IsNone && square.Piece.Color == _gameService.CurrentBoard.Turn)
             {
+                ClearMoveHighlights();
                 _selectedSquare = square;
                 square.IsSelected = true;
                 HighlightLegalMoves(square.Index);
@@ -163,7 +179,7 @@ public class ChessBoardViewModel : ObservableObject
             {
                 _selectedSquare.IsSelected = false;
                 _selectedSquare = null;
-                ClearHighlights();
+                ClearMoveHighlights();
                 return;
             }
 
@@ -172,7 +188,7 @@ public class ChessBoardViewModel : ObservableObject
             {
                 // Switch selection
                 _selectedSquare.IsSelected = false;
-                ClearHighlights();
+                ClearMoveHighlights();
                 
                 _selectedSquare = square;
                 square.IsSelected = true;
@@ -185,7 +201,7 @@ public class ChessBoardViewModel : ObservableObject
                 var move = new Move(from, square.Index);
                 // Validate via service/board? Service handles it.
                 
-                ClearHighlights();
+                ClearMoveHighlights();
                 _selectedSquare.IsSelected = false;
                 _selectedSquare = null;
 
@@ -194,27 +210,45 @@ public class ChessBoardViewModel : ObservableObject
         }
     }
 
-    private void ClearHighlights()
+    private void ClearMoveHighlights()
     {
-        foreach (var s in Squares) s.IsValidMove = false;
+        foreach (var s in Squares)
+        {
+            s.IsValidMove = false;
+        }
+    }
+
+    private void ClearHintHighlights()
+    {
+        foreach (var s in Squares)
+        {
+            s.IsHintFrom = false;
+            s.IsHintTo = false;
+        }
+    }
+
+    private void ClearAllHighlights()
+    {
+        ClearMoveHighlights();
+        ClearHintHighlights();
     }
 
     private void ApplyHintHighlights()
     {
         if (_hintFrom.HasValue && _hintFrom.Value < 90 && _hintFrom.Value >= 0)
         {
-            Squares[_hintFrom.Value].IsValidMove = true;
+            Squares[_hintFrom.Value].IsHintFrom = true;
         }
 
         if (_hintTo.HasValue && _hintTo.Value < 90 && _hintTo.Value >= 0)
         {
-            Squares[_hintTo.Value].IsValidMove = true;
+            Squares[_hintTo.Value].IsHintTo = true;
         }
     }
 
     private void HighlightLegalMoves(int fromIndex)
     {
-        ClearHighlights();
+        ClearMoveHighlights();
         var moves = _gameService.CurrentBoard.GenerateLegalMoves().Where(m => m.From == fromIndex);
         foreach (var move in moves)
         {

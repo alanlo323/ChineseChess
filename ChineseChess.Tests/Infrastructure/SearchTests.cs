@@ -49,6 +49,19 @@ public class SearchTests
     }
 
     [Fact]
+    public async Task Search_AsymmetricPosition_ShouldReturnNonZeroScore()
+    {
+        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABN1 w - - 0 1");
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000 };
+
+        var result = await engine.SearchAsync(board, settings, CancellationToken.None);
+
+        Assert.NotEqual(0, result.Score);
+        Assert.False(result.BestMove.IsNull);
+    }
+
+    [Fact]
     public async Task Search_ShouldReturnSameMove_ForSamePosition()
     {
         var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");

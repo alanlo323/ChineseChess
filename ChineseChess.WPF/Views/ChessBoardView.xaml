@@ -89,6 +89,28 @@
                                     VerticalAlignment="Center"
                                     Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
+                            <Border x:Name="HintFromRing"
+                                    Width="44"
+                                    Height="44"
+                                    BorderBrush="{StaticResource HintFromBrush}"
+                                    BorderThickness="3"
+                                    CornerRadius="22"
+                                    Opacity="0.9"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IsHintFrom, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                            <Border x:Name="HintToRing"
+                                    Width="46"
+                                    Height="46"
+                                    BorderBrush="{StaticResource HintToBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="23"
+                                    Opacity="0.85"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
                             <Ellipse Width="14"
                                      Height="14"
                                      Fill="{StaticResource MoveHintBrush}"
@@ -96,6 +118,14 @@
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"
                                      Visibility="{Binding IsValidMove, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                            <Ellipse Width="18"
+                                     Height="18"
+                                     Fill="{StaticResource HintToBrush}"
+                                     Opacity="0.8"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                             <TextBlock Text="{Binding Piece, Converter={StaticResource PieceTextConverter}}"
                                        Foreground="{Binding Piece.Color, Converter={StaticResource ColorConverter}}">
