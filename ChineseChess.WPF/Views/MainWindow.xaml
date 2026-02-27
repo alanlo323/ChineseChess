@@ -7,34 +7,88 @@
         xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
-        Title="Chinese Chess AI" Height="700" Width="900" MinWidth="800" MinHeight="600"
-        Background="White">
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+        Title="Chinese Chess AI"
+        Height="760" Width="980" MinWidth="900" MinHeight="640"
+        Style="{StaticResource AppWindowStyle}">
 
-        <!-- Board Area (Scaled) -->
-        <Viewbox Grid.Row="0" Grid.Column="0" Margin="10" Stretch="Uniform">
-            <views:ChessBoardView DataContext="{Binding ChessBoard}"/>
-        </Viewbox>
+    <Window.Triggers>
+        <EventTrigger RoutedEvent="Window.Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="RootGrid"
+                                     Storyboard.TargetProperty="Opacity"
+                                     From="0"
+                                     To="1"
+                                     Duration="0:0:0.55" />
+                    <DoubleAnimation Storyboard.TargetName="RootGrid"
+                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                     From="18"
+                                     To="0"
+                                     Duration="0:0:0.55">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut" />
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </Window.Triggers>
 
-        <!-- Control Panel -->
-        <Border Grid.Row="0" Grid.Column="1" Grid.RowSpan="2" BorderBrush="Gray" BorderThickness="1,0,0,0" Background="#FAFAFA">
-            <views:ControlPanelView DataContext="{Binding ControlPanel}"/>
-        </Border>
+    <Grid x:Name="RootGrid" Opacity="0">
+        <Grid.RenderTransform>
+            <TranslateTransform Y="18" />
+        </Grid.RenderTransform>
 
-        <!-- Analysis Panel -->
-        <Border Grid.Row="1" Grid.Column="0" BorderBrush="Gray" BorderThickness="0,1,0,0" Padding="10" Background="#F0F0F0">
-            <StackPanel>
-                <TextBlock Text="Analysis:" FontWeight="Bold"/>
-                <TextBlock Text="{Binding AnalysisText}" TextWrapping="Wrap" FontFamily="Consolas"/>
-            </StackPanel>
-        </Border>
+        <Grid Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="300" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="220" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Grid.Column="0"
+                    Style="{StaticResource PanelCardStyle}"
+                    Margin="0,0,12,12">
+                <Viewbox Stretch="Uniform" Margin="10">
+                    <views:ChessBoardView DataContext="{Binding ChessBoard}" />
+                </Viewbox>
+            </Border>
+
+            <Border Grid.Row="0"
+                    Grid.Column="1"
+                    Style="{StaticResource PanelCardStyle}"
+                    Margin="0,0,0,12">
+                <views:ControlPanelView DataContext="{Binding ControlPanel}" />
+            </Border>
+
+            <Border Grid.Row="1"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="2"
+                    Style="{StaticResource PanelCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="棋局觀測"
+                               Style="{StaticResource SectionHeadingStyle}" />
+
+                    <Border Grid.Row="1"
+                            Style="{StaticResource SubPanelCardStyle}"
+                            Margin="0,6,0,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <TextBlock Text="{Binding AnalysisText}"
+                                       Style="{StaticResource AnalysisTextStyle}" />
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
