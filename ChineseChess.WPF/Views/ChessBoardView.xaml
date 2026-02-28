@@ -6,7 +6,7 @@
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ChessBoardViewModel}"
-             Height="560" Width="540">
+             Height="616" Width="600">
     <UserControl.Resources>
         <SolidColorBrush x:Key="BoardHoverBrush" Color="#B58F5F" />
         <SolidColorBrush x:Key="BoardPressedBrush" Color="#8D6A3A" />
@@ -62,12 +62,12 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid Width="600" Height="616">
         <Border Background="{StaticResource BoardOuterBrush}"
                 BorderBrush="{StaticResource BoardOuterBrush}"
                 BorderThickness="0"
                 CornerRadius="10">
-            <Grid>
+            <Grid Margin="30,28">
                 <Border Background="{StaticResource BoardPatternBrush}" CornerRadius="2" />
 
                 <Canvas IsHitTestVisible="False">
@@ -230,12 +230,20 @@ M492,372 L502,372 M502,372 L502,382" />
                               VerticalAlignment="Stretch">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <UniformGrid Rows="10" Columns="9" />
+                            <Canvas Width="540" Height="560" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="Canvas.Left" Value="{Binding HitBoxLeft}" />
+                            <Setter Property="Canvas.Top" Value="{Binding HitBoxTop}" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Button Style="{StaticResource SquareButtonStyle}"
+                                    Width="60"
+                                    Height="56"
                                     Command="{Binding DataContext.SquareClickCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     CommandParameter="{Binding}">
                                 <Grid>

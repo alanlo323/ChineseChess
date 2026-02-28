@@ -10,6 +10,12 @@ namespace ChineseChess.WPF.ViewModels;
 
 public class SquareViewModel : ObservableObject
 {
+    private const double ColumnSpacing = 60.0;
+    private const double RowSpacing = 56.0;
+    private const double RiverGap = 56.0;
+    private const double HitBoxHalfWidth = 30.0;
+    private const double HitBoxHalfHeight = 28.0;
+
     private Piece _piece;
     private bool _isSelected;
     private bool _isValidMove;
@@ -20,6 +26,10 @@ public class SquareViewModel : ObservableObject
     public int Index { get; }
     public int Row { get; }
     public int Col { get; }
+    public double BoardX { get; }
+    public double BoardY { get; }
+    public double HitBoxLeft { get; }
+    public double HitBoxTop { get; }
     
     // 棋盤座標定位（相對於棋盤尺寸，若採像素模式可在這裡處理）
     // UniformGrid 下順序很重要。
@@ -65,6 +75,10 @@ public class SquareViewModel : ObservableObject
         Index = index;
         Row = row;
         Col = col;
+        BoardX = col * ColumnSpacing;
+        BoardY = row * RowSpacing + (row >= 5 ? RiverGap : 0.0);
+        HitBoxLeft = BoardX - HitBoxHalfWidth;
+        HitBoxTop = BoardY - HitBoxHalfHeight;
         _piece = Piece.None;
     }
 }
