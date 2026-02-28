@@ -44,6 +44,17 @@
                             TickFrequency="1"
                             IsSnapToTickEnabled="True"
                             Style="{StaticResource DifficultySliderStyle}" />
+
+                    <TextBlock Text="思考時間（秒）"
+                               Style="{StaticResource SectionTitleStyle}"
+                               Margin="0,8,0,6" />
+                    <Slider Minimum="1"
+                            Maximum="30"
+                            Value="{Binding SearchThinkingTime}"
+                            AutoToolTipPlacement="TopLeft"
+                            TickFrequency="1"
+                            IsSnapToTickEnabled="True"
+                            Style="{StaticResource DifficultySliderStyle}" />
                 </StackPanel>
             </GroupBox>
 
@@ -61,6 +72,23 @@
 
             <Button Content="提示走法"
                     Command="{Binding HintCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Padding="10,8" />
+
+            <Button Content="停止思考"
+                    Command="{Binding StopThinkingCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Margin="0,10,0,8"
+                    Padding="10,8" />
+
+            <Button Content="暫停思考"
+                    Command="{Binding PauseThinkingCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Margin="0,0,0,8"
+                    Padding="10,8" />
+
+            <Button Content="繼續思考"
+                    Command="{Binding ResumeThinkingCommand}"
                     Style="{StaticResource ActionButtonStyle}"
                     Padding="10,8" />
         </StackPanel>

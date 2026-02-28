@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using Xunit;
 
 namespace ChineseChess.Tests.Infrastructure;
@@ -103,6 +104,52 @@ public class SearchTests
 
         Assert.True(deeper.Nodes > shallow.Nodes);
         Assert.True(deeper.Depth > shallow.Depth);
+    }
+
+    [Fact]
+    public async Task Search_ShouldCancelByTimeLimit()
+    {
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        var settings = new SearchSettings
+        {
+            Depth = 20,
+            TimeLimitMs = 1,
+            ThreadCount = 1
+        };
+        var stopwatch = Stopwatch.StartNew();
+
+        var result = await engine.SearchAsync(board, settings, CancellationToken.None);
+        stopwatch.Stop();
+
+        Assert.NotNull(result);
+        Assert.True(result.Depth <= settings.Depth);
+        Assert.True(stopwatch.ElapsedMilliseconds < 2000);
+    }
+
+    [Fact]
+    public async Task Search_ShouldPauseAndResumeWithPauseSignal()
+    {
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        using var pauseSignal = new ManualResetEventSlim(false);
+        var settings = new SearchSettings
+        {
+            Depth = 18,
+            TimeLimitMs = 10000,
+            ThreadCount = 1,
+            PauseSignal = pauseSignal
+        };
+
+        var searchTask = engine.SearchAsync(board, settings, CancellationToken.None);
+        var completedBeforeResume = await Task.WhenAny(searchTask, Task.Delay(120));
+
+        Assert.NotSame(searchTask, completedBeforeResume);
+
+        pauseSignal.Set();
+        var result = await searchTask;
+
+        Assert.NotNull(result);
     }
 
     // --- PST 測試 ---

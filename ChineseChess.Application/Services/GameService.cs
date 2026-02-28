@@ -19,6 +19,7 @@ public class GameService : IGameService
     private bool _isThinking;
     private SearchSettings _aiSettings = new SearchSettings();
     private CancellationTokenSource? _aiCts;
+    private readonly ManualResetEventSlim _aiPauseSignal = new ManualResetEventSlim(true);
 
     public IBoard CurrentBoard => _board;
     public GameMode CurrentMode => _currentMode;
@@ -41,6 +42,7 @@ public class GameService : IGameService
     {
         _currentMode = mode;
         _aiCts?.Cancel();
+        _aiPauseSignal.Set();
         _board = new Board(); // 重置為標準初始局
         _board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
         
@@ -60,8 +62,35 @@ public class GameService : IGameService
 
     public Task StopGameAsync()
     {
+        _aiPauseSignal.Set();
         _aiCts?.Cancel();
         ThinkingProgress?.Invoke("AI 思考已停止");
+        return Task.CompletedTask;
+    }
+
+    public Task PauseThinkingAsync()
+    {
+        if (!_isThinking)
+        {
+            ThinkingProgress?.Invoke("AI 目前未在思考中");
+            return Task.CompletedTask;
+        }
+
+        _aiPauseSignal.Reset();
+        ThinkingProgress?.Invoke("AI 思考已暫停");
+        return Task.CompletedTask;
+    }
+
+    public Task ResumeThinkingAsync()
+    {
+        if (!_isThinking)
+        {
+            ThinkingProgress?.Invoke("AI 目前未在思考中");
+            return Task.CompletedTask;
+        }
+
+        _aiPauseSignal.Set();
+        ThinkingProgress?.Invoke("AI 思考已繼續");
         return Task.CompletedTask;
     }
 
@@ -104,6 +133,13 @@ public class GameService : IGameService
         var boardSnapshot = _board.Clone();
         SearchResult? result = null;
         var continueAiLoop = false;
+        var settings = new SearchSettings
+        {
+            Depth = _aiSettings.Depth,
+            TimeLimitMs = _aiSettings.TimeLimitMs,
+            ThreadCount = _aiSettings.ThreadCount,
+            PauseSignal = _aiPauseSignal
+        };
         var progress = new Progress<SearchProgress>(p =>
         {
             ThinkingProgress?.Invoke(FormatThinkingProgress(p));
@@ -113,7 +149,7 @@ public class GameService : IGameService
         {
             result = await _aiEngine.SearchAsync(
                 boardSnapshot,
-                _aiSettings,
+                settings,
                 cts.Token,
                 progress);
             

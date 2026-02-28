@@ -34,12 +34,17 @@ public class SearchEngine : IAiEngine
         {
             int threadCount = Math.Clamp(settings.ThreadCount, 1, 128);
             _tt.NewGeneration();
+            var pauseSignal = settings.PauseSignal ?? new ManualResetEventSlim(true);
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            if (settings.TimeLimitMs > 0)
+            {
+                linkedCts.CancelAfter(settings.TimeLimitMs);
+            }
             var token = linkedCts.Token;
 
             // --- 建立主 worker ---
-            var mainWorker = new SearchWorker(board.Clone(), _evaluator, _tt, token);
+            var mainWorker = new SearchWorker(board.Clone(), _evaluator, _tt, token, pauseSignal);
 
             // --- 啟動輔助 worker（各自獨立執行迭代加深） ---
             var helperWorkers = new SearchWorker[threadCount - 1];
@@ -47,7 +52,7 @@ public class SearchEngine : IAiEngine
 
             for (int i = 0; i < threadCount - 1; i++)
             {
-                var helper = new SearchWorker(board.Clone(), _evaluator, _tt, token);
+                var helper = new SearchWorker(board.Clone(), _evaluator, _tt, token, pauseSignal);
                 helperWorkers[i] = helper;
 
                 int helperDepth = settings.Depth + 1 + (i % 2);
@@ -129,6 +134,7 @@ public class SearchEngine : IAiEngine
             {
                 for (int depth = 1; depth <= settings.Depth; depth++)
                 {
+                    pauseSignal.Wait(token);
                     if (token.IsCancellationRequested) break;
 
                     int score = mainWorker.SearchSingleDepth(depth);

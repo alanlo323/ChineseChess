@@ -46,7 +46,9 @@ Difficulty is controlled by the Search Depth:
 - **Medium**: Depth 4-6.
 - **Hard**: Depth 7+ (requires optimization for speed).
 
-Adjust the slider in the UI to change the depth.
+Use sliders in the UI to adjust:
+- **Search Depth**: AI search depth.
+- **Thinking Time (seconds)**: AI time budget limit for each search.
 
 ## Features
 

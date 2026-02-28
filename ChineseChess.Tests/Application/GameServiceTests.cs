@@ -46,4 +46,39 @@ public class GameServiceTests
 
         Assert.Equal(expectedBoard.ToFen(), gameService.CurrentBoard.ToFen());
     }
+
+    [Fact]
+    public async Task PauseThinking_ShouldPauseAndResumeHintSearch()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        gameService.SetDifficulty(18, 10000, 1);
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+
+        var hintTask = gameService.GetHintAsync();
+        await Task.Delay(40);
+        await gameService.PauseThinkingAsync();
+
+        await gameService.ResumeThinkingAsync();
+        var hint = await hintTask;
+
+        Assert.False(hint.BestMove.IsNull);
+    }
+
+    [Fact]
+    public async Task StopThinking_ShouldCancelHintSearch()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        gameService.SetDifficulty(18, 10000, 1);
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+
+        var hintTask = gameService.GetHintAsync();
+        await Task.Delay(40);
+        await gameService.StopGameAsync();
+        var hint = await hintTask;
+
+        Assert.False(gameService.IsThinking);
+        Assert.NotNull(hint);
+    }
 }

@@ -21,6 +21,8 @@ public interface IGameService
     // 控制
     Task StartGameAsync(GameMode mode);
     Task StopGameAsync();
+    Task PauseThinkingAsync();
+    Task ResumeThinkingAsync();
     
     // 遊戲流程
     Task HumanMoveAsync(Move move); // Player 操作

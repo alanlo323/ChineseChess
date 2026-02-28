@@ -20,6 +20,7 @@ internal sealed class SearchWorker
     private readonly IEvaluator _evaluator;
     private readonly TranspositionTable _tt;
     private readonly CancellationToken _ct;
+    private readonly ManualResetEventSlim _pauseSignal;
 
     private long _nodesVisited;
     private Move[,] _killerMoves;
@@ -35,12 +36,13 @@ internal sealed class SearchWorker
 
     public long NodesVisited => Interlocked.Read(ref _nodesVisited);
 
-    public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct)
+    public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, ManualResetEventSlim pauseSignal)
     {
         _board = board;
         _evaluator = evaluator;
         _tt = tt;
         _ct = ct;
+        _pauseSignal = pauseSignal;
         _killerMoves = new Move[MaxSearchPly, 2];
         _historyTable = new int[90, 90];
     }
@@ -54,6 +56,7 @@ internal sealed class SearchWorker
         _nodesVisited = 0;
         Array.Clear(_killerMoves, 0, _killerMoves.Length);
         Array.Clear(_historyTable, 0, _historyTable.Length);
+        CheckPauseOrCancellation();
 
         var result = new SearchResult();
 
@@ -61,6 +64,7 @@ internal sealed class SearchWorker
         {
             for (int depth = 1; depth <= targetDepth; depth++)
             {
+                CheckPauseOrCancellation();
                 if (_ct.IsCancellationRequested) break;
 
                 int score = Negamax(depth, 0, -Infinity, Infinity, false);
@@ -91,6 +95,7 @@ internal sealed class SearchWorker
     /// </summary>
     public int SearchSingleDepth(int depth)
     {
+        CheckPauseOrCancellation();
         return Negamax(depth, 0, -Infinity, Infinity, false);
     }
 
@@ -105,9 +110,10 @@ internal sealed class SearchWorker
 
     private int Negamax(int depth, int ply, int alpha, int beta, bool skipNullMove)
     {
+        CheckPauseOrCancellation();
         Interlocked.Increment(ref _nodesVisited);
-        if (_nodesVisited % 2000 == 0 && _ct.IsCancellationRequested)
-            throw new OperationCanceledException();
+        if (_nodesVisited % 2000 == 0)
+            CheckPauseOrCancellation();
 
         bool isPvNode = (beta - alpha) > 1;
 
@@ -254,6 +260,7 @@ internal sealed class SearchWorker
 
     private int Quiescence(int alpha, int beta, int ply)
     {
+        CheckPauseOrCancellation();
         Interlocked.Increment(ref _nodesVisited);
 
         int eval = _evaluator.Evaluate(_board);
@@ -272,7 +279,7 @@ internal sealed class SearchWorker
 
         foreach (var move in captures)
         {
-            if (_ct.IsCancellationRequested) throw new OperationCanceledException();
+            CheckPauseOrCancellation();
 
             _board.MakeMove(move);
             int score = -Quiescence(-beta, -alpha, ply + 1);
@@ -370,5 +377,11 @@ internal sealed class SearchWorker
             }
         }
         return false;
+    }
+
+    private void CheckPauseOrCancellation()
+    {
+        _pauseSignal.Wait(_ct);
+        if (_ct.IsCancellationRequested) throw new OperationCanceledException();
     }
 }

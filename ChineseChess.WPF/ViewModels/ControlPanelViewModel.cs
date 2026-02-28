@@ -14,6 +14,7 @@ public class ControlPanelViewModel : ObservableObject
     private GameMode _selectedMode = GameMode.PlayerVsAi;
     private string _statusMessage = "Ready";
     private int _searchDepth = 5;
+    private int _searchThinkingTime = 3;
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
@@ -36,7 +37,19 @@ public class ControlPanelViewModel : ObservableObject
         {
             if (SetProperty(ref _searchDepth, value))
             {
-                _gameService.SetDifficulty(value, 3000);
+                _gameService.SetDifficulty(value, _searchThinkingTime * 1000);
+            }
+        }
+    }
+
+    public int SearchThinkingTime
+    {
+        get => _searchThinkingTime;
+        set
+        {
+            if (SetProperty(ref _searchThinkingTime, value))
+            {
+                _gameService.SetDifficulty(_searchDepth, value * 1000);
             }
         }
     }
@@ -44,12 +57,31 @@ public class ControlPanelViewModel : ObservableObject
     public ICommand StartGameCommand { get; }
     public ICommand UndoCommand { get; }
     public ICommand HintCommand { get; }
+    public ICommand StopThinkingCommand { get; }
+    public ICommand PauseThinkingCommand { get; }
+    public ICommand ResumeThinkingCommand { get; }
 
     public ControlPanelViewModel(IGameService gameService)
     {
         _gameService = gameService;
         StartGameCommand = new RelayCommand(async _ => await _gameService.StartGameAsync(SelectedMode));
         UndoCommand = new RelayCommand(_ => _gameService.Undo());
+        StopThinkingCommand = new RelayCommand(async _ =>
+        {
+            StatusMessage = "停止思考中...";
+            await _gameService.StopGameAsync();
+            StatusMessage = "AI 思考已停止";
+        });
+        PauseThinkingCommand = new RelayCommand(async _ =>
+        {
+            StatusMessage = "正在暫停思考...";
+            await _gameService.PauseThinkingAsync();
+        });
+        ResumeThinkingCommand = new RelayCommand(async _ =>
+        {
+            StatusMessage = "繼續思考中...";
+            await _gameService.ResumeThinkingAsync();
+        });
         HintCommand = new RelayCommand(async _ =>
         {
             try
@@ -72,6 +104,8 @@ public class ControlPanelViewModel : ObservableObject
                 StatusMessage = $"提示失敗：{ex.Message}";
             }
         });
+
+        _gameService.SetDifficulty(_searchDepth, _searchThinkingTime * 1000);
 
         _gameService.GameMessage += msg => StatusMessage = msg;
     }

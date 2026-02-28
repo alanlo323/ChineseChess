@@ -33,6 +33,7 @@ public class SearchSettings
     public int Depth { get; set; } = 5;
     public int TimeLimitMs { get; set; } = 3000;
     public int ThreadCount { get; set; } = Environment.ProcessorCount;
+    public ManualResetEventSlim PauseSignal { get; set; } = new ManualResetEventSlim(true);
 }
 
 public interface IAiEngine
