@@ -2,8 +2,10 @@ using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Enums;
 using ChineseChess.WPF.Core;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Windows.Input;
 
 namespace ChineseChess.WPF.ViewModels;
@@ -60,6 +62,8 @@ public class ControlPanelViewModel : ObservableObject
     public ICommand StopThinkingCommand { get; }
     public ICommand PauseThinkingCommand { get; }
     public ICommand ResumeThinkingCommand { get; }
+    public ICommand ExportTranspositionTableCommand { get; }
+    public ICommand ImportTranspositionTableCommand { get; }
 
     public ControlPanelViewModel(IGameService gameService)
     {
@@ -81,6 +85,60 @@ public class ControlPanelViewModel : ObservableObject
         {
             StatusMessage = "繼續思考中...";
             await _gameService.ResumeThinkingAsync();
+        });
+        ExportTranspositionTableCommand = new RelayCommand(async _ =>
+        {
+            try
+            {
+                var dialog = new SaveFileDialog
+                {
+                    Title = "匯出 TT 表",
+                    Filter = "Chinese Chess TT|*.cctt;*.json|Binary|*.cctt|JSON|*.json|All files|*.*",
+                    FileName = $"transposition-table-{DateTime.Now:yyyyMMdd_HHmmss}.cctt"
+                };
+
+                if (dialog.ShowDialog() != true) return;
+
+                var asJson = string.Equals(
+                    Path.GetExtension(dialog.FileName),
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase);
+
+                StatusMessage = "匯出 TT 表中...";
+                await _gameService.ExportTranspositionTableAsync(dialog.FileName, asJson);
+                StatusMessage = "TT 表匯出完成";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"TT 表匯出失敗：{ex.Message}";
+            }
+        });
+        ImportTranspositionTableCommand = new RelayCommand(async _ =>
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = "匯入 TT 表",
+                    Filter = "Chinese Chess TT|*.cctt;*.json|Binary|*.cctt|JSON|*.json|All files|*.*",
+                    CheckFileExists = true
+                };
+
+                if (dialog.ShowDialog() != true) return;
+
+                var asJson = string.Equals(
+                    Path.GetExtension(dialog.FileName),
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase);
+
+                StatusMessage = "匯入 TT 表中...";
+                await _gameService.ImportTranspositionTableAsync(dialog.FileName, asJson);
+                StatusMessage = "TT 表匯入完成";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"TT 表匯入失敗：{ex.Message}";
+            }
         });
         HintCommand = new RelayCommand(async _ =>
         {

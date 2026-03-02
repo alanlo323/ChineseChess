@@ -23,6 +23,8 @@ public interface IGameService
     Task StopGameAsync();
     Task PauseThinkingAsync();
     Task ResumeThinkingAsync();
+    Task ExportTranspositionTableAsync(string filePath, bool asJson, CancellationToken ct = default);
+    Task ImportTranspositionTableAsync(string filePath, bool asJson, CancellationToken ct = default);
     
     // 遊戲流程
     Task HumanMoveAsync(Move move); // Player 操作

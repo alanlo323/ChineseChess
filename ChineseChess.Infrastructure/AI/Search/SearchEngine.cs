@@ -3,6 +3,7 @@ using ChineseChess.Domain.Entities;
 using ChineseChess.Infrastructure.AI.Evaluators;
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -181,5 +182,35 @@ public class SearchEngine : IAiEngine
             result.Nodes = GetTotalNodes();
             return result;
         }, ct);
+    }
+
+    public Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (asJson)
+        {
+            _tt.ExportToJson(output);
+        }
+        else
+        {
+            _tt.ExportToBinary(output);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task ImportTranspositionTableAsync(Stream input, bool asJson, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (asJson)
+        {
+            _tt.ImportFromJson(input);
+        }
+        else
+        {
+            _tt.ImportFromBinary(input);
+        }
+
+        return Task.CompletedTask;
     }
 }

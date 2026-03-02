@@ -1,4 +1,5 @@
 using ChineseChess.Domain.Entities;
+using System.IO;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -39,4 +40,6 @@ public class SearchSettings
 public interface IAiEngine
 {
     Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null);
+    Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default);
+    Task ImportTranspositionTableAsync(Stream input, bool asJson, CancellationToken ct = default);
 }

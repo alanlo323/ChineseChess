@@ -1,6 +1,10 @@
 using ChineseChess.Domain.Entities;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 
 namespace ChineseChess.Infrastructure.AI.Search;
@@ -24,6 +28,14 @@ public struct TTEntry
     public byte Generation;
 }
 
+public sealed class TTStateSnapshot
+{
+    public ulong Size { get; set; }
+    public byte Generation { get; set; }
+    public ulong[] Keys { get; set; } = [];
+    public ulong[] Data { get; set; } = [];
+}
+
 /// <summary>
 /// 使用 XOR 驗證技巧的 lock-free transposition table。
 /// 以兩個對齊的 ulong 陣列（_keys 與 _data）確保 x64 上 8 bytes 原子性讀寫。
@@ -31,6 +43,9 @@ public struct TTEntry
 /// </summary>
 public class TranspositionTable
 {
+    private static readonly byte[] BinaryHeader = "CCTT"u8.ToArray();
+    private const uint BinaryVersion = 1u;
+
     private readonly ulong[] _keys;
     private readonly ulong[] _data;
     private readonly ulong _size;
@@ -95,6 +110,146 @@ public class TranspositionTable
         System.Array.Clear(_keys, 0, _keys.Length);
         System.Array.Clear(_data, 0, _data.Length);
         _generation = 0;
+    }
+
+    public void ExportToBinary(Stream output)
+    {
+        if (output == null)
+        {
+            throw new ArgumentNullException(nameof(output));
+        }
+
+        using var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, true);
+        writer.Write(BinaryHeader);
+        writer.Write(BinaryVersion);
+        writer.Write(_size);
+        writer.Write(_generation);
+
+        for (int i = 0; i < _keys.Length; i++)
+        {
+            writer.Write(_keys[i]);
+        }
+
+        for (int i = 0; i < _data.Length; i++)
+        {
+            writer.Write(_data[i]);
+        }
+    }
+
+    public void ImportFromBinary(Stream input)
+    {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        using var reader = new BinaryReader(input, System.Text.Encoding.UTF8, true);
+
+        var magic = reader.ReadBytes(BinaryHeader.Length);
+        if (magic.Length != BinaryHeader.Length || !magic.SequenceEqual(BinaryHeader))
+        {
+            throw new InvalidDataException("The file is not a valid TT binary snapshot.");
+        }
+
+        uint version = reader.ReadUInt32();
+        if (version != BinaryVersion)
+        {
+            throw new InvalidDataException($"Unsupported TT binary version: {version}");
+        }
+
+        ulong size = reader.ReadUInt64();
+        if (size == 0 || size > (ulong)_keys.Length)
+        {
+            throw new InvalidDataException($"Invalid TT table size in binary snapshot: {size}");
+        }
+
+        if (size != _size)
+        {
+            throw new InvalidDataException($"TT size mismatch. Snapshot={size}, current={_size}");
+        }
+
+        var generation = reader.ReadByte();
+
+        int expectedLength = (int)size;
+        var keys = new ulong[expectedLength];
+        var data = new ulong[expectedLength];
+
+        for (int i = 0; i < expectedLength; i++)
+        {
+            keys[i] = reader.ReadUInt64();
+        }
+
+        for (int i = 0; i < expectedLength; i++)
+        {
+            data[i] = reader.ReadUInt64();
+        }
+
+        _generation = generation;
+        System.Array.Copy(keys, _keys, expectedLength);
+        System.Array.Copy(data, _data, expectedLength);
+    }
+
+    public void ExportToJson(Stream output)
+    {
+        if (output == null)
+        {
+            throw new ArgumentNullException(nameof(output));
+        }
+
+        var snapshot = new TTStateSnapshot
+        {
+            Size = _size,
+            Generation = _generation,
+            Keys = _keys,
+            Data = _data
+        };
+
+        JsonSerializer.Serialize(output, snapshot, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+    }
+
+    public void ImportFromJson(Stream input)
+    {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        TTStateSnapshot? snapshot;
+        try
+        {
+            snapshot = JsonSerializer.Deserialize<TTStateSnapshot>(input);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException("Invalid TT json snapshot.", ex);
+        }
+
+        if (snapshot == null)
+        {
+            throw new InvalidDataException("TT json snapshot is null.");
+        }
+
+        if (snapshot.Size != _size)
+        {
+            throw new InvalidDataException($"TT size mismatch. Snapshot={snapshot.Size}, current={_size}");
+        }
+
+        if (snapshot.Keys == null || snapshot.Data == null)
+        {
+            throw new InvalidDataException("TT snapshot is missing key/data arrays.");
+        }
+
+        if (snapshot.Keys.Length != (int)_size || snapshot.Data.Length != (int)_size)
+        {
+            throw new InvalidDataException("TT snapshot key/data length does not match table size.");
+        }
+
+        _generation = snapshot.Generation;
+        System.Array.Copy(snapshot.Keys, _keys, (int)_size);
+        System.Array.Copy(snapshot.Data, _data, (int)_size);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

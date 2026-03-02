@@ -91,6 +91,17 @@
                     Command="{Binding ResumeThinkingCommand}"
                     Style="{StaticResource ActionButtonStyle}"
                     Padding="10,8" />
+
+            <Button Content="匯出TT表"
+                    Command="{Binding ExportTranspositionTableCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Margin="0,10,0,8"
+                    Padding="10,8" />
+
+            <Button Content="匯入TT表"
+                    Command="{Binding ImportTranspositionTableCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Padding="10,8" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

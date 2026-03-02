@@ -4,6 +4,7 @@ using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -92,6 +93,66 @@ public class GameService : IGameService
         _aiPauseSignal.Set();
         ThinkingProgress?.Invoke("AI 思考已繼續");
         return Task.CompletedTask;
+    }
+
+    public async Task ExportTranspositionTableAsync(string filePath, bool asJson, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            ThinkingProgress?.Invoke("TT 匯出失敗：未指定檔案路徑");
+            return;
+        }
+
+        try
+        {
+            await EnsureAiStoppedForPersistenceAsync(ct);
+
+            ThinkingProgress?.Invoke("TT 匯出中...");
+            await using var file = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            await _aiEngine.ExportTranspositionTableAsync(file, asJson, ct);
+            ThinkingProgress?.Invoke("TT 匯出完成");
+        }
+        catch (OperationCanceledException)
+        {
+            ThinkingProgress?.Invoke("TT 匯出已取消");
+        }
+        catch (Exception ex)
+        {
+            ThinkingProgress?.Invoke($"TT 匯出失敗：{ex.Message}");
+        }
+    }
+
+    public async Task ImportTranspositionTableAsync(string filePath, bool asJson, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            ThinkingProgress?.Invoke("TT 匯入失敗：未指定檔案路徑");
+            return;
+        }
+
+        if (!File.Exists(filePath))
+        {
+            ThinkingProgress?.Invoke("TT 匯入失敗：檔案不存在");
+            return;
+        }
+
+        try
+        {
+            await EnsureAiStoppedForPersistenceAsync(ct);
+
+            ThinkingProgress?.Invoke("TT 匯入中...");
+            await using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await _aiEngine.ImportTranspositionTableAsync(file, asJson, ct);
+            ThinkingProgress?.Invoke("TT 匯入完成");
+        }
+        catch (OperationCanceledException)
+        {
+            ThinkingProgress?.Invoke("TT 匯入已取消");
+        }
+        catch (Exception ex)
+        {
+            ThinkingProgress?.Invoke($"TT 匯入失敗：{ex.Message}");
+        }
     }
 
     public async Task HumanMoveAsync(Move move)
@@ -314,4 +375,20 @@ public class GameService : IGameService
     }
 
     private void NotifyUpdate() => BoardUpdated?.Invoke();
+
+    private async Task EnsureAiStoppedForPersistenceAsync(CancellationToken ct)
+    {
+        if (!_isThinking)
+        {
+            return;
+        }
+
+        _aiPauseSignal.Set();
+        _aiCts?.Cancel();
+        while (_isThinking)
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Delay(10, ct);
+        }
+    }
 }

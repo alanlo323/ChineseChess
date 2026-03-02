@@ -3,6 +3,10 @@ using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Services;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Infrastructure.AI.Search;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -80,5 +84,85 @@ public class GameServiceTests
 
         Assert.False(gameService.IsThinking);
         Assert.NotNull(hint);
+    }
+
+    [Fact]
+    public async Task ExportTranspositionTable_ShouldCreateFile_WhenIdle()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        gameService.SetDifficulty(1, 3000, 1);
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+
+        var filePath = Path.Combine(Path.GetTempPath(), $"tt-export-{Guid.NewGuid():N}.cctt");
+
+        try
+        {
+            await gameService.ExportTranspositionTableAsync(filePath, asJson: false);
+            Assert.True(File.Exists(filePath));
+            Assert.True(new FileInfo(filePath).Length > 0);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ImportTranspositionTable_ShouldReportFailure_OnInvalidFile()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        var messages = new List<string>();
+        Action<string> handler = msg => messages.Add(msg);
+        gameService.ThinkingProgress += handler;
+
+        var filePath = Path.Combine(Path.GetTempPath(), $"tt-invalid-{Guid.NewGuid():N}.cctt");
+        await File.WriteAllTextAsync(filePath, "not valid tt", Encoding.UTF8);
+        await gameService.ImportTranspositionTableAsync(filePath, asJson: false);
+        gameService.ThinkingProgress -= handler;
+
+        Assert.Contains(messages, msg => msg.Contains("TT 匯入失敗"));
+
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task ImportTranspositionTable_ShouldRestoreUsableCache()
+    {
+        var sourceEngine = new SearchEngine();
+        var targetService = new GameService(new SearchEngine());
+        var filePath = Path.Combine(Path.GetTempPath(), $"tt-import-{Guid.NewGuid():N}.cctt");
+
+        await sourceEngine.SearchAsync(
+            new Board(InitialFen),
+            new SearchSettings { Depth = 1, TimeLimitMs = 500, ThreadCount = 1 },
+            CancellationToken.None);
+
+        using (var file = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            await sourceEngine.ExportTranspositionTableAsync(file, asJson: false, ct: CancellationToken.None);
+        }
+
+        try
+        {
+            await targetService.ImportTranspositionTableAsync(filePath, asJson: false);
+            await targetService.StartGameAsync(GameMode.PlayerVsAi);
+            var hint = await targetService.GetHintAsync();
+            Assert.False(hint.BestMove.IsNull);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
     }
 }
