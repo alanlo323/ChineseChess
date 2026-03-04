@@ -258,16 +258,14 @@ M460,402 L470,402 M470,402 L470,412" />
                                             VerticalAlignment="Center"
                                             Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                            <Border x:Name="LastMoveRing"
-                                    Width="46"
-                                    Height="46"
-                                    BorderBrush="{StaticResource LastMoveBrush}"
-                                    BorderThickness="2"
-                                    CornerRadius="23"
-                                    Opacity="0.65"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Visibility="{Binding IsLastMove, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <!-- 上一步起點：淡色填充圓（空格可見） -->
+                            <Ellipse x:Name="LastMoveFromDot"
+                                     Width="20" Height="20"
+                                     Fill="{StaticResource LastMoveBrush}"
+                                     Opacity="0.75"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Visibility="{Binding IsLastMoveFrom, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                             <Border x:Name="HintFromRing"
                                             Width="44"
@@ -403,6 +401,21 @@ M460,402 L470,402 M470,402 L470,412" />
                                             </TextBlock.Style>
                                         </TextBlock>
                                     </Grid>
+
+                                    <!-- 上一步終點：亮色外環覆蓋在棋子上 -->
+                                    <Border x:Name="LastMoveToRing"
+                                            Width="46" Height="46"
+                                            BorderBrush="{StaticResource LastMoveDestBrush}"
+                                            BorderThickness="3"
+                                            CornerRadius="23"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding IsLastMoveTo, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="8" ShadowDepth="0"
+                                                              Opacity="0.85" Color="#FF9D2A" />
+                                        </Border.Effect>
+                                    </Border>
                                 </Grid>
                             </Button>
                         </DataTemplate>

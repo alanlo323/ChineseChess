@@ -21,8 +21,9 @@ public class SquareViewModel : ObservableObject
     private bool _isValidMove;
     private bool _isHintFrom;
     private bool _isHintTo;
-    private bool _isLastMove;
-    
+    private bool _isLastMoveFrom;
+    private bool _isLastMoveTo;
+
     public int Index { get; }
     public int Row { get; }
     public int Col { get; }
@@ -64,10 +65,16 @@ public class SquareViewModel : ObservableObject
         set => SetProperty(ref _isHintTo, value);
     }
 
-    public bool IsLastMove
+    public bool IsLastMoveFrom
     {
-        get => _isLastMove;
-        set => SetProperty(ref _isLastMove, value);
+        get => _isLastMoveFrom;
+        set => SetProperty(ref _isLastMoveFrom, value);
+    }
+
+    public bool IsLastMoveTo
+    {
+        get => _isLastMoveTo;
+        set => SetProperty(ref _isLastMoveTo, value);
     }
 
     public SquareViewModel(int index, int row, int col)
@@ -256,7 +263,8 @@ public class ChessBoardViewModel : ObservableObject
     {
         foreach (var s in Squares)
         {
-            s.IsLastMove = false;
+            s.IsLastMoveFrom = false;
+            s.IsLastMoveTo = false;
         }
     }
 
@@ -271,12 +279,12 @@ public class ChessBoardViewModel : ObservableObject
     {
         if (_lastMoveFrom.HasValue && _lastMoveFrom.Value >= 0 && _lastMoveFrom.Value < 90)
         {
-            Squares[_lastMoveFrom.Value].IsLastMove = true;
+            Squares[_lastMoveFrom.Value].IsLastMoveFrom = true;
         }
 
         if (_lastMoveTo.HasValue && _lastMoveTo.Value >= 0 && _lastMoveTo.Value < 90)
         {
-            Squares[_lastMoveTo.Value].IsLastMove = true;
+            Squares[_lastMoveTo.Value].IsLastMoveTo = true;
         }
     }
 

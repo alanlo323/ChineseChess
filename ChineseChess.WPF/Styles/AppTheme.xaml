@@ -15,6 +15,7 @@
     <Color x:Key="HintFromColor">#F2B632</Color>
     <Color x:Key="HintToColor">#5BC0FF</Color>
     <Color x:Key="LastMoveColor">#F3D89B</Color>
+    <Color x:Key="LastMoveDestColor">#FF9D2A</Color>
     <Color x:Key="HighlightColor">#EACF75</Color>
     <Color x:Key="BoardLineColor">#4A3620</Color>
     <Color x:Key="BoardSurfaceDarkColor">#7A4E2A</Color>
@@ -42,6 +43,7 @@
     <SolidColorBrush x:Key="HintFromBrush" Color="{StaticResource HintFromColor}" />
     <SolidColorBrush x:Key="HintToBrush" Color="{StaticResource HintToColor}" />
     <SolidColorBrush x:Key="LastMoveBrush" Color="{StaticResource LastMoveColor}" />
+    <SolidColorBrush x:Key="LastMoveDestBrush" Color="{StaticResource LastMoveDestColor}" />
     <SolidColorBrush x:Key="HighlightBrush" Color="{StaticResource HighlightColor}" />
     <SolidColorBrush x:Key="BoardLineBrush" Color="{StaticResource BoardLineColor}" />
     <SolidColorBrush x:Key="BoardGridBrush" Color="{StaticResource BoardGridColor}" />
