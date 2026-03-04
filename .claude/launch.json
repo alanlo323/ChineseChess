@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ChineseChess WPF App",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "ChineseChess.WPF"],
+      "port": 0
+    },
+    {
+      "name": "Tests (watch)",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["test", "--project", "ChineseChess.Tests", "--logger", "console;verbosity=normal"],
+      "port": 0
+    }
+  ]
+}
