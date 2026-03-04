@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             xmlns:enums="clr-namespace:ChineseChess.Domain.Enums;assembly=ChineseChess.Domain"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ChessBoardViewModel}"
              Height="616" Width="540">
@@ -306,33 +307,102 @@ M460,402 L470,402 M470,402 L470,412" />
                                              VerticalAlignment="Center"
                                              Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                                    <TextBlock Text="{Binding Piece, Converter={StaticResource PieceTextConverter}}"
-                                               Foreground="{Binding Piece.Color, Converter={StaticResource ColorConverter}}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="FontFamily" Value="{StaticResource ChineseClassicFont}" />
-                                                <Setter Property="FontSize" Value="30" />
-                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                    <!-- 棋子圓盤 -->
+                                    <Grid Width="46" Height="46"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center">
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
                                                 <Setter Property="Visibility" Value="Visible" />
-                                                <Setter Property="TextAlignment" Value="Center" />
-                                                <Setter Property="HorizontalAlignment" Value="Center" />
-                                                <Setter Property="VerticalAlignment" Value="Center" />
-                                                <Setter Property="Effect">
-                                                    <Setter.Value>
-                                                        <DropShadowEffect BlurRadius="3"
-                                                                          ShadowDepth="0"
-                                                                          Opacity="0.35"
-                                                                          Color="#000000" />
-                                                    </Setter.Value>
-                                                </Setter>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding Piece.IsNone}" Value="True">
                                                         <Setter Property="Visibility" Value="Collapsed" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                        </Grid.Style>
+
+                                        <!-- 底盤漸層 (立體陰影) -->
+                                        <Ellipse Width="46" Height="46">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Fill" Value="{StaticResource RedPieceDiscBrush}" />
+                                                    <Setter Property="Effect">
+                                                        <Setter.Value>
+                                                            <DropShadowEffect BlurRadius="6" ShadowDepth="2.5"
+                                                                              Opacity="0.55" Color="#2A1000"
+                                                                              Direction="280" />
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Piece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Fill" Value="{StaticResource BlackPieceDiscBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+
+                                        <!-- 外環 -->
+                                        <Ellipse Width="46" Height="46" Fill="Transparent">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Stroke" Value="{StaticResource RedPieceRingBrush}" />
+                                                    <Setter Property="StrokeThickness" Value="2.5" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Piece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Stroke" Value="{StaticResource BlackPieceRingBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+
+                                        <!-- 內環 (裝飾) -->
+                                        <Ellipse Width="37" Height="37" Fill="Transparent" Opacity="0.7">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Stroke" Value="{StaticResource RedPieceRingBrush}" />
+                                                    <Setter Property="StrokeThickness" Value="1.2" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Piece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Stroke" Value="{StaticResource BlackPieceRingBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+
+                                        <!-- 棋字 -->
+                                        <TextBlock Text="{Binding Piece, Converter={StaticResource PieceTextConverter}}"
+                                                   FontFamily="{StaticResource ChineseClassicFont}"
+                                                   FontSize="22"
+                                                   FontWeight="Bold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   TextAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource RedPieceTextBrush}" />
+                                                    <Setter Property="Effect">
+                                                        <Setter.Value>
+                                                            <DropShadowEffect BlurRadius="1.5" ShadowDepth="0.5"
+                                                                              Opacity="0.25" Color="#000000" />
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Piece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Foreground" Value="{StaticResource BlackPieceTextBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
                                 </Grid>
                             </Button>
                         </DataTemplate>

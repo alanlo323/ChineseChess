@@ -84,6 +84,32 @@
         </DrawingBrush.Drawing>
     </DrawingBrush>
 
+    <!-- 棋子樣式資源 -->
+    <SolidColorBrush x:Key="RedPieceTextBrush" Color="#780E0E" />
+    <SolidColorBrush x:Key="BlackPieceTextBrush" Color="#E8DCC8" />
+    <SolidColorBrush x:Key="RedPieceRingBrush" Color="#5C0F0F" />
+    <SolidColorBrush x:Key="BlackPieceRingBrush" Color="#141414" />
+
+    <!-- 紅方棋子底盤 — 象牙白至金棕漸層，模擬木質澤感 -->
+    <RadialGradientBrush x:Key="RedPieceDiscBrush"
+                         GradientOrigin="0.33,0.30"
+                         Center="0.5,0.5"
+                         RadiusX="0.65" RadiusY="0.65">
+        <GradientStop Color="#FFFEF5" Offset="0" />
+        <GradientStop Color="#F7E4A8" Offset="0.48" />
+        <GradientStop Color="#C8983C" Offset="1" />
+    </RadialGradientBrush>
+
+    <!-- 黑方棋子底盤 — 深炭灰漸層 -->
+    <RadialGradientBrush x:Key="BlackPieceDiscBrush"
+                         GradientOrigin="0.33,0.30"
+                         Center="0.5,0.5"
+                         RadiusX="0.65" RadiusY="0.65">
+        <GradientStop Color="#565656" Offset="0" />
+        <GradientStop Color="#2C2C2C" Offset="0.48" />
+        <GradientStop Color="#0A0A0A" Offset="1" />
+    </RadialGradientBrush>
+
     <Style x:Key="AppWindowStyle" TargetType="Window">
         <Setter Property="FontFamily" Value="{StaticResource ChineseClassicFont}" />
         <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
