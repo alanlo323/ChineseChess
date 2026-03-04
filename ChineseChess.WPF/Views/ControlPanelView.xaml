@@ -34,7 +34,7 @@
                               Style="{StaticResource InputControlStyle}"
                               Margin="0,0,0,10" />
 
-                    <TextBlock Text="搜尋深度 (難度)"
+                    <TextBlock Text="{Binding SearchDepth, StringFormat=搜尋深度 (難度)（目前：{0}）}"
                                Style="{StaticResource SectionTitleStyle}"
                                Margin="0,0,0,6" />
                     <Slider Minimum="1"
@@ -45,7 +45,7 @@
                             IsSnapToTickEnabled="True"
                             Style="{StaticResource DifficultySliderStyle}" />
 
-                    <TextBlock Text="思考時間（秒）"
+                    <TextBlock Text="{Binding SearchThinkingTime, StringFormat=思考時間（秒）（目前：{0} 秒）}"
                                Style="{StaticResource SectionTitleStyle}"
                                Margin="0,8,0,6" />
                     <Slider Minimum="1"
