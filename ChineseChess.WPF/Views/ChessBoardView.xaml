@@ -6,7 +6,7 @@
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ChessBoardViewModel}"
-             Height="616" Width="600">
+             Height="616" Width="540">
     <UserControl.Resources>
         <SolidColorBrush x:Key="BoardHoverBrush" Color="#B58F5F" />
         <SolidColorBrush x:Key="BoardPressedBrush" Color="#8D6A3A" />
@@ -62,7 +62,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Width="600" Height="616">
+    <Grid Width="540" Height="616">
         <Border Background="{StaticResource BoardOuterBrush}"
                 BorderBrush="{StaticResource BoardOuterBrush}"
                 BorderThickness="0"
@@ -71,7 +71,7 @@
                 <Border Background="{StaticResource BoardPatternBrush}" CornerRadius="2" />
 
                 <Canvas IsHitTestVisible="False">
-                    <Rectangle Width="540"
+                    <Rectangle Width="480"
                                Height="560"
                                Stroke="{StaticResource BoardLineBrush}"
                                StrokeThickness="2.8"
@@ -92,8 +92,7 @@ M240,0 L240,280 M240,336 L240,560
 M300,0 L300,280 M300,336 L300,560
 M360,0 L360,280 M360,336 L360,560
 M420,0 L420,280 M420,336 L420,560
-M480,0 L480,280 M480,336 L480,560
-M540,0 L540,280 M540,336 L540,560" />
+M480,0 L480,280 M480,336 L480,560" />
                         </Path.Data>
                     </Path>
 
@@ -102,16 +101,16 @@ M540,0 L540,280 M540,336 L540,560" />
                           StrokeLineJoin="Miter">
                         <Path.Data>
                             <PathGeometry Figures="
-M0,0 L540,0
-M0,56 L540,56
-M0,112 L540,112
-M0,168 L540,168
-M0,224 L540,224
-M0,336 L540,336
-M0,392 L540,392
-M0,448 L540,448
-M0,504 L540,504
-M0,560 L540,560" />
+M0,0 L480,0
+M0,56 L480,56
+M0,112 L480,112
+M0,168 L480,168
+M0,224 L480,224
+M0,336 L480,336
+M0,392 L480,392
+M0,448 L480,448
+M0,504 L480,504
+M0,560 L480,560" />
                         </Path.Data>
                     </Path>
 
@@ -119,10 +118,10 @@ M0,560 L540,560" />
                           StrokeThickness="2.2">
                         <Path.Data>
                             <PathGeometry Figures="
-M180,0 L360,168
-M360,0 L180,168
-M180,392 L360,560
-M360,392 L180,560" />
+M180,0 L300,112
+M300,0 L180,112
+M180,448 L300,560
+M300,448 L180,560" />
                         </Path.Data>
                     </Path>
 
@@ -166,8 +165,6 @@ M372,188 L382,188 M382,188 L382,178
 M398,188 L408,188 M398,188 L398,178
 M372,204 L382,204 M382,204 L382,214
 M398,204 L408,204 M398,204 L398,214
-M492,188 L502,188 M502,188 L502,178
-M492,204 L502,204 M502,204 L502,214
 
 M38,356 L48,356 M38,356 L38,346
 M38,372 L48,372 M38,372 L38,382
@@ -182,9 +179,7 @@ M278,372 L288,372 M278,372 L278,382
 M372,356 L382,356 M382,356 L382,346
 M398,356 L408,356 M398,356 L398,346
 M372,372 L382,372 M382,372 L382,382
-M398,372 L408,372 M398,372 L398,382
-M492,356 L502,356 M502,356 L502,346
-M492,372 L502,372 M502,372 L502,382" />
+M398,372 L408,372 M398,372 L398,382" />
                         </Path.Data>
                     </Path>
 
@@ -202,7 +197,7 @@ M492,372 L502,372 M502,372 L502,382" />
                             <DropShadowEffect BlurRadius="1.5" ShadowDepth="0" Opacity="0.2" />
                         </TextBlock.Effect>
                         <TextBlock.Margin>
-                            <Thickness>220,270,0,0</Thickness>
+                            <Thickness>160,270,0,0</Thickness>
                         </TextBlock.Margin>
                     </TextBlock>
 
@@ -220,7 +215,7 @@ M492,372 L502,372 M502,372 L502,382" />
                             <DropShadowEffect BlurRadius="1.5" ShadowDepth="0" Opacity="0.2" />
                         </TextBlock.Effect>
                         <TextBlock.Margin>
-                            <Thickness>285,270,0,0</Thickness>
+                            <Thickness>225,270,0,0</Thickness>
                         </TextBlock.Margin>
                     </TextBlock>
                 </Canvas>
@@ -230,7 +225,7 @@ M492,372 L502,372 M502,372 L502,382" />
                               VerticalAlignment="Stretch">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <Canvas Width="540" Height="560" />
+                            <Canvas Width="480" Height="560" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemContainerStyle>
