@@ -24,7 +24,6 @@ public class Board : IBoard
     {
         public Move Move;
         public Piece CapturedPiece;
-        public ulong ZobristKey;
         public bool IsNullMove;
     }
 
@@ -88,55 +87,30 @@ public class Board : IBoard
         {
             Move = move,
             CapturedPiece = target,
-            ZobristKey = _zobristKey // 儲存的是「新 key」或「舊 key」？通常保留可還原狀態。
-            // 注意：若將 Key 存入歷史，通常要存「舊」的 key 才能快速還原，
-            // 或者改用可逆的 XOR 再計算也能還原。
-            // 如果有不可逆狀態，保留舊 key 會更安全。
-            // 其實 Zobrist 全程使用 XOR 可逆。
-            // 為求保險，建議存入走棋前的 key。
-            // 但若改用 XOR 還原，則其實不必存它。
-            // 這裡選擇存入舊 Key，方便驗證與實作單純化。
         });
     }
 
     public void UnmakeMove(Move move)
     {
         if (_history.Count == 0) throw new InvalidOperationException("No history to undo.");
-        
+
         var state = _history.Pop();
-        // 確認走法是否一致？
-        if (state.Move != move) 
-        {
-            // 為求安全，假設呼叫端傳入正確參數時信任歷史堆疊即可。
-            // 理想上若使用堆疊，UnmakeMove() 不需要帶參數。
-            // 若介面要求保留參數，這裡保留接收但先忽略比對或僅做最小驗證。
-        }
 
-        // 1. 回復行棋方
+        // 回復行棋方
         _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
-        // _zobristKey ^= ZobristHash.SideToMoveKey; // 透過還原或再 XOR 可恢復
+        _zobristKey ^= ZobristHash.SideToMoveKey;
 
-        // 2. 還原棋子
+        // 空著不涉及棋子移動，僅還原行棋方與 Zobrist 即可
+        if (state.IsNullMove) return;
+
+        // 還原棋子
         var movedPiece = _pieces[state.Move.To];
         var capturedPiece = state.CapturedPiece;
 
         _pieces[state.Move.From] = movedPiece;
         _pieces[state.Move.To] = capturedPiece;
 
-        // 3. 還原 Zobrist
-        // 若邏輯正確，Re-XOR 通常比直接存值來得精簡，但保留 state 回存可降低錯誤風險。
-        // 以下以 Re-XOR 驗證正確性或直接還原皆可。
-        // 因為上方註解原先是存「新 Key」，這裡順手修正認知即可。
-
-        // 可改為在 MakeMove 存 PREVIOUS key，或直接重算還原。
-        // 重算流程：
-        // Key 目前是 Key_After。
-        // Key ^= SideToMove（回到上一個行棋方）
-        // 移除 To 的棋子
-        // 復原 From 的棋子
-        // 若有被吃掉棋子，放回 To
-        
-        _zobristKey ^= ZobristHash.SideToMoveKey;
+        // 還原 Zobrist（Re-XOR 可逆）
         _zobristKey ^= ZobristHash.GetPieceKey(state.Move.To, movedPiece.Color, movedPiece.Type);
         _zobristKey ^= ZobristHash.GetPieceKey(state.Move.From, movedPiece.Color, movedPiece.Type);
         if (!capturedPiece.IsNone)
@@ -177,7 +151,6 @@ public class Board : IBoard
         {
             Move = Move.Null,
             CapturedPiece = Piece.None,
-            ZobristKey = _zobristKey,
             IsNullMove = true
         });
     }

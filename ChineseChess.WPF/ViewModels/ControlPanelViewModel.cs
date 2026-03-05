@@ -165,7 +165,12 @@ public class ControlPanelViewModel : ObservableObject
 
         _gameService.SetDifficulty(_searchDepth, _searchThinkingTime * 1000);
 
-        _gameService.GameMessage += msg => StatusMessage = msg;
+        _gameService.GameMessage += msg =>
+        {
+            var app = global::System.Windows.Application.Current;
+            if (app == null) { StatusMessage = msg; return; }
+            app.Dispatcher.Invoke(() => StatusMessage = msg);
+        };
     }
 
     private static string FormatHintScore(int score)

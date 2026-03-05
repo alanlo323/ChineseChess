@@ -34,8 +34,8 @@ public readonly struct Piece : IEquatable<Piece>
         {
             PieceType.King => Color == PieceColor.Red ? 'K' : 'k',
             PieceType.Advisor => Color == PieceColor.Red ? 'A' : 'a',
-            PieceType.Elephant => Color == PieceColor.Red ? 'E' : 'e',
-            PieceType.Horse => Color == PieceColor.Red ? 'H' : 'h',
+            PieceType.Elephant => Color == PieceColor.Red ? 'B' : 'b',
+            PieceType.Horse => Color == PieceColor.Red ? 'N' : 'n',
             PieceType.Rook => Color == PieceColor.Red ? 'R' : 'r',
             PieceType.Cannon => Color == PieceColor.Red ? 'C' : 'c',
             PieceType.Pawn => Color == PieceColor.Red ? 'P' : 'p',
