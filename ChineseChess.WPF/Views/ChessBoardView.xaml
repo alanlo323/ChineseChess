@@ -351,6 +351,62 @@ M460,402 L470,402 M470,402 L470,412" />
                                             VerticalAlignment="Center"
                                             Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
+                                    <!-- 普通提示：虛影棋子（落點顯示移動棋子，半透明） -->
+                                    <Grid Width="46" Height="46"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Opacity="0.55"
+                                          IsHitTestVisible="False"
+                                          Panel.ZIndex="7"
+                                          Visibility="{Binding HasHintGhostPiece, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Ellipse Width="46" Height="46">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Fill" Value="{StaticResource RedPieceDiscBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HintGhostPiece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Fill" Value="{StaticResource BlackPieceDiscBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <Ellipse Width="46" Height="46" Fill="Transparent">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Stroke" Value="{StaticResource RedPieceRingBrush}" />
+                                                    <Setter Property="StrokeThickness" Value="2.5" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HintGhostPiece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Stroke" Value="{StaticResource BlackPieceRingBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <TextBlock Text="{Binding HintGhostPiece, Converter={StaticResource PieceTextConverter}}"
+                                                   FontFamily="{StaticResource ChineseClassicFont}"
+                                                   FontSize="22"
+                                                   FontWeight="Bold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   TextAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource RedPieceTextBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HintGhostPiece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Foreground" Value="{StaticResource BlackPieceTextBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+
                                     <Ellipse Width="14"
                                              Height="14"
                                              Fill="{StaticResource MoveHintBrush}"

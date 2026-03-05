@@ -28,6 +28,8 @@ public class SquareViewModel : ObservableObject
     private int _smartHintScore;
     private bool _hasGhostPiece;
     private Piece _ghostPiece;
+    private bool _hasHintGhostPiece;
+    private Piece _hintGhostPiece;
 
     public int Index { get; }
     public int Row { get; }
@@ -119,6 +121,20 @@ public class SquareViewModel : ObservableObject
         set => SetProperty(ref _ghostPiece, value);
     }
 
+    /// <summary>是否顯示普通提示虛影棋子（提示走法的落點）</summary>
+    public bool HasHintGhostPiece
+    {
+        get => _hasHintGhostPiece;
+        set => SetProperty(ref _hasHintGhostPiece, value);
+    }
+
+    /// <summary>普通提示虛影棋子</summary>
+    public Piece HintGhostPiece
+    {
+        get => _hintGhostPiece;
+        set => SetProperty(ref _hintGhostPiece, value);
+    }
+
     public SquareViewModel(int index, int row, int col)
     {
         Index = index;
@@ -130,6 +146,7 @@ public class SquareViewModel : ObservableObject
         HitBoxTop = BoardY - HitBoxHalfHeight;
         _piece = Piece.None;
         _ghostPiece = Piece.None;
+        _hintGhostPiece = Piece.None;
     }
 }
 
@@ -192,6 +209,17 @@ public class ChessBoardViewModel : ObservableObject
             if (to < 90) _hintTo = to;
             _hintBoardFen = _gameService.CurrentBoard.ToFen();
             ApplyHintHighlights();
+
+            // 在落點顯示虛影棋子（讓玩家清楚看到是哪顆棋子移動到哪裡）
+            if (_hintFrom.HasValue && _hintTo.HasValue)
+            {
+                var movingPiece = _gameService.CurrentBoard.GetPiece(_hintFrom.Value);
+                if (!movingPiece.IsNone)
+                {
+                    Squares[_hintTo.Value].HintGhostPiece = movingPiece;
+                    Squares[_hintTo.Value].HasHintGhostPiece = true;
+                }
+            }
         });
     }
 
@@ -343,6 +371,8 @@ public class ChessBoardViewModel : ObservableObject
         {
             s.IsHintFrom = false;
             s.IsHintTo = false;
+            s.HasHintGhostPiece = false;
+            s.HintGhostPiece = Piece.None;
         }
     }
 
