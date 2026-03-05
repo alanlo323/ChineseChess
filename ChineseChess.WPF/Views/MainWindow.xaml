@@ -10,7 +10,6 @@
         Title="象棋 AI 對弈"
         Icon="/Resources/app.ico"
         Height="800" Width="980" MinWidth="900" MinHeight="640"
-        WindowState="Maximized"
         Style="{StaticResource AppWindowStyle}">
 
     <Window.Triggers>

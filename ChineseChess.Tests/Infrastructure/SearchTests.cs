@@ -152,6 +152,140 @@ public class SearchTests
         Assert.NotNull(result);
     }
 
+    [Fact]
+    public async Task Search_WhenPaused_TimeLimitShouldNotExitSearch()
+    {
+        // 複現 bug：暫停中的搜尋，時間限制到期後不應自動退出
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        using var pauseSignal = new ManualResetEventSlim(false); // 一開始就暫停
+        var settings = new SearchSettings
+        {
+            Depth = 20,
+            TimeLimitMs = 150, // 短時間限制
+            ThreadCount = 1,
+            PauseSignal = pauseSignal
+        };
+
+        var searchTask = engine.SearchAsync(board, settings, CancellationToken.None);
+
+        // 等比時間限制更久
+        await Task.Delay(400);
+
+        // 搜尋應仍在暫停中（未因時間限制退出）
+        Assert.False(searchTask.IsCompleted,
+            "暫停中的搜尋不應因時間限制而自動退出");
+
+        // 恢復後才應完成
+        pauseSignal.Set();
+        var result = await searchTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task Search_TimeLimitShouldNotCountPauseDuration()
+    {
+        // 複現 bug：time limit 以掛牆時間計算，暫停期間計時不停
+        // 恢復後，time limit 已耗盡，搜尋立即結束，AI 實際思考時間被縮短
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        using var pauseSignal = new ManualResetEventSlim(false); // 一開始就暫停
+        var settings = new SearchSettings
+        {
+            Depth = 20,
+            TimeLimitMs = 500, // 500ms 的思考時間
+            ThreadCount = 1,
+            PauseSignal = pauseSignal
+        };
+
+        var searchTask = engine.SearchAsync(board, settings, CancellationToken.None);
+
+        // 暫停 700ms（超過 time limit）
+        await Task.Delay(700);
+
+        // 恢復：修復後 AI 應仍有 ~500ms 的思考時間
+        var resumeSw = System.Diagnostics.Stopwatch.StartNew();
+        pauseSignal.Set();
+        await searchTask;
+        resumeSw.Stop();
+
+        // 舊行為：恢復後立即結束（< 50ms），因計時器已過期
+        // 新行為：繼續搜尋 ~500ms 的實際思考時間
+        Assert.True(resumeSw.ElapsedMilliseconds >= 200,
+            $"恢復後搜尋應繼續 ~500ms，但只執行了 {resumeSw.ElapsedMilliseconds}ms（計時器誤計暫停時間）");
+    }
+
+    [Fact]
+    public async Task Search_ElapsedTimeShouldNotIncludePausedDuration()
+    {
+        // 複現 bug：暫停中的時間不應計入 ElapsedMs
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        using var pauseSignal = new ManualResetEventSlim(false); // 一開始就暫停
+        using var cts = new CancellationTokenSource();
+        var settings = new SearchSettings
+        {
+            Depth = 20,
+            TimeLimitMs = 30000,
+            ThreadCount = 1,
+            PauseSignal = pauseSignal
+        };
+
+        var depthReports = new System.Collections.Concurrent.ConcurrentBag<SearchProgress>();
+        var searchTask = engine.SearchAsync(
+            board, settings, cts.Token,
+            new Progress<SearchProgress>(p => { if (!p.IsHeartbeat) depthReports.Add(p); }));
+
+        // 暫停 600ms
+        await Task.Delay(600);
+
+        // 恢復，等第一個 depth 完成
+        pauseSignal.Set();
+        await Task.Delay(300);
+
+        cts.Cancel();
+        try { await searchTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { }
+
+        Assert.NotEmpty(depthReports);
+        var firstElapsed = depthReports.OrderBy(p => p.CurrentDepth).First().ElapsedMs;
+        // ElapsedMs 不應包含 600ms 的暫停時間
+        Assert.True(firstElapsed < 400,
+            $"ElapsedMs ({firstElapsed}ms) 不應包含暫停期間的時間（約 600ms）");
+    }
+
+    [Fact]
+    public async Task Search_WhenPaused_HeartbeatShouldNotFire()
+    {
+        // 複現 bug：暫停時心跳計時器不應繼續回報進度，讓使用者誤以為 AI 還在運算
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        using var pauseSignal = new ManualResetEventSlim(false); // 一開始就暫停
+        var settings = new SearchSettings
+        {
+            Depth = 20,
+            TimeLimitMs = 10000,
+            ThreadCount = 1,
+            PauseSignal = pauseSignal
+        };
+        using var cts = new CancellationTokenSource();
+        var heartbeatCount = 0;
+
+        var searchTask = engine.SearchAsync(
+            board, settings, cts.Token,
+            new Progress<SearchProgress>(p => { if (p.IsHeartbeat) heartbeatCount++; }));
+
+        // 等足夠久讓心跳可能觸發（心跳間隔 100ms）
+        await Task.Delay(1200);
+        var heartbeatsWhilePaused = heartbeatCount;
+
+        // 停止搜尋
+        cts.Cancel();
+        try { await searchTask; } catch { }
+
+        // 暫停時不應有心跳回報
+        Assert.Equal(0, heartbeatsWhilePaused);
+    }
+
     // --- PST 測試 ---
 
     [Fact]

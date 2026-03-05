@@ -70,6 +70,34 @@ public class GameServiceTests
     }
 
     [Fact]
+    public async Task PauseThinking_WhenTimerFires_ShouldRemainPaused()
+    {
+        // 複現 bug：暫停後時間限制到期，IsThinking 應仍為 true（搜尋還在等待 resume）
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        gameService.SetDifficulty(18, 200, 1); // 200ms 時間限制
+
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+        var hintTask = gameService.GetHintAsync();
+        await Task.Delay(50); // 讓搜尋開始
+
+        await gameService.PauseThinkingAsync();
+        Assert.True(gameService.IsThinking, "暫停後 IsThinking 應仍為 true");
+
+        // 等比時間限制更久
+        await Task.Delay(400);
+
+        // 搜尋應仍在暫停中，沒有因計時器退出
+        Assert.True(gameService.IsThinking,
+            "計時器到期後，暫停中的搜尋不應自動結束（IsThinking 應仍為 true）");
+
+        // 恢復後才完成
+        await gameService.ResumeThinkingAsync();
+        var hint = await hintTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(hint.BestMove.IsNull);
+    }
+
+    [Fact]
     public async Task StopThinking_ShouldCancelHintSearch()
     {
         var engine = new SearchEngine();

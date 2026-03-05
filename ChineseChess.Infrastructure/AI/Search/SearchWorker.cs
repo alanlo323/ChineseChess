@@ -19,7 +19,8 @@ internal sealed class SearchWorker
     private readonly IBoard _board;
     private readonly IEvaluator _evaluator;
     private readonly TranspositionTable _tt;
-    private readonly CancellationToken _ct;
+    private readonly CancellationToken _ct;         // 時間限制 + 使用者停止（合併）
+    private readonly CancellationToken _hardStopCt; // 僅使用者明確停止（暫停等待用）
     private readonly ManualResetEventSlim _pauseSignal;
 
     private long _nodesVisited;
@@ -36,12 +37,13 @@ internal sealed class SearchWorker
 
     public long NodesVisited => Interlocked.Read(ref _nodesVisited);
 
-    public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, ManualResetEventSlim pauseSignal)
+    public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, CancellationToken hardStopCt, ManualResetEventSlim pauseSignal)
     {
         _board = board;
         _evaluator = evaluator;
         _tt = tt;
         _ct = ct;
+        _hardStopCt = hardStopCt;
         _pauseSignal = pauseSignal;
         _killerMoves = new Move[MaxSearchPly, 2];
         _historyTable = new int[90, 90];
@@ -381,7 +383,10 @@ internal sealed class SearchWorker
 
     private void CheckPauseOrCancellation()
     {
-        _pauseSignal.Wait(_ct);
-        if (_ct.IsCancellationRequested) throw new OperationCanceledException();
+        // 使用 _hardStopCt（僅使用者明確停止）等待，避免時間限制到期時破壞暫停狀態
+        // 時間限制（_ct）到期不應中斷暫停；只有明確 Stop 才能跳出
+        _pauseSignal.Wait(_hardStopCt);
+        if (_ct.IsCancellationRequested || _hardStopCt.IsCancellationRequested)
+            throw new OperationCanceledException();
     }
 }

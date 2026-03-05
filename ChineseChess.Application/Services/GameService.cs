@@ -78,7 +78,7 @@ public class GameService : IGameService
         }
 
         _aiPauseSignal.Reset();
-        ThinkingProgress?.Invoke("AI 思考已暫停");
+        // ThinkingProgress?.Invoke("AI 思考已暫停");
         return Task.CompletedTask;
     }
 
@@ -91,7 +91,7 @@ public class GameService : IGameService
         }
 
         _aiPauseSignal.Set();
-        ThinkingProgress?.Invoke("AI 思考已繼續");
+        // ThinkingProgress?.Invoke("AI 思考已繼續");
         return Task.CompletedTask;
     }
 

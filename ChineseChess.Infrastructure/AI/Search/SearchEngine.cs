@@ -14,7 +14,7 @@ public class SearchEngine : IAiEngine
     private readonly IEvaluator _evaluator;
     private readonly TranspositionTable _tt;
 
-    private const int HeartbeatIntervalMs = 500;
+    private const int HeartbeatIntervalMs = 100;
 
     private sealed class SearchProgressState
     {
@@ -37,15 +37,15 @@ public class SearchEngine : IAiEngine
             _tt.NewGeneration();
             var pauseSignal = settings.PauseSignal ?? new ManualResetEventSlim(true);
 
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            if (settings.TimeLimitMs > 0)
-            {
-                linkedCts.CancelAfter(settings.TimeLimitMs);
-            }
+            // 用獨立的 timeLimitCts 管理思考時間，讓監控任務依「實際搜尋時間」取消
+            // 暫停期間不計入 time limit，恢復後繼續剩餘思考時間
+            using var timeLimitCts = new CancellationTokenSource();
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeLimitCts.Token);
             var token = linkedCts.Token;
 
             // --- 建立主 worker ---
-            var mainWorker = new SearchWorker(board.Clone(), _evaluator, _tt, token, pauseSignal);
+            // ct = 使用者明確停止 token（hardStopCt），token = 時間限制 + 使用者停止（合併）
+            var mainWorker = new SearchWorker(board.Clone(), _evaluator, _tt, token, ct, pauseSignal);
 
             // --- 啟動輔助 worker（各自獨立執行迭代加深） ---
             var helperWorkers = new SearchWorker[threadCount - 1];
@@ -53,7 +53,7 @@ public class SearchEngine : IAiEngine
 
             for (int i = 0; i < threadCount - 1; i++)
             {
-                var helper = new SearchWorker(board.Clone(), _evaluator, _tt, token, pauseSignal);
+                var helper = new SearchWorker(board.Clone(), _evaluator, _tt, token, ct, pauseSignal);
                 helperWorkers[i] = helper;
 
                 int helperDepth = settings.Depth + 1 + (i % 2);
@@ -67,6 +67,20 @@ public class SearchEngine : IAiEngine
             // --- 主 worker：以迭代加深並回報進度 ---
             var result = new SearchResult();
             var stopwatch = Stopwatch.StartNew();
+
+            // 暫停時間追蹤：用實際搜尋時間（排除暫停期間）回報 ElapsedMs
+            long totalPausedMs = 0L;      // 已累計的暫停總時間
+            long pauseStartedAtMs = -1L;  // 目前暫停開始的時間點（-1 = 未暫停）
+
+            long GetActiveElapsedMs()
+            {
+                var total = stopwatch.ElapsedMilliseconds;
+                var paused = Volatile.Read(ref totalPausedMs);
+                var pauseStart = Volatile.Read(ref pauseStartedAtMs);
+                var currentPause = pauseStart >= 0 ? total - pauseStart : 0L;
+                return total - paused - currentPause;
+            }
+
             var progressState = new SearchProgressState();
             var progressStateLock = new object();
             System.Timers.Timer? heartbeatTimer = null;
@@ -98,7 +112,7 @@ public class SearchEngine : IAiEngine
                 }
 
                 long nodes = GetTotalNodes();
-                long elapsedMs = stopwatch.ElapsedMilliseconds;
+                long elapsedMs = GetActiveElapsedMs(); // 排除暫停時間
                 long nodesPerSecond = elapsedMs > 0 ? (nodes * 1000L) / elapsedMs : 0;
 
                 progress.Report(new SearchProgress
@@ -124,18 +138,54 @@ public class SearchEngine : IAiEngine
                 heartbeatTimer.Elapsed += (_, _) =>
                 {
                     if (token.IsCancellationRequested) return;
+                    if (!pauseSignal.IsSet) return; // 暫停中不回報進度，避免誤導使用者
                     try { ReportProgress(true, 0, 0, null); }
                     catch { /* 忽略背景進度回報可忽略的失敗。 */ }
                 };
                 heartbeatTimer.Start();
-                ReportProgress(true, 0, 0, null);
+                if (pauseSignal.IsSet) ReportProgress(true, 0, 0, null);
+            }
+
+            // 啟動「有效時間監控」任務：只在 AI 實際搜尋時計時，暫停時凍結倒數
+            Task? timeLimitMonitor = null;
+            if (settings.TimeLimitMs > 0)
+            {
+                timeLimitMonitor = Task.Factory.StartNew(() =>
+                {
+                    while (!token.IsCancellationRequested)
+                    {
+                        if (GetActiveElapsedMs() >= settings.TimeLimitMs)
+                        {
+                            timeLimitCts.Cancel();
+                            return;
+                        }
+                        // 暫停中：等待恢復，不計時
+                        if (!pauseSignal.IsSet)
+                        {
+                            pauseSignal.Wait(ct);
+                            continue;
+                        }
+                        // 每 10ms 輪詢一次（精度足夠，CPU 開銷低）
+                        token.WaitHandle.WaitOne(10);
+                    }
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             }
 
             try
             {
                 for (int depth = 1; depth <= settings.Depth; depth++)
                 {
-                    pauseSignal.Wait(token);
+                    // 用 ct（使用者明確停止）等待暫停解除；時間限制不應中斷暫停
+                    if (!pauseSignal.IsSet)
+                    {
+                        Volatile.Write(ref pauseStartedAtMs, stopwatch.ElapsedMilliseconds);
+                    }
+                    pauseSignal.Wait(ct);
+                    if (pauseStartedAtMs >= 0)
+                    {
+                        totalPausedMs += stopwatch.ElapsedMilliseconds - pauseStartedAtMs;
+                        Volatile.Write(ref pauseStartedAtMs, -1L);
+                    }
                     if (token.IsCancellationRequested) break;
 
                     int score = mainWorker.SearchSingleDepth(depth);
@@ -168,9 +218,15 @@ public class SearchEngine : IAiEngine
                 // 通知所有輔助 worker 停止
                 linkedCts.Cancel();
 
-                // 等待輔助 worker 平順結束
+                // 等待輔助 worker 與時間監控任務平順結束
                 try { Task.WaitAll(helperTasks); }
                 catch { /* Helper 可能拋出 OperationCanceledException，屬於預期狀況 */ }
+
+                if (timeLimitMonitor != null)
+                {
+                    try { timeLimitMonitor.Wait(500); }
+                    catch { }
+                }
 
                 if (heartbeatTimer != null)
                 {
