@@ -59,7 +59,7 @@ public class BoardTests
         var board = new Board();
         board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
 
-        Assert.True(board.GenerateLegalMoves().Any());
+        Assert.NotEmpty(board.GenerateLegalMoves());
     }
 
     [Fact]
@@ -72,9 +72,9 @@ public class BoardTests
         var pseudoMoves = board.GeneratePseudoLegalMoves().ToList();
         var illegalMove = new Move(49, 50);
 
-        Assert.True(pseudoMoves.Any(m => m.From == illegalMove.From && m.To == illegalMove.To));
+        Assert.Contains(illegalMove, pseudoMoves);
         Assert.False(board.IsCheck(PieceColor.Red));
-        Assert.False(board.GenerateLegalMoves().Any(m => m.From == illegalMove.From && m.To == illegalMove.To));
+        Assert.DoesNotContain(illegalMove, board.GenerateLegalMoves());
     }
 
     [Fact]
@@ -96,8 +96,8 @@ public class BoardTests
         Assert.False(board.IsCheck(PieceColor.Red));
 
         var pseudoMoves = board.GeneratePseudoLegalMoves().ToList();
-        Assert.True(pseudoMoves.Any(m => m.From == move.From && m.To == move.To));
-        Assert.True(board.GenerateLegalMoves().Any(m => m.From == move.From && m.To == move.To));
+        Assert.Contains(move, pseudoMoves);
+        Assert.Contains(move, board.GenerateLegalMoves());
     }
 
     [Fact]
@@ -113,9 +113,9 @@ public class BoardTests
         var blockedSlide = new Move(67, 70);
         var legalCapture = new Move(67, 69);
 
-        Assert.True(pseudoMoves.Any(m => m.From == legalCapture.From && m.To == legalCapture.To));
-        Assert.False(pseudoMoves.Any(m => m.From == blockedSlide.From && m.To == blockedSlide.To));
-        Assert.True(legalMoves.Any(m => m.From == legalCapture.From && m.To == legalCapture.To));
-        Assert.False(legalMoves.Any(m => m.From == blockedSlide.From && m.To == blockedSlide.To));
+        Assert.Contains(legalCapture, pseudoMoves);
+        Assert.DoesNotContain(blockedSlide, pseudoMoves);
+        Assert.Contains(legalCapture, legalMoves);
+        Assert.DoesNotContain(blockedSlide, legalMoves);
     }
 }
