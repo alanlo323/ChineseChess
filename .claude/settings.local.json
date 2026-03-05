@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "mcp__Claude_Preview__preview_start",
-      "Bash(dotnet build --no-restore -v quiet)"
+      "Bash(dotnet build --no-restore -v quiet)",
+      "Bash(powershell:*)"
     ]
   }
 }
