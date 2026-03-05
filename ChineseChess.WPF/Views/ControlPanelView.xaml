@@ -47,6 +47,23 @@
                                   Style="{StaticResource InputControlStyle}"
                                   Margin="0,0,0,10" />
 
+                        <CheckBox Content="智能提示（選子時自動分析走法）"
+                                  IsChecked="{Binding IsSmartHintEnabled}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,0,0,6" />
+
+                        <TextBlock Text="{Binding SmartHintDepth, StringFormat=智能提示深度（目前：{0}）}"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,0,0,6" />
+                        <Slider Minimum="1"
+                                Maximum="8"
+                                Value="{Binding SmartHintDepth}"
+                                AutoToolTipPlacement="TopLeft"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="True"
+                                Style="{StaticResource DifficultySliderStyle}"
+                                Margin="0,0,0,10" />
+
                         <TextBlock Text="{Binding SearchDepth, StringFormat=搜尋深度（目前：{0}）}"
                                    Style="{StaticResource SectionTitleStyle}"
                                    Margin="0,0,0,6" />

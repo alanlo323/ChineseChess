@@ -1,4 +1,5 @@
 using ChineseChess.Domain.Entities;
+using System.Collections.Generic;
 using System.IO;
 using System;
 using System.Threading;
@@ -37,9 +38,17 @@ public class SearchSettings
     public ManualResetEventSlim PauseSignal { get; set; } = new ManualResetEventSlim(true);
 }
 
+public class MoveEvaluation
+{
+    public Move Move { get; set; }
+    public int Score { get; set; }  // 從「做出此走法的玩家」視角，正分 = 對自己有利
+    public bool IsBest { get; set; }
+}
+
 public interface IAiEngine
 {
     Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null);
+    Task<IReadOnlyList<MoveEvaluation>> EvaluateMovesAsync(IBoard board, IEnumerable<Move> moves, int depth, CancellationToken ct = default, IProgress<string>? progress = null);
     Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default);
     Task ImportTranspositionTableAsync(Stream input, bool asJson, CancellationToken ct = default);
 }

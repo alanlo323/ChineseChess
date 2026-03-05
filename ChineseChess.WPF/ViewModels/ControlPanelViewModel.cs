@@ -17,6 +17,8 @@ public class ControlPanelViewModel : ObservableObject
     private string _statusMessage = "Ready";
     private int _searchDepth = 5;
     private int _searchThinkingTime = 3;
+    private bool _isSmartHintEnabled = false;
+    private int _smartHintDepth = 2;
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
@@ -52,6 +54,30 @@ public class ControlPanelViewModel : ObservableObject
             if (SetProperty(ref _searchThinkingTime, value))
             {
                 _gameService.SetDifficulty(_searchDepth, value * 1000);
+            }
+        }
+    }
+
+    public bool IsSmartHintEnabled
+    {
+        get => _isSmartHintEnabled;
+        set
+        {
+            if (SetProperty(ref _isSmartHintEnabled, value))
+            {
+                _gameService.IsSmartHintEnabled = value;
+            }
+        }
+    }
+
+    public int SmartHintDepth
+    {
+        get => _smartHintDepth;
+        set
+        {
+            if (SetProperty(ref _smartHintDepth, value))
+            {
+                _gameService.SmartHintDepth = value;
             }
         }
     }

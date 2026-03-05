@@ -2,6 +2,7 @@ using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.WPF.Core;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
@@ -23,6 +24,10 @@ public class SquareViewModel : ObservableObject
     private bool _isHintTo;
     private bool _isLastMoveFrom;
     private bool _isLastMoveTo;
+    private bool _hasSmartHint;
+    private int _smartHintScore;
+    private bool _hasGhostPiece;
+    private Piece _ghostPiece;
 
     public int Index { get; }
     public int Row { get; }
@@ -31,10 +36,7 @@ public class SquareViewModel : ObservableObject
     public double BoardY { get; }
     public double HitBoxLeft { get; }
     public double HitBoxTop { get; }
-    
-    // 棋盤座標定位（相對於棋盤尺寸，若採像素模式可在這裡處理）
-    // UniformGrid 下順序很重要。
-    
+
     public Piece Piece
     {
         get => _piece;
@@ -77,6 +79,46 @@ public class SquareViewModel : ObservableObject
         set => SetProperty(ref _isLastMoveTo, value);
     }
 
+    /// <summary>是否顯示智能提示評分 Badge</summary>
+    public bool HasSmartHint
+    {
+        get => _hasSmartHint;
+        set => SetProperty(ref _hasSmartHint, value);
+    }
+
+    /// <summary>走法評分（從「做出走法的玩家」視角，正分=有利）</summary>
+    public int SmartHintScore
+    {
+        get => _smartHintScore;
+        set
+        {
+            if (SetProperty(ref _smartHintScore, value))
+                OnPropertyChanged(nameof(SmartHintScoreText));
+        }
+    }
+
+    /// <summary>格式化評分文字，供 UI 顯示</summary>
+    public string SmartHintScoreText => _smartHintScore switch
+    {
+        > 0 => $"+{_smartHintScore}",
+        < 0 => _smartHintScore.ToString(),
+        _ => "0"
+    };
+
+    /// <summary>是否顯示虛影棋子（最佳走法落點）</summary>
+    public bool HasGhostPiece
+    {
+        get => _hasGhostPiece;
+        set => SetProperty(ref _hasGhostPiece, value);
+    }
+
+    /// <summary>虛影棋子（顯示哪顆棋子的虛影）</summary>
+    public Piece GhostPiece
+    {
+        get => _ghostPiece;
+        set => SetProperty(ref _ghostPiece, value);
+    }
+
     public SquareViewModel(int index, int row, int col)
     {
         Index = index;
@@ -87,6 +129,7 @@ public class SquareViewModel : ObservableObject
         HitBoxLeft = BoardX - HitBoxHalfWidth;
         HitBoxTop = BoardY - HitBoxHalfHeight;
         _piece = Piece.None;
+        _ghostPiece = Piece.None;
     }
 }
 
@@ -101,7 +144,7 @@ public class ChessBoardViewModel : ObservableObject
     private int? _lastMoveTo;
 
     public ObservableCollection<SquareViewModel> Squares { get; } = new ObservableCollection<SquareViewModel>();
-    
+
     public ICommand SquareClickCommand { get; }
 
     public ChessBoardViewModel(IGameService gameService)
@@ -109,6 +152,7 @@ public class ChessBoardViewModel : ObservableObject
         _gameService = gameService;
         _gameService.BoardUpdated += OnBoardUpdated;
         _gameService.HintReady += OnHintReady;
+        _gameService.SmartHintReady += OnSmartHintReady;
         SquareClickCommand = new RelayCommand(OnSquareClick);
 
         InitializeBoard();
@@ -199,9 +243,11 @@ public class ChessBoardViewModel : ObservableObject
             if (!square.Piece.IsNone && square.Piece.Color == _gameService.CurrentBoard.Turn)
             {
                 ClearMoveHighlights();
+                ClearSmartHintHighlights();
                 _selectedSquare = square;
                 square.IsSelected = true;
                 HighlightLegalMoves(square.Index);
+                await _gameService.RequestSmartHintAsync(square.Index);
             }
         }
         else
@@ -212,28 +258,31 @@ public class ChessBoardViewModel : ObservableObject
                 _selectedSquare.IsSelected = false;
                 _selectedSquare = null;
                 ClearMoveHighlights();
+                ClearSmartHintHighlights();
                 return;
             }
 
-                // 嘗試移動
+            // 嘗試移動
             if (square.Piece.Color == _gameService.CurrentBoard.Turn)
             {
                 // 切換選取
                 _selectedSquare.IsSelected = false;
                 ClearMoveHighlights();
-                
+                ClearSmartHintHighlights();
+
                 _selectedSquare = square;
                 square.IsSelected = true;
                 HighlightLegalMoves(square.Index);
+                await _gameService.RequestSmartHintAsync(square.Index);
             }
             else
             {
                 // 移動到空位或吃子
                 var from = _selectedSquare.Index;
                 var move = new Move(from, square.Index);
-                // 交由 service/board 驗證，實際由 service 負責
-                
+
                 ClearMoveHighlights();
+                ClearSmartHintHighlights();
                 _selectedSquare.IsSelected = false;
                 _selectedSquare = null;
 
@@ -242,11 +291,49 @@ public class ChessBoardViewModel : ObservableObject
         }
     }
 
+    private void OnSmartHintReady(IReadOnlyList<MoveEvaluation> evaluations)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            ClearSmartHintHighlights();
+
+            if (_selectedSquare == null) return;
+            var selectedPiece = _selectedSquare.Piece;
+
+            foreach (var eval in evaluations)
+            {
+                var toIndex = eval.Move.To;
+                if (toIndex < 0 || toIndex >= 90) continue;
+
+                var sq = Squares[toIndex];
+                sq.HasSmartHint = true;
+                sq.SmartHintScore = eval.Score;
+
+                if (eval.IsBest)
+                {
+                    sq.HasGhostPiece = true;
+                    sq.GhostPiece = selectedPiece;
+                }
+            }
+        });
+    }
+
     private void ClearMoveHighlights()
     {
         foreach (var s in Squares)
         {
             s.IsValidMove = false;
+        }
+    }
+
+    private void ClearSmartHintHighlights()
+    {
+        foreach (var s in Squares)
+        {
+            s.HasSmartHint = false;
+            s.SmartHintScore = 0;
+            s.HasGhostPiece = false;
+            s.GhostPiece = Piece.None;
         }
     }
 
@@ -273,6 +360,7 @@ public class ChessBoardViewModel : ObservableObject
         ClearMoveHighlights();
         ClearHintHighlights();
         ClearLastMoveHighlights();
+        ClearSmartHintHighlights();
     }
 
     private void ApplyLastMoveHighlights()

@@ -29,6 +29,9 @@
     <Color x:Key="ButtonNormalColor">#C98B41</Color>
     <Color x:Key="ButtonHoverColor">#E1A65A</Color>
     <Color x:Key="ButtonPressedColor">#A46F2E</Color>
+    <Color x:Key="SmartHintPositiveColor">#2E7D32</Color>
+    <Color x:Key="SmartHintNegativeColor">#B71C1C</Color>
+    <Color x:Key="SmartHintNeutralColor">#37474F</Color>
 
     <SolidColorBrush x:Key="PaperBrush" Color="{StaticResource PaperColor}" />
     <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource PaperColor}" />
@@ -56,6 +59,9 @@
     <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHoverColor}" />
     <SolidColorBrush x:Key="ButtonPressedBrush" Color="{StaticResource ButtonPressedColor}" />
     <SolidColorBrush x:Key="CardShadowBrush" Color="#55000000" />
+    <SolidColorBrush x:Key="SmartHintPositiveBrush" Color="{StaticResource SmartHintPositiveColor}" />
+    <SolidColorBrush x:Key="SmartHintNegativeBrush" Color="{StaticResource SmartHintNegativeColor}" />
+    <SolidColorBrush x:Key="SmartHintNeutralBrush" Color="{StaticResource SmartHintNeutralColor}" />
 
     <LinearGradientBrush x:Key="AppBackgroundGradient" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#F7F0DE" Offset="0" />

@@ -108,6 +108,59 @@ internal sealed class SearchWorker
         return Move.Null;
     }
 
+    /// <summary>
+    /// 對指定走法列表進行評分，回傳各走法的分數（從做出走法的一方視角，正分=有利）。
+    /// 使用 Negamax 搜尋至指定深度（depth=1 表示只做靜態評估）。
+    /// </summary>
+    public IReadOnlyList<MoveEvaluation> EvaluateRootMoves(
+        IEnumerable<Move> moves, int depth, IProgress<string>? progress = null, string threadLabel = "單執行緒")
+    {
+        _nodesVisited = 0;
+        Array.Clear(_killerMoves, 0, _killerMoves.Length);
+        Array.Clear(_historyTable, 0, _historyTable.Length);
+
+        var moveList = moves.ToList();
+        var results = new List<(Move Move, int Score)>();
+        int searchDepth = Math.Max(0, depth - 1);
+        int total = moveList.Count;
+        int bestScore = -Infinity;
+
+        for (int i = 0; i < total; i++)
+        {
+            if (_ct.IsCancellationRequested) break;
+
+            var move = moveList[i];
+            try
+            {
+                _board.MakeMove(move);
+                // Negamax 在 MakeMove 後已切換行棋方，取負號還原為「做出此走法的玩家」視角
+                int score = -Negamax(searchDepth, 1, -Infinity, Infinity, false);
+                _board.UnmakeMove(move);
+
+                results.Add((move, score));
+                if (score > bestScore) bestScore = score;
+
+                string bestStr = bestScore > 0 ? $"+{bestScore}" : bestScore.ToString();
+                progress?.Report($"智能提示分析中（深度 {depth}，{threadLabel}）：{i + 1}/{total} 走法，目前最佳 {bestStr}");
+            }
+            catch (OperationCanceledException)
+            {
+                // MakeMove 已執行，Negamax 中取消 → 還原棋盤後停止
+                _board.UnmakeMove(move);
+                break;
+            }
+        }
+
+        results.Sort((a, b) => b.Score.CompareTo(a.Score));
+
+        return results.Select((r, idx) => new MoveEvaluation
+        {
+            Move = r.Move,
+            Score = r.Score,
+            IsBest = idx == 0
+        }).ToList();
+    }
+
     // --- 核心搜尋流程 ---
 
     private int Negamax(int depth, int ply, int alpha, int beta, bool skipNullMove)

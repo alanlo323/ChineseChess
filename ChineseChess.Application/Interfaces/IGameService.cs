@@ -2,6 +2,7 @@ using ChineseChess.Application.Enums;
 using ChineseChess.Domain.Entities;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ChineseChess.Application.Interfaces;
@@ -12,11 +13,14 @@ public interface IGameService
     GameMode CurrentMode { get; }
     bool IsThinking { get; }
     Move? LastMove { get; }
-    
+    bool IsSmartHintEnabled { get; set; }
+    int SmartHintDepth { get; set; }
+
     event Action BoardUpdated;
     event Action<string> GameMessage; // Check、Win 等訊息
     event Action<SearchResult>? HintReady; // AI 提示/分析結果
     event Action<string>? ThinkingProgress;
+    event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady; // 智能提示結果
 
     // 控制
     Task StartGameAsync(GameMode mode);
@@ -40,4 +44,5 @@ public interface IGameService
     // AI
     void SetDifficulty(int depth, int timeMs, int threadCount = 0);
     Task<SearchResult> GetHintAsync(); // 取得目前局面的分析結果
+    Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default); // 取得指定棋子的所有走法評分
 }

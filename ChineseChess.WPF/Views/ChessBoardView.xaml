@@ -504,6 +504,80 @@ M460,402 L470,402 M470,402 L470,412" />
                                         </TextBlock>
                                     </Grid>
 
+                                    <!-- 智能提示：虛影棋子（最佳落點，棋子半透明顯示） -->
+                                    <Grid Width="46" Height="46"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Opacity="0.38"
+                                          IsHitTestVisible="False"
+                                          Panel.ZIndex="8"
+                                          Visibility="{Binding HasGhostPiece, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Ellipse Width="46" Height="46">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Fill" Value="{StaticResource RedPieceDiscBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding GhostPiece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Fill" Value="{StaticResource BlackPieceDiscBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <Ellipse Width="46" Height="46" Fill="Transparent">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Stroke" Value="{StaticResource RedPieceRingBrush}" />
+                                                    <Setter Property="StrokeThickness" Value="2.5" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding GhostPiece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Stroke" Value="{StaticResource BlackPieceRingBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <TextBlock Text="{Binding GhostPiece, Converter={StaticResource PieceTextConverter}}"
+                                                   FontFamily="{StaticResource ChineseClassicFont}"
+                                                   FontSize="22"
+                                                   FontWeight="Bold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   TextAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource RedPieceTextBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding GhostPiece.Color}"
+                                                                     Value="{x:Static enums:PieceColor.Black}">
+                                                            <Setter Property="Foreground" Value="{StaticResource BlackPieceTextBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+
+                                    <!-- 智能提示：評分數字（右下角，黑色半透明背景，文字依正負著色） -->
+                                    <Border HorizontalAlignment="Right"
+                                            VerticalAlignment="Bottom"
+                                            Margin="0,0,1,1"
+                                            CornerRadius="3"
+                                            Padding="2,1"
+                                            IsHitTestVisible="False"
+                                            Panel.ZIndex="15"
+                                            Background="#CC000000"
+                                            Visibility="{Binding HasSmartHint, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding SmartHintScoreText}"
+                                                   FontSize="9"
+                                                   FontWeight="Bold"
+                                                   Foreground="{Binding SmartHintScore, Converter={StaticResource SmartHintScoreToBrushConverter}}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+
                                     <!-- 上一步終點：亮色外環覆蓋在棋子上 -->
                                     <Border x:Name="LastMoveToRing"
                                             Width="46" Height="46"

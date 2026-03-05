@@ -2,8 +2,11 @@ using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Infrastructure.AI.Evaluators;
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -274,6 +277,87 @@ public class SearchEngine : IAiEngine
             result.Nodes = GetTotalNodes();
             return result;
         }, ct);
+    }
+
+    // 深度門檻：>= 此值時改用多執行緒（每個走法獨立 worker 平行跑）
+    private const int ParallelDepthThreshold = 3;
+
+    public Task<IReadOnlyList<MoveEvaluation>> EvaluateMovesAsync(
+        IBoard board, IEnumerable<Move> moves, int depth, CancellationToken ct = default, IProgress<string>? progress = null)
+    {
+        var moveList = moves.ToList();
+        int clampedDepth = Math.Max(1, depth);
+
+        // 智能決策：淺層單執行緒（快），深層多執行緒（平行）
+        return clampedDepth >= ParallelDepthThreshold
+            ? EvaluateMovesParallelAsync(board, moveList, clampedDepth, ct, progress)
+            : EvaluateMovesSequentialAsync(board, moveList, clampedDepth, ct, progress);
+    }
+
+    private Task<IReadOnlyList<MoveEvaluation>> EvaluateMovesSequentialAsync(
+        IBoard board, IReadOnlyList<Move> moves, int depth, CancellationToken ct, IProgress<string>? progress)
+    {
+        return Task.Run(() =>
+        {
+            var noopPause = new ManualResetEventSlim(true);
+            var worker = new SearchWorker(board.Clone(), _evaluator, _tt, ct, ct, noopPause);
+            return worker.EvaluateRootMoves(moves, depth, progress, threadLabel: "單執行緒");
+        }, ct);
+    }
+
+    private async Task<IReadOnlyList<MoveEvaluation>> EvaluateMovesParallelAsync(
+        IBoard board, IReadOnlyList<Move> moves, int depth, CancellationToken ct, IProgress<string>? progress)
+    {
+        int total = moves.Count;
+        int threadCount = Math.Min(total, Environment.ProcessorCount);
+        int completed = 0;
+        int bestScore = int.MinValue;
+        var scoreLock = new object();
+        var results = new ConcurrentBag<(Move Move, int Score)>();
+
+        string threadLabel = $"{threadCount} 執行緒";
+
+        var tasks = moves.Select(move => Task.Run(() =>
+        {
+            if (ct.IsCancellationRequested) return;
+            try
+            {
+                // 每個走法各自 clone 棋盤並執行走法，再搜尋對手的應對
+                var clonedBoard = board.Clone();
+                clonedBoard.MakeMove(move);
+
+                var noopPause = new ManualResetEventSlim(true);
+                var worker = new SearchWorker(clonedBoard, _evaluator, _tt, ct, ct, noopPause);
+                int score = -worker.SearchSingleDepth(depth - 1);
+
+                results.Add((move, score));
+
+                int done = Interlocked.Increment(ref completed);
+                int currentBest;
+                lock (scoreLock)
+                {
+                    if (score > bestScore) bestScore = score;
+                    currentBest = bestScore;
+                }
+
+                string bestStr = currentBest > 0 ? $"+{currentBest}" : currentBest.ToString();
+                progress?.Report($"智能提示分析中（深度 {depth}，{threadLabel}）：{done}/{total} 走法，目前最佳 {bestStr}");
+            }
+            catch (OperationCanceledException)
+            {
+                // 取消時靜默退出，不加入結果
+            }
+        })).ToArray();  // 不傳 ct 給 Task.Run，讓任務自行處理取消
+
+        await Task.WhenAll(tasks);
+
+        var sorted = results.OrderByDescending(r => r.Score).ToList();
+        return sorted.Select((r, i) => new MoveEvaluation
+        {
+            Move = r.Move,
+            Score = r.Score,
+            IsBest = i == 0
+        }).ToList();
     }
 
     public Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default)

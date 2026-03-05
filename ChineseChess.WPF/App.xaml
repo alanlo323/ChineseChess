@@ -11,6 +11,7 @@
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
             <converters:ColorConverter x:Key="ColorConverter" />
             <converters:PieceTextConverter x:Key="PieceTextConverter" />
+            <converters:SmartHintScoreToBrushConverter x:Key="SmartHintScoreToBrushConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

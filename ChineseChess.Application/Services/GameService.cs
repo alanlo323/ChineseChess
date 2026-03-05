@@ -20,17 +20,21 @@ public class GameService : IGameService
     private bool _isThinking;
     private SearchSettings _aiSettings = new SearchSettings();
     private CancellationTokenSource? _aiCts;
+    private CancellationTokenSource? _smartHintCts;
     private readonly ManualResetEventSlim _aiPauseSignal = new ManualResetEventSlim(true);
 
     public IBoard CurrentBoard => _board;
     public GameMode CurrentMode => _currentMode;
     public bool IsThinking => _isThinking;
     public Move? LastMove => _board.TryGetLastMove(out var lastMove) ? lastMove : null;
+    public bool IsSmartHintEnabled { get; set; } = false;
+    public int SmartHintDepth { get; set; } = 2;
 
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
     public event Action<SearchResult>? HintReady;
     public event Action<string>? ThinkingProgress;
+    public event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady;
 
     public GameService(IAiEngine aiEngine)
     {
@@ -360,6 +364,46 @@ public class GameService : IGameService
     {
         var result = await RunAiSearchAsync(applyBestMove: false);
         return result ?? new SearchResult { BestMove = Move.Null };
+    }
+
+    public async Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default)
+    {
+        if (!IsSmartHintEnabled) return;
+
+        // 取消上一次尚未完成的智能提示搜尋
+        _smartHintCts?.Cancel();
+        _smartHintCts = new CancellationTokenSource();
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, _smartHintCts.Token);
+
+        try
+        {
+            var board = _board.Clone();
+            var moves = board.GenerateLegalMoves()
+                .Where(m => m.From == fromIndex)
+                .ToList();
+
+            if (moves.Count == 0) return;
+
+            ThinkingProgress?.Invoke($"智能提示：開始分析 {moves.Count} 個走法（深度 {SmartHintDepth}）...");
+
+            var progress = new Progress<string>(msg => ThinkingProgress?.Invoke(msg));
+            var evaluations = await _aiEngine.EvaluateMovesAsync(board, moves, SmartHintDepth, linkedCts.Token, progress);
+
+            if (!linkedCts.Token.IsCancellationRequested)
+            {
+                var best = evaluations.FirstOrDefault(e => e.IsBest);
+                if (best != null)
+                {
+                    string scoreStr = best.Score > 0 ? $"+{best.Score}" : best.Score.ToString();
+                    ThinkingProgress?.Invoke($"智能提示完成：最佳走法 {best.Move} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法");
+                }
+                SmartHintReady?.Invoke(evaluations);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 已被新選棋取消，靜默處理
+        }
     }
 
     private string FormatThinkingProgress(SearchProgress progress)
