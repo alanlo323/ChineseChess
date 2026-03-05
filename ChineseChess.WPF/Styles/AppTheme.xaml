@@ -129,10 +129,10 @@
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect Color="{StaticResource InkDarkColor}"
-                                  BlurRadius="14"
+                                  BlurRadius="18"
                                   Direction="270"
-                                  ShadowDepth="4"
-                                  Opacity="0.22" />
+                                  ShadowDepth="6"
+                                  Opacity="0.30" />
             </Setter.Value>
         </Setter>
     </Style>

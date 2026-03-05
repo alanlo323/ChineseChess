@@ -30,8 +30,14 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Stretch"
-                                              VerticalAlignment="Stretch" />
+                            <ContentPresenter x:Name="Content"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Stretch"
+                                              RenderTransformOrigin="0.5,0.5">
+                                <ContentPresenter.RenderTransform>
+                                    <ScaleTransform ScaleX="1" ScaleY="1" />
+                                </ContentPresenter.RenderTransform>
+                            </ContentPresenter>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -47,6 +53,62 @@
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="SquareFrame" Property="Opacity" Value="0.9" />
                             </Trigger>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Content"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.08" Duration="0:0:0.12">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Content"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.08" Duration="0:0:0.12">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Content"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.0" Duration="0:0:0.15" />
+                                        <DoubleAnimation Storyboard.TargetName="Content"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.0" Duration="0:0:0.15" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="PreviewMouseLeftButtonDown">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Content"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="0.93" Duration="0:0:0.07" />
+                                        <DoubleAnimation Storyboard.TargetName="Content"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="0.93" Duration="0:0:0.07" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="PreviewMouseLeftButtonUp">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Content"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.08" Duration="0:0:0.1" />
+                                        <DoubleAnimation Storyboard.TargetName="Content"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.08" Duration="0:0:0.1" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -188,10 +250,10 @@ M460,402 L470,402 M470,402 L470,412" />
                         </Path.Data>
                     </Path>
 
-                    <TextBlock Text="楚 河"
+                    <TextBlock Text="楚  河"
                                FontFamily="{StaticResource ChineseClassicFont}"
                                FontWeight="SemiBold"
-                               FontSize="22"
+                               FontSize="26"
                                Foreground="{StaticResource BoardRiverTextBrush}"
                                Opacity="0.95"
                                RenderTransformOrigin="0.5,0.5">
@@ -199,16 +261,16 @@ M460,402 L470,402 M470,402 L470,412" />
                             <RotateTransform Angle="-2" />
                         </TextBlock.RenderTransform>
                         <TextBlock.Effect>
-                            <DropShadowEffect BlurRadius="1.5" ShadowDepth="0" Opacity="0.2" />
+                            <DropShadowEffect BlurRadius="3" ShadowDepth="0" Opacity="0.2" />
                         </TextBlock.Effect>
                         <TextBlock.Margin>
-                            <Thickness>160,270,0,0</Thickness>
+                            <Thickness>148,267,0,0</Thickness>
                         </TextBlock.Margin>
                     </TextBlock>
 
-                    <TextBlock Text="漢 界"
+                    <TextBlock Text="漢  界"
                                FontFamily="{StaticResource ChineseClassicFont}"
-                               FontSize="22"
+                               FontSize="26"
                                FontWeight="Semibold"
                                Foreground="{StaticResource BoardRiverTextBrush}"
                                Opacity="0.95"
@@ -217,10 +279,10 @@ M460,402 L470,402 M470,402 L470,412" />
                             <RotateTransform Angle="2" />
                         </TextBlock.RenderTransform>
                         <TextBlock.Effect>
-                            <DropShadowEffect BlurRadius="1.5" ShadowDepth="0" Opacity="0.2" />
+                            <DropShadowEffect BlurRadius="3" ShadowDepth="0" Opacity="0.2" />
                         </TextBlock.Effect>
                         <TextBlock.Margin>
-                            <Thickness>225,270,0,0</Thickness>
+                            <Thickness>250,267,0,0</Thickness>
                         </TextBlock.Margin>
                     </TextBlock>
                 </Canvas>
@@ -327,7 +389,7 @@ M460,402 L470,402 M470,402 L470,412" />
                                                     <Setter Property="Fill" Value="{StaticResource RedPieceDiscBrush}" />
                                                     <Setter Property="Effect">
                                                         <Setter.Value>
-                                                            <DropShadowEffect BlurRadius="6" ShadowDepth="2.5"
+                                                            <DropShadowEffect BlurRadius="8" ShadowDepth="3.5"
                                                                               Opacity="0.55" Color="#2A1000"
                                                                               Direction="280" />
                                                         </Setter.Value>

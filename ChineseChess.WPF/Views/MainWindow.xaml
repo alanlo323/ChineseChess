@@ -7,7 +7,7 @@
         xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
-        Title="Chinese Chess AI"
+        Title="象棋 AI 對弈"
         Height="800" Width="980" MinWidth="900" MinHeight="640"
         WindowState="Maximized"
         Style="{StaticResource AppWindowStyle}">
@@ -40,20 +40,20 @@
             <TranslateTransform Y="18" />
         </Grid.RenderTransform>
 
-        <Grid Margin="16">
+        <Grid Margin="20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="300" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
-                <RowDefinition Height="220" />
+                <RowDefinition Height="Auto" MinHeight="180" MaxHeight="260" />
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0"
                     Grid.Column="0"
                     Style="{StaticResource PanelCardStyle}"
-                    Margin="0,0,12,12">
+                    Margin="0,0,16,16">
                 <Viewbox Stretch="Uniform" Margin="10">
                     <views:ChessBoardView DataContext="{Binding ChessBoard}" />
                 </Viewbox>
@@ -62,7 +62,7 @@
             <Border Grid.Row="0"
                     Grid.Column="1"
                     Style="{StaticResource PanelCardStyle}"
-                    Margin="0,0,0,12">
+                    Margin="0,0,0,16">
                 <views:ControlPanelView DataContext="{Binding ControlPanel}" />
             </Border>
 
