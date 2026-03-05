@@ -69,16 +69,42 @@ public class SearchEngine : IAiEngine
             var stopwatch = Stopwatch.StartNew();
 
             // 暫停時間追蹤：用實際搜尋時間（排除暫停期間）回報 ElapsedMs
-            long totalPausedMs = 0L;      // 已累計的暫停總時間
-            long pauseStartedAtMs = -1L;  // 目前暫停開始的時間點（-1 = 未暫停）
+            long totalPausedMs = 0L;       // 已累計的暫停總時間
+            long pauseStartedAtMs = -1L;   // 目前暫停開始的時間點（-1 = 未暫停）
+            var pauseTimingLock = new object();
 
             long GetActiveElapsedMs()
             {
-                var total = stopwatch.ElapsedMilliseconds;
-                var paused = Volatile.Read(ref totalPausedMs);
-                var pauseStart = Volatile.Read(ref pauseStartedAtMs);
-                var currentPause = pauseStart >= 0 ? total - pauseStart : 0L;
-                return total - paused - currentPause;
+                lock (pauseTimingLock)
+                {
+                    var total = stopwatch.ElapsedMilliseconds;
+                    var currentPause = pauseStartedAtMs >= 0 ? total - pauseStartedAtMs : 0L;
+                    var activeElapsed = total - totalPausedMs - currentPause;
+                    return activeElapsed > 0 ? activeElapsed : 0L;
+                }
+            }
+
+            void RegisterPauseStart()
+            {
+                lock (pauseTimingLock)
+                {
+                    if (pauseStartedAtMs < 0)
+                    {
+                        pauseStartedAtMs = stopwatch.ElapsedMilliseconds;
+                    }
+                }
+            }
+
+            void RegisterPauseEnd()
+            {
+                lock (pauseTimingLock)
+                {
+                    if (pauseStartedAtMs >= 0)
+                    {
+                        totalPausedMs += stopwatch.ElapsedMilliseconds - pauseStartedAtMs;
+                        pauseStartedAtMs = -1L;
+                    }
+                }
             }
 
             var progressState = new SearchProgressState();
@@ -150,23 +176,41 @@ public class SearchEngine : IAiEngine
             Task? timeLimitMonitor = null;
             if (settings.TimeLimitMs > 0)
             {
+                if (!pauseSignal.IsSet)
+                {
+                    RegisterPauseStart();
+                }
+
                 timeLimitMonitor = Task.Factory.StartNew(() =>
                 {
-                    while (!token.IsCancellationRequested)
+                    try
                     {
-                        if (GetActiveElapsedMs() >= settings.TimeLimitMs)
+                        while (!token.IsCancellationRequested)
                         {
-                            timeLimitCts.Cancel();
-                            return;
+                            if (!pauseSignal.IsSet)
+                            {
+                                RegisterPauseStart();
+                                try { pauseSignal.Wait(ct); }
+                                catch (OperationCanceledException)
+                                {
+                                    return;
+                                }
+                                RegisterPauseEnd();
+                                continue;
+                            }
+
+                            if (GetActiveElapsedMs() >= settings.TimeLimitMs)
+                            {
+                                timeLimitCts.Cancel();
+                                return;
+                            }
+
+                            token.WaitHandle.WaitOne(10);
                         }
-                        // 暫停中：等待恢復，不計時
-                        if (!pauseSignal.IsSet)
-                        {
-                            pauseSignal.Wait(ct);
-                            continue;
-                        }
-                        // 每 10ms 輪詢一次（精度足夠，CPU 開銷低）
-                        token.WaitHandle.WaitOne(10);
+                    }
+                    finally
+                    {
+                        RegisterPauseEnd();
                     }
                 }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             }
@@ -175,18 +219,10 @@ public class SearchEngine : IAiEngine
             {
                 for (int depth = 1; depth <= settings.Depth; depth++)
                 {
-                    // 用 ct（使用者明確停止）等待暫停解除；時間限制不應中斷暫停
-                    if (!pauseSignal.IsSet)
+                    if (token.IsCancellationRequested)
                     {
-                        Volatile.Write(ref pauseStartedAtMs, stopwatch.ElapsedMilliseconds);
+                        break;
                     }
-                    pauseSignal.Wait(ct);
-                    if (pauseStartedAtMs >= 0)
-                    {
-                        totalPausedMs += stopwatch.ElapsedMilliseconds - pauseStartedAtMs;
-                        Volatile.Write(ref pauseStartedAtMs, -1L);
-                    }
-                    if (token.IsCancellationRequested) break;
 
                     int score = mainWorker.SearchSingleDepth(depth);
 
@@ -209,7 +245,7 @@ public class SearchEngine : IAiEngine
             }
             catch (OperationCanceledException)
             {
-            // 回傳目前為止的最佳結果
+                // 回傳目前為止的最佳結果
             }
             finally
             {

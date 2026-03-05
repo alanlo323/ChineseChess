@@ -216,6 +216,39 @@ public class SearchTests
     }
 
     [Fact]
+    public async Task Search_MidSearchPause_ShouldNotCountPauseDuration()
+    {
+        // 複現 bug：搜尋進行中暫停後，time limit 仍持續增加
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        using var pauseSignal = new ManualResetEventSlim(true);
+        var settings = new SearchSettings
+        {
+            Depth = 20,
+            TimeLimitMs = 350,
+            ThreadCount = 1,
+            PauseSignal = pauseSignal
+        };
+
+        var searchTask = engine.SearchAsync(board, settings, CancellationToken.None);
+
+        await Task.Delay(120);
+        Assert.False(searchTask.IsCompleted, "搜尋在暫停前就已完成，無法驗證 mid-search 暫停邏輯");
+
+        pauseSignal.Reset();
+        await Task.Delay(500);
+
+        var resumeSw = System.Diagnostics.Stopwatch.StartNew();
+        pauseSignal.Set();
+        await searchTask.WaitAsync(TimeSpan.FromSeconds(8));
+        resumeSw.Stop();
+
+        // Bug 情境下，恢復後多半會立即退出；修復後需持續消耗剩餘時間
+        Assert.True(resumeSw.ElapsedMilliseconds >= 120,
+            $"恢復後搜尋不應幾乎立即結束（{resumeSw.ElapsedMilliseconds}ms）");
+    }
+
+    [Fact]
     public async Task Search_ElapsedTimeShouldNotIncludePausedDuration()
     {
         // 複現 bug：暫停中的時間不應計入 ElapsedMs
