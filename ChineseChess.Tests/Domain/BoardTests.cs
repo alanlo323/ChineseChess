@@ -89,8 +89,8 @@ public class BoardTests
     [Fact]
     public void GenerateLegalMoves_ShouldAllowMoveWhenCannonWouldHaveNoScreen()
     {
-        // 黑方大砲應可水平滑到空格。
-        var board = new Board("4k4/9/9/9/9/9/9/4C4/9/4K4 w - - 0 1");
+        // 紅方大砲應可水平滑到空格（黑將與紅將不同列，避免觸發面將規則）。
+        var board = new Board("k8/9/9/9/9/9/9/4C4/9/4K4 w - - 0 1");
         var move = new Move(67, 68);
 
         Assert.False(board.IsCheck(PieceColor.Red));
@@ -104,8 +104,8 @@ public class BoardTests
     public void GeneratePseudoLegalMoves_CannonCannotSlideAfterScreenButCanCaptureOverScreen()
     {
         // 黑方大砲在 c5 有阻擋棋子、c6 有敵方棋子，因此可吃 c6，
-        // 但不能越過阻擋在空格上再繼續移動。
-        var board = new Board("4k4/9/9/9/9/9/9/4cPR2/9/4K4 b - - 0 1");
+        // 但不能越過阻擋在空格上再繼續移動（黑將與紅將不同列，避免觸發面將規則）。
+        var board = new Board("k8/9/9/9/9/9/9/4cPR2/9/4K4 b - - 0 1");
 
         var pseudoMoves = board.GeneratePseudoLegalMoves().ToList();
         var legalMoves = board.GenerateLegalMoves().ToList();

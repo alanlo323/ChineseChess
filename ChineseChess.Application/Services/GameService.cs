@@ -274,10 +274,16 @@ public class GameService : IGameService
 
     private bool CheckGameOver()
     {
-        // 檢查將死（Checkmate）或和局（Stalemate）
-        // var moves = _board.GenerateLegalMoves();
-        // if (!moves.Any()) { ... 勝負/和局邏輯 ... return true; }
-        return false;
+        var currentTurn = _board.Turn;
+        if (_board.GenerateLegalMoves().Any()) return false;
+
+        var winner = currentTurn == PieceColor.Red ? "黑方" : "紅方";
+        if (_board.IsCheck(currentTurn))
+            GameMessage?.Invoke($"將死！{winner}獲勝！");
+        else
+            GameMessage?.Invoke($"困斃！{winner}獲勝！"); // 中國象棋中困斃也算輸
+
+        return true;
     }
 
     public void Undo()
