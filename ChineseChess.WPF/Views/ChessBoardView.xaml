@@ -356,8 +356,48 @@ M460,402 L470,402 M470,402 L470,412" />
                                              Fill="{StaticResource MoveHintBrush}"
                                              Opacity="0.75"
                                              HorizontalAlignment="Center"
-                                             VerticalAlignment="Center"
-                                             Visibility="{Binding IsValidMove, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                             VerticalAlignment="Center">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsValidMove}" Value="True" />
+                                                            <Condition Binding="{Binding Piece.IsNone}" Value="True" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+
+                                    <Border Width="46"
+                                            Height="46"
+                                            BorderBrush="{StaticResource HintToBrush}"
+                                            BorderThickness="2.5"
+                                            CornerRadius="23"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Panel.ZIndex="10"
+                                            IsHitTestVisible="False"
+                                            Opacity="0.85">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsValidMove}" Value="True" />
+                                                            <Condition Binding="{Binding Piece.IsNone}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
 
                                     <Ellipse Width="18"
                                              Height="18"
