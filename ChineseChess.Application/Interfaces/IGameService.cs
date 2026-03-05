@@ -15,6 +15,8 @@ public interface IGameService
     Move? LastMove { get; }
     bool IsSmartHintEnabled { get; set; }
     int SmartHintDepth { get; set; }
+    long LastSearchNodes { get; }
+    long LastSearchNps { get; }
 
     event Action BoardUpdated;
     event Action<string> GameMessage; // Check、Win 等訊息
@@ -45,4 +47,5 @@ public interface IGameService
     void SetDifficulty(int depth, int timeMs, int threadCount = 0);
     Task<SearchResult> GetHintAsync(); // 取得目前局面的分析結果
     Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default); // 取得指定棋子的所有走法評分
+    TTStatistics GetTTStatistics(); // 取得 TT 表統計資料
 }

@@ -45,10 +45,21 @@ public class MoveEvaluation
     public bool IsBest { get; set; }
 }
 
+public class TTStatistics
+{
+    public ulong Capacity { get; set; }      // 表格容量（條目數）
+    public double MemoryMb { get; set; }     // 記憶體用量（MB）
+    public byte Generation { get; set; }     // 當前世代（每局遞增）
+    public long TotalProbes { get; set; }    // 累計查詢次數
+    public long Hits { get; set; }           // 命中次數
+    public double HitRate { get; set; }      // 命中率（0.0–1.0）
+}
+
 public interface IAiEngine
 {
     Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null);
     Task<IReadOnlyList<MoveEvaluation>> EvaluateMovesAsync(IBoard board, IEnumerable<Move> moves, int depth, CancellationToken ct = default, IProgress<string>? progress = null);
     Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default);
     Task ImportTranspositionTableAsync(Stream input, bool asJson, CancellationToken ct = default);
+    TTStatistics GetTTStatistics();
 }

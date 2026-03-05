@@ -19,6 +19,7 @@ public class ControlPanelViewModel : ObservableObject
     private int _searchThinkingTime = 3;
     private bool _isSmartHintEnabled = false;
     private int _smartHintDepth = 2;
+    private TTStatistics _ttStats = new TTStatistics();
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
@@ -82,6 +83,15 @@ public class ControlPanelViewModel : ObservableObject
         }
     }
 
+    public string TtCapacity => $"{_ttStats.Capacity:N0}";
+    public string TtMemoryMb => $"{_ttStats.MemoryMb:F1} MB";
+    public string TtGeneration => _ttStats.Generation.ToString();
+    public string TtProbes => $"{_ttStats.TotalProbes:N0}";
+    public string TtHits => $"{_ttStats.Hits:N0}";
+    public string TtHitRate => $"{_ttStats.HitRate:P1}";
+    public string SearchNodes => $"{_gameService.LastSearchNodes:N0}";
+    public string SearchNps => $"{_gameService.LastSearchNps:N0} 節點/秒";
+
     public ICommand StartGameCommand { get; }
     public ICommand UndoCommand { get; }
     public ICommand HintCommand { get; }
@@ -90,10 +100,12 @@ public class ControlPanelViewModel : ObservableObject
     public ICommand ResumeThinkingCommand { get; }
     public ICommand ExportTranspositionTableCommand { get; }
     public ICommand ImportTranspositionTableCommand { get; }
+    public ICommand RefreshTTStatsCommand { get; }
 
     public ControlPanelViewModel(IGameService gameService)
     {
         _gameService = gameService;
+        RefreshTTStatsCommand = new RelayCommand(_ => RefreshTTStats());
         StartGameCommand = new RelayCommand(async _ => await _gameService.StartGameAsync(SelectedMode));
         UndoCommand = new RelayCommand(_ => _gameService.Undo());
         StopThinkingCommand = new RelayCommand(async _ =>
@@ -197,6 +209,28 @@ public class ControlPanelViewModel : ObservableObject
             if (app == null) { StatusMessage = msg; return; }
             app.Dispatcher.Invoke(() => StatusMessage = msg);
         };
+
+        _gameService.ThinkingProgress += _ =>
+        {
+            var app = global::System.Windows.Application.Current;
+            if (app == null) return;
+            app.Dispatcher.Invoke(RefreshTTStats);
+        };
+
+        RefreshTTStats();
+    }
+
+    private void RefreshTTStats()
+    {
+        _ttStats = _gameService.GetTTStatistics();
+        OnPropertyChanged(nameof(TtCapacity));
+        OnPropertyChanged(nameof(TtMemoryMb));
+        OnPropertyChanged(nameof(TtGeneration));
+        OnPropertyChanged(nameof(TtProbes));
+        OnPropertyChanged(nameof(TtHits));
+        OnPropertyChanged(nameof(TtHitRate));
+        OnPropertyChanged(nameof(SearchNodes));
+        OnPropertyChanged(nameof(SearchNps));
     }
 
     private static string FormatHintScore(int score)

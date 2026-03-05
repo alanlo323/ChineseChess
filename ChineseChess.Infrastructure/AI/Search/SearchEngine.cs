@@ -389,4 +389,6 @@ public class SearchEngine : IAiEngine
 
         return Task.CompletedTask;
     }
+
+    public TTStatistics GetTTStatistics() => _tt.GetStatistics();
 }

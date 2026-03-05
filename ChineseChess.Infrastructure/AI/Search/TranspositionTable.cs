@@ -1,3 +1,4 @@
+using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -50,6 +51,8 @@ public class TranspositionTable
     private readonly ulong[] _data;
     private readonly ulong _size;
     private byte _generation;
+    private long _totalProbes;
+    private long _probeHits;
 
     // Pack 版面（共 64 位元）：
     //   bits  0-15 : score      （16 位元，透過 cast 轉為有號）
@@ -85,8 +88,11 @@ public class TranspositionTable
         ulong storedKey = Volatile.Read(ref _keys[index]);
         ulong storedData = Volatile.Read(ref _data[index]);
 
+        Interlocked.Increment(ref _totalProbes);
+
         if ((storedKey ^ storedData) == key)
         {
+            Interlocked.Increment(ref _probeHits);
             entry = Unpack(storedData, key);
             return true;
         }
@@ -110,6 +116,23 @@ public class TranspositionTable
         System.Array.Clear(_keys, 0, _keys.Length);
         System.Array.Clear(_data, 0, _data.Length);
         _generation = 0;
+        Interlocked.Exchange(ref _totalProbes, 0);
+        Interlocked.Exchange(ref _probeHits, 0);
+    }
+
+    public TTStatistics GetStatistics()
+    {
+        long probes = Interlocked.Read(ref _totalProbes);
+        long hits = Interlocked.Read(ref _probeHits);
+        return new TTStatistics
+        {
+            Capacity = _size,
+            MemoryMb = _size * 16.0 / (1024 * 1024),
+            Generation = _generation,
+            TotalProbes = probes,
+            Hits = hits,
+            HitRate = probes > 0 ? (double)hits / probes : 0.0
+        };
     }
 
     public void ExportToBinary(Stream output)

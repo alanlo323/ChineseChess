@@ -143,6 +143,107 @@
                                 Padding="10,8" />
                     </StackPanel>
                 </GroupBox>
+
+                <GroupBox Header="搜尋統計"
+                          Style="{StaticResource PanelGroupStyle}">
+                    <StackPanel Margin="0,2">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <!-- 搜尋節點 -->
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="已搜尋節點："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="0" Grid.Column="1"
+                                       Text="{Binding SearchNodes}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Text="搜尋速度："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                       Text="{Binding SearchNps}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,8" />
+
+                            <!-- TT 快取資訊 -->
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Text="TT 容量："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="2" Grid.Column="1"
+                                       Text="{Binding TtCapacity}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0"
+                                       Text="TT 記憶體："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="3" Grid.Column="1"
+                                       Text="{Binding TtMemoryMb}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0"
+                                       Text="TT 世代："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="4" Grid.Column="1"
+                                       Text="{Binding TtGeneration}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Grid.Row="5" Grid.Column="0"
+                                       Text="TT 查詢："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="5" Grid.Column="1"
+                                       Text="{Binding TtProbes}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0"
+                                       Text="TT 命中："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="6" Grid.Column="1"
+                                       Text="{Binding TtHits}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Grid.Row="7" Grid.Column="0"
+                                       Text="TT 命中率："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,0" />
+                            <TextBlock Grid.Row="7" Grid.Column="1"
+                                       Text="{Binding TtHitRate}"
+                                       Style="{StaticResource StatusTextStyle}" />
+                        </Grid>
+
+                        <Button Content="刷新統計"
+                                Command="{Binding RefreshTTStatsCommand}"
+                                Style="{StaticResource ActionButtonStyle}"
+                                Margin="0,8,0,0"
+                                Padding="10,6" />
+                    </StackPanel>
+                </GroupBox>
             </StackPanel>
         </Grid>
     </StackPanel>

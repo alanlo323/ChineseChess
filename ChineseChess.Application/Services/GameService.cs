@@ -29,6 +29,10 @@ public class GameService : IGameService
     public Move? LastMove => _board.TryGetLastMove(out var lastMove) ? lastMove : null;
     public bool IsSmartHintEnabled { get; set; } = false;
     public int SmartHintDepth { get; set; } = 2;
+    public long LastSearchNodes => Interlocked.Read(ref _lastSearchNodes);
+    public long LastSearchNps => Interlocked.Read(ref _lastSearchNps);
+    private long _lastSearchNodes;
+    private long _lastSearchNps;
 
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
@@ -207,6 +211,8 @@ public class GameService : IGameService
         };
         var progress = new Progress<SearchProgress>(p =>
         {
+            Interlocked.Exchange(ref _lastSearchNodes, p.Nodes);
+            Interlocked.Exchange(ref _lastSearchNps, p.NodesPerSecond);
             ThinkingProgress?.Invoke(FormatThinkingProgress(p));
         });
         
@@ -365,6 +371,8 @@ public class GameService : IGameService
         var result = await RunAiSearchAsync(applyBestMove: false);
         return result ?? new SearchResult { BestMove = Move.Null };
     }
+
+    public TTStatistics GetTTStatistics() => _aiEngine.GetTTStatistics();
 
     public async Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default)
     {

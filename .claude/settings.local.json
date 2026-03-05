@@ -7,5 +7,6 @@
       "Bash(dotnet build:*)",
       "Bash(dotnet test:*)"
     ]
-  }
+  },
+  "outputStyle": "Explanatory"
 }
