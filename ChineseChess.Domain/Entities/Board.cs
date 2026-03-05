@@ -59,8 +59,27 @@ public class Board : IBoard
 
     public void MakeMove(Move move)
     {
+        if (move.From < 0 || move.From >= BoardSize || move.To < 0 || move.To >= BoardSize)
+        {
+            throw new ArgumentOutOfRangeException("Move index is outside the board.");
+        }
+
+        if (move.From == move.To)
+        {
+            throw new InvalidOperationException("Move source and destination must be different.");
+        }
+
         var piece = _pieces[move.From];
         var target = _pieces[move.To];
+        if (piece.IsNone)
+        {
+            throw new InvalidOperationException("Cannot move an empty square.");
+        }
+
+        if (target.Color == piece.Color)
+        {
+            throw new InvalidOperationException("Cannot capture own piece.");
+        }
 
         // 更新 Zobrist：移除 From 的棋子
         _zobristKey ^= ZobristHash.GetPieceKey(move.From, piece.Color, piece.Type);
@@ -95,6 +114,11 @@ public class Board : IBoard
         if (_history.Count == 0) throw new InvalidOperationException("No history to undo.");
 
         var state = _history.Pop();
+        if (state.Move != move)
+        {
+            _history.Push(state);
+            throw new InvalidOperationException("Unmake move does not match history.");
+        }
 
         // 回復行棋方
         _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
@@ -168,16 +192,30 @@ public class Board : IBoard
     
     public void ParseFen(string fen)
     {
+        if (string.IsNullOrWhiteSpace(fen))
+        {
+            throw new ArgumentException("Invalid FEN string.");
+        }
+
         // 簡易 FEN 解析器
         // 範例：rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1
         var parts = fen.Split(' ');
+        if (parts.Length < 2)
+        {
+            throw new ArgumentException("Invalid FEN format.");
+        }
+
         var rows = parts[0].Split('/');
-        
-        if (rows.Length != 10) throw new ArgumentException("Invalid FEN rows");
+
+        if (rows.Length != 10)
+        {
+            throw new ArgumentException("Invalid FEN rows.");
+        }
 
         // 清空棋盤
         for (int i = 0; i < BoardSize; i++) _pieces[i] = Piece.None;
         _zobristKey = 0;
+        _history.Clear();
 
         for (int r = 0; r < 10; r++)
         {
@@ -186,10 +224,20 @@ public class Board : IBoard
             {
                 if (char.IsDigit(ch))
                 {
-                    c += (ch - '0');
+                    int empty = ch - '0';
+                    if (empty <= 0 || c + empty > 9)
+                    {
+                        throw new ArgumentException($"Invalid FEN row length at row {r}.");
+                    }
+                    c += empty;
                 }
                 else
                 {
+                    if (c >= 9)
+                    {
+                        throw new ArgumentException($"Invalid FEN row length at row {r}.");
+                    }
+
                     int index = r * 9 + c;
                     Piece p = CharToPiece(ch);
                     _pieces[index] = p;
@@ -197,9 +245,19 @@ public class Board : IBoard
                     c++;
                 }
             }
+
+            if (c != 9)
+            {
+                throw new ArgumentException($"Invalid FEN row length at row {r}.");
+            }
         }
 
-        _turn = parts[1] == "w" || parts[1] == "r" ? PieceColor.Red : PieceColor.Black; // 'w' 為標準表示，'r' 可能也會被使用
+        _turn = parts[1] switch
+        {
+            "w" or "r" => PieceColor.Red,
+            "b" or "k" => PieceColor.Black,
+            _ => throw new ArgumentException("Invalid FEN side to move.")
+        }; // 'w' 為標準表示，'r' 可能也會被使用
         if (_turn == PieceColor.Black) _zobristKey ^= ZobristHash.SideToMoveKey;
         
         // TODO：解析著法時計數（move clocks / counters）
@@ -252,7 +310,7 @@ public class Board : IBoard
             'r' => PieceType.Rook,
             'c' => PieceType.Cannon,
             'p' => PieceType.Pawn,
-            _ => PieceType.None
+            _ => throw new ArgumentException($"Invalid piece character '{c}' in FEN.")
         };
         return new Piece(color, type);
     }

@@ -124,4 +124,63 @@ public class FenTests
         Assert.Equal(PieceType.King, board.GetPiece(4).Type);  // 黑將 (0,4)
         Assert.Equal(PieceType.King, board.GetPiece(85).Type); // 紅帥 (9,4)
     }
+
+    [Fact]
+    public void ParseFen_InvalidRowCount_ShouldThrow()
+    {
+        Assert.Throws<ArgumentException>(() =>
+        {
+            new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9 w - - 0 1");
+        });
+    }
+
+    [Fact]
+    public void ParseFen_InvalidRowLength_ShouldThrow()
+    {
+        Assert.Throws<ArgumentException>(() =>
+        {
+            new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/4 w - - 0 1");
+        });
+
+        Assert.Throws<ArgumentException>(() =>
+        {
+            new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/123/9/9/P1P1P1P1P/1C5C1/9 w - - 0 1");
+        });
+    }
+
+    [Fact]
+    public void ParseFen_UnknownPiece_ShouldThrow()
+    {
+        Assert.Throws<ArgumentException>(() =>
+        {
+            new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNz w - - 0 1");
+        });
+    }
+
+    [Fact]
+    public void ParseFen_InvalidSideToMove_ShouldThrow()
+    {
+        Assert.Throws<ArgumentException>(() =>
+        {
+            new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR x - - 0 1");
+        });
+    }
+
+    [Fact]
+    public void ParseFen_EmptyString_ShouldThrow()
+    {
+        Assert.Throws<ArgumentException>(() =>
+        {
+            new Board(string.Empty);
+        });
+    }
+
+    [Fact]
+    public void GetPiece_OutOfRange_ReturnsNone()
+    {
+        var board = new Board(InitialFen);
+
+        Assert.True(board.GetPiece(-1).IsNone);
+        Assert.True(board.GetPiece(90).IsNone);
+    }
 }

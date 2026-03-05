@@ -266,4 +266,18 @@ public class BoardUndoTests
         Assert.Equal(board.ZobristKey, clone.ZobristKey);
         Assert.Equal(board.Turn, clone.Turn);
     }
+
+    [Fact]
+    public void ParseFen_ShouldClearHistory()
+    {
+        var board = new Board(InitialFen);
+        var move = new Move(64, 65);
+        board.MakeMove(move);
+        Assert.True(board.TryGetLastMove(out _));
+
+        board.ParseFen(InitialFen);
+
+        Assert.False(board.TryGetLastMove(out _));
+        Assert.Throws<InvalidOperationException>(() => board.UnmakeMove(new Move(64, 65)));
+    }
 }

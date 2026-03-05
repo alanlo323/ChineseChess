@@ -289,23 +289,51 @@ public class GameService : IGameService
     public void Undo()
     {
         if (_isThinking) return;
-        try
+
+        bool didUndo = false;
+
+        void TryUndo()
         {
-            _board.UndoMove();
-            // PvAI 模式下可能需要 Undo 兩步才能回到玩家回合
-            if (_currentMode == GameMode.PlayerVsAi)
+            if (!_board.TryGetLastMove(out _))
+            {
+                GameMessage?.Invoke("無可悔棋步數");
+                return;
+            }
+
+            try
             {
                 _board.UndoMove();
+                didUndo = true;
             }
+            catch (InvalidOperationException)
+            {
+                GameMessage?.Invoke("悔棋失敗");
+            }
+        }
+
+        TryUndo();
+        if (_currentMode == GameMode.PlayerVsAi)
+        {
+            if (_board.TryGetLastMove(out _))
+            {
+                TryUndo();
+            }
+            else if (didUndo)
+            {
+                GameMessage?.Invoke("無可悔棋步數");
+            }
+        }
+
+        if (didUndo)
+        {
             NotifyUpdate();
         }
-        catch { }
     }
 
     public void Redo()
     {
-        // 需要在 GameService 補上獨立歷史堆疊
-        throw new NotImplementedException();
+        // Minimal no-op implementation to avoid hard crash.
+        GameMessage?.Invoke("Redo 功能未實作");
     }
 
     public void AddBookmark(string name) => _bookmarkManager.AddBookmark(name, _board.ToFen());

@@ -363,6 +363,46 @@ public class SearchTests
         Assert.True(fullScore > missingScore);
     }
 
+    [Fact]
+    public void Evaluator_Evaluate_ShouldNotMutateBoardState()
+    {
+        var board = new Board("4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1");
+        var evaluator = new HandcraftedEvaluator();
+        var initialTurn = board.Turn;
+        var initialPieces = new Piece[90];
+        var initialKey = board.ZobristKey;
+
+        for (int i = 0; i < 90; i++)
+        {
+            initialPieces[i] = board.GetPiece(i);
+        }
+
+        int first = evaluator.Evaluate(board);
+        int second = evaluator.Evaluate(board);
+
+        Assert.Equal(first, second);
+        Assert.Equal(initialTurn, board.Turn);
+        Assert.Equal(initialKey, board.ZobristKey);
+
+        for (int i = 0; i < 90; i++)
+        {
+            Assert.Equal(initialPieces[i], board.GetPiece(i));
+        }
+    }
+
+    [Fact]
+    public async Task Search_StableResult_WithSameSettingsAndBoard()
+    {
+        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000, ThreadCount = 1 };
+
+        var first = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
+        var second = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
+
+        Assert.Equal(first.BestMove, second.BestMove);
+    }
+
     // --- Null-Move / 棋盤測試 ---
 
     [Fact]

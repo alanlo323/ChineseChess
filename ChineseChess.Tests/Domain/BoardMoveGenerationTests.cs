@@ -254,7 +254,7 @@ public class BoardMoveGenerationTests
     public void Rook_CapturesEnemy_StopsAfterCapture()
     {
         // 紅車在 (5,4)=49，黑兵在 (5,6)=51，向右走 (5,5)=50 和吃 (5,6)=51，不再繼續
-        var board = new Board("k8/9/9/9/9/4R1p3/9/9/9/4K4 w - - 0 1");
+        var board = new Board("k8/9/9/9/9/4R1p2/9/9/9/4K4 w - - 0 1");
         var rookMoves = board.GenerateLegalMoves()
             .Where(m => m.From == 49)
             .ToList();
@@ -308,7 +308,7 @@ public class BoardMoveGenerationTests
     public void Cannon_CannotSlideAfterScreen()
     {
         // 砲遇屏後不能繼續滑動
-        var board = new Board("k8/9/9/9/9/4C1P3/9/9/9/4K4 w - - 0 1");
+        var board = new Board("k8/9/9/9/9/4C1P2/9/9/9/4K4 w - - 0 1");
         var cannonMoves = board.GenerateLegalMoves()
             .Where(m => m.From == 49)
             .ToList();

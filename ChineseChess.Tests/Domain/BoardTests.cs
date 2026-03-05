@@ -118,4 +118,46 @@ public class BoardTests
         Assert.Contains(legalCapture, legalMoves);
         Assert.DoesNotContain(blockedSlide, legalMoves);
     }
+
+    [Fact]
+    public void MakeMove_OutOfRangeMove_Throws()
+    {
+        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        Assert.Throws<ArgumentOutOfRangeException>(() => board.MakeMove(new Move(-1, 10)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => board.MakeMove(new Move(10, 90)));
+    }
+
+    [Fact]
+    public void MakeMove_SameSquare_Throws()
+    {
+        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        Assert.Throws<InvalidOperationException>(() => board.MakeMove(new Move(64, 64)));
+    }
+
+    [Fact]
+    public void MakeMove_EmptySquare_Throws()
+    {
+        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        Assert.Throws<InvalidOperationException>(() => board.MakeMove(new Move(40, 41)));
+    }
+
+    [Fact]
+    public void MakeMove_CaptureOwnPiece_Throws()
+    {
+        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        Assert.Throws<InvalidOperationException>(() => board.MakeMove(new Move(64, 70)));
+    }
+
+    [Fact]
+    public void UnmakeMove_MismatchedState_Throws()
+    {
+        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        var first = new Move(64, 65);
+        var second = new Move(19, 20);
+
+        board.MakeMove(first);
+        Assert.Throws<InvalidOperationException>(() => board.UnmakeMove(second));
+        Assert.True(board.TryGetLastMove(out var top));
+        Assert.Equal(first, top);
+    }
 }

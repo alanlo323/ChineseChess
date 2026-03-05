@@ -1,8 +1,6 @@
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using System;
-using System.Linq;
-
 namespace ChineseChess.Infrastructure.AI.Evaluators;
 
 public class HandcraftedEvaluator : IEvaluator
@@ -84,12 +82,43 @@ public class HandcraftedEvaluator : IEvaluator
         score += EvaluateRookStructure(board, PieceColor.Red, redRook1, redRook2, redRookCount);
         score -= EvaluateRookStructure(board, PieceColor.Black, blackRook1, blackRook2, blackRookCount);
 
-        // --- 機動力（輕量：統計當前可走著法） ---
-        int mobility = board.GenerateLegalMoves().Count();
-        score += (board.Turn == PieceColor.Red ? 1 : -1) * mobility * 2;
+        // --- 機動力（輕量：以局面素材估算可行性） ---
+        int mobility = EstimatePotentialMobility(board);
+        score += (board.Turn == PieceColor.Red ? 1 : -1) * mobility;
 
         // 以輪到行動的一方為觀點回傳分數
         return board.Turn == PieceColor.Red ? score : -score;
+    }
+
+    private static int EstimatePotentialMobility(IBoard board)
+    {
+        int redPotential = 0;
+        int blackPotential = 0;
+
+        for (int i = 0; i < BoardSize; i++)
+        {
+            var piece = board.GetPiece(i);
+            if (piece.IsNone) continue;
+
+            int value = piece.Type switch
+            {
+                PieceType.King => 4,
+                PieceType.Advisor => 4,
+                PieceType.Elephant => 4,
+                PieceType.Horse => 6,
+                PieceType.Rook => 12,
+                PieceType.Cannon => 10,
+                PieceType.Pawn => 3,
+                _ => 0
+            };
+
+            if (piece.Color == PieceColor.Red)
+                redPotential += value;
+            else
+                blackPotential += value;
+        }
+
+        return redPotential - blackPotential;
     }
 
     private static int EvaluateKingSafety(IBoard board, PieceColor color, int kingIndex,

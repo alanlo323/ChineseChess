@@ -193,4 +193,62 @@ public class GameServiceTests
             }
         }
     }
+
+    [Fact]
+    public async Task Undo_WhenInsufficientHistory_ShouldNotPartialRollback_AndRaiseGameMessage()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        var messages = new List<string>();
+        gameService.GameMessage += msg => messages.Add(msg);
+
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+
+        var board = gameService.CurrentBoard;
+        var beforeFen = board.ToFen();
+        var moves = board.GenerateLegalMoves().GetEnumerator();
+        moves.MoveNext();
+        var move = moves.Current;
+        board.MakeMove(move);
+
+        var afterOneMoveFen = board.ToFen();
+        Assert.NotEqual(beforeFen, afterOneMoveFen);
+
+        gameService.Undo();
+
+        Assert.Equal(beforeFen, board.ToFen());
+        Assert.Contains(messages, msg => msg.Contains("無可悔棋步數"));
+    }
+
+    [Fact]
+    public async Task Undo_WhenBoardHistoryExhausted_ShouldRemainStable()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+        var beforeFen = gameService.CurrentBoard.ToFen();
+
+        gameService.Undo();
+
+        Assert.Equal(beforeFen, gameService.CurrentBoard.ToFen());
+    }
+
+    [Fact]
+    public async Task Redo_NotImplemented_ShouldNotThrow_AndPublishMessage()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        var messages = new List<string>();
+        gameService.GameMessage += msg => messages.Add(msg);
+
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+
+        var beforeFen = gameService.CurrentBoard.ToFen();
+
+        gameService.Redo();
+
+        Assert.Equal(beforeFen, gameService.CurrentBoard.ToFen());
+        Assert.Contains(messages, msg => msg.Contains("未實作"));
+    }
 }
