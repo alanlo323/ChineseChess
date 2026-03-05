@@ -1,119 +1,132 @@
 <UserControl x:Class="ChineseChess.WPF.Views.ControlPanelView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
-             mc:Ignorable="d" 
-             d:DataContext="{d:DesignInstance Type=vm:ControlPanelViewModel}"
-             Width="250">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="8">
-            <TextBlock Text="象棋演算法對弈"
-                       FontSize="20"
-                       FontWeight="SemiBold"
-                       Foreground="{StaticResource InkBrush}" />
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:ControlPanelViewModel}">
+    <StackPanel Margin="8">
+        <TextBlock Text="象棋演算法對弈"
+                   FontSize="20"
+                   FontWeight="SemiBold"
+                   Foreground="{StaticResource InkBrush}" />
 
-            <Border Height="1"
-                    Background="{StaticResource WoodDarkBrush}"
-                    Opacity="0.35"
-                    Margin="0,10,0,0" />
+        <Border Height="1"
+                Background="{StaticResource WoodDarkBrush}"
+                Opacity="0.35"
+                Margin="0,10,0,0" />
 
-            <Border Style="{StaticResource SubPanelCardStyle}" Margin="0,12,0,12">
-                <StackPanel>
-                    <TextBlock Text="局面訊息"
-                               Style="{StaticResource SectionTitleStyle}" />
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Style="{StaticResource StatusTextStyle}"
-                               Margin="0,6,0,0"
-                               FontWeight="Medium" />
-                </StackPanel>
-            </Border>
+        <!-- 兩欄主佈局 -->
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-            <GroupBox Header="設定"
-                      Style="{StaticResource PanelGroupStyle}">
-                <StackPanel Margin="0,2">
-                    <TextBlock Text="遊戲模式" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,6" />
-                    <ComboBox ItemsSource="{Binding GameModes}"
-                              SelectedItem="{Binding SelectedMode}"
-                              Style="{StaticResource InputControlStyle}"
-                              Margin="0,0,0,10" />
+            <!-- 左欄：狀態 + 設定 -->
+            <StackPanel Grid.Column="0">
+                <Border Style="{StaticResource SubPanelCardStyle}" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="局面訊息"
+                                   Style="{StaticResource SectionTitleStyle}" />
+                        <TextBlock Text="{Binding StatusMessage}"
+                                   Style="{StaticResource StatusTextStyle}"
+                                   Margin="0,6,0,0"
+                                   FontWeight="Medium" />
+                    </StackPanel>
+                </Border>
 
-                    <TextBlock Text="{Binding SearchDepth, StringFormat=搜尋深度 (難度)（目前：{0}）}"
-                               Style="{StaticResource SectionTitleStyle}"
-                               Margin="0,0,0,6" />
-                    <Slider Minimum="1"
-                            Maximum="10"
-                            Value="{Binding SearchDepth}"
-                            AutoToolTipPlacement="TopLeft"
-                            TickFrequency="1"
-                            IsSnapToTickEnabled="True"
-                            Style="{StaticResource DifficultySliderStyle}" />
+                <GroupBox Header="設定"
+                          Style="{StaticResource PanelGroupStyle}">
+                    <StackPanel Margin="0,2">
+                        <TextBlock Text="遊戲模式" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,6" />
+                        <ComboBox ItemsSource="{Binding GameModes}"
+                                  SelectedItem="{Binding SelectedMode}"
+                                  Style="{StaticResource InputControlStyle}"
+                                  Margin="0,0,0,10" />
 
-                    <TextBlock Text="{Binding SearchThinkingTime, StringFormat=思考時間（秒）（目前：{0} 秒）}"
-                               Style="{StaticResource SectionTitleStyle}"
-                               Margin="0,8,0,6" />
-                    <Slider Minimum="1"
-                            Maximum="30"
-                            Value="{Binding SearchThinkingTime}"
-                            AutoToolTipPlacement="TopLeft"
-                            TickFrequency="1"
-                            IsSnapToTickEnabled="True"
-                            Style="{StaticResource DifficultySliderStyle}" />
-                </StackPanel>
-            </GroupBox>
+                        <TextBlock Text="{Binding SearchDepth, StringFormat=搜尋深度（目前：{0}）}"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,0,0,6" />
+                        <Slider Minimum="1"
+                                Maximum="10"
+                                Value="{Binding SearchDepth}"
+                                AutoToolTipPlacement="TopLeft"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="True"
+                                Style="{StaticResource DifficultySliderStyle}" />
 
-            <Button Content="開始對局"
-                    Command="{Binding StartGameCommand}"
-                    Style="{StaticResource ActionButtonStyle}"
-                    Margin="0,14,0,8"
-                    Padding="10,8" />
+                        <TextBlock Text="{Binding SearchThinkingTime, StringFormat=思考時間（目前：{0} 秒）}"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,8,0,6" />
+                        <Slider Minimum="1"
+                                Maximum="30"
+                                Value="{Binding SearchThinkingTime}"
+                                AutoToolTipPlacement="TopLeft"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="True"
+                                Style="{StaticResource DifficultySliderStyle}" />
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
 
-            <Button Content="悔棋"
-                    Command="{Binding UndoCommand}"
-                    Style="{StaticResource ActionButtonStyle}"
-                    Margin="0,0,0,8"
-                    Padding="10,8" />
+            <!-- 右欄：操作按鈕 + AI 控制 + 資料管理 -->
+            <StackPanel Grid.Column="2">
+                <Button Content="開始對局"
+                        Command="{Binding StartGameCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="0,0,0,8"
+                        Padding="10,8" />
 
-            <Button Content="提示走法"
-                    Command="{Binding HintCommand}"
-                    Style="{StaticResource ActionButtonStyle}"
-                    Padding="10,8" />
+                <Button Content="悔棋"
+                        Command="{Binding UndoCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="0,0,0,8"
+                        Padding="10,8" />
 
-            <GroupBox Header="AI 思考控制"
-                      Style="{StaticResource PanelGroupStyle}">
-                <StackPanel Margin="0,2">
-                    <Button Content="停止思考"
-                            Command="{Binding StopThinkingCommand}"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Margin="0,0,0,8"
-                            Padding="10,8" />
-                    <Button Content="暫停思考"
-                            Command="{Binding PauseThinkingCommand}"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Margin="0,0,0,8"
-                            Padding="10,8" />
-                    <Button Content="繼續思考"
-                            Command="{Binding ResumeThinkingCommand}"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Padding="10,8" />
-                </StackPanel>
-            </GroupBox>
+                <Button Content="提示走法"
+                        Command="{Binding HintCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="0,0,0,0"
+                        Padding="10,8" />
 
-            <GroupBox Header="資料管理"
-                      Style="{StaticResource PanelGroupStyle}">
-                <StackPanel Margin="0,2">
-                    <Button Content="匯出TT表"
-                            Command="{Binding ExportTranspositionTableCommand}"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Margin="0,0,0,8"
-                            Padding="10,8" />
-                    <Button Content="匯入TT表"
-                            Command="{Binding ImportTranspositionTableCommand}"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Padding="10,8" />
-                </StackPanel>
-            </GroupBox>
-        </StackPanel>
-    </ScrollViewer>
+                <GroupBox Header="AI 思考控制"
+                          Style="{StaticResource PanelGroupStyle}">
+                    <StackPanel Margin="0,2">
+                        <Button Content="停止思考"
+                                Command="{Binding StopThinkingCommand}"
+                                Style="{StaticResource ActionButtonStyle}"
+                                Margin="0,0,0,8"
+                                Padding="10,8" />
+                        <Button Content="暫停思考"
+                                Command="{Binding PauseThinkingCommand}"
+                                Style="{StaticResource ActionButtonStyle}"
+                                Margin="0,0,0,8"
+                                Padding="10,8" />
+                        <Button Content="繼續思考"
+                                Command="{Binding ResumeThinkingCommand}"
+                                Style="{StaticResource ActionButtonStyle}"
+                                Padding="10,8" />
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="資料管理"
+                          Style="{StaticResource PanelGroupStyle}">
+                    <StackPanel Margin="0,2">
+                        <Button Content="匯出TT表"
+                                Command="{Binding ExportTranspositionTableCommand}"
+                                Style="{StaticResource ActionButtonStyle}"
+                                Margin="0,0,0,8"
+                                Padding="10,8" />
+                        <Button Content="匯入TT表"
+                                Command="{Binding ImportTranspositionTableCommand}"
+                                Style="{StaticResource ActionButtonStyle}"
+                                Padding="10,8" />
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+        </Grid>
+    </StackPanel>
 </UserControl>
