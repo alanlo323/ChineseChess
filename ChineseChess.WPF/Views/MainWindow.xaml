@@ -9,7 +9,7 @@
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="象棋 AI 對弈"
         Icon="/Resources/app.ico"
-        Height="800" Width="980" MinWidth="900" MinHeight="640"
+        Height="800" Width="1085" MinWidth="900" MinHeight="640"
         WindowStartupLocation="CenterScreen"
         Style="{StaticResource AppWindowStyle}">
 
@@ -48,7 +48,7 @@
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" MinHeight="100" MaxHeight="150" />
+                <RowDefinition Height="Auto" MinHeight="60" MaxHeight="90" />
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0"
@@ -61,36 +61,28 @@
             </Border>
 
             <Border Grid.Row="0"
-                    Grid.RowSpan="2"
                     Grid.Column="1"
                     Style="{StaticResource PanelCardStyle}"
-                    Margin="0,0,0,0">
+                    Margin="0,0,0,16">
                 <views:ControlPanelView DataContext="{Binding ControlPanel}" />
             </Border>
 
             <Border Grid.Row="1"
                     Grid.Column="0"
+                    Grid.ColumnSpan="2"
                     Style="{StaticResource PanelCardStyle}"
-                    Margin="0,0,16,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Text="棋局觀測"
-                               Style="{StaticResource SectionHeadingStyle}" />
-
-                    <Border Grid.Row="1"
-                            Style="{StaticResource SubPanelCardStyle}"
-                            Margin="0,6,0,0">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
-                            <TextBlock Text="{Binding AnalysisText}"
-                                       Style="{StaticResource AnalysisTextStyle}" />
-                        </ScrollViewer>
-                    </Border>
-                </Grid>
+                    Margin="0,0,0,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="棋局觀測"
+                               Style="{StaticResource SectionTitleStyle}"
+                               Margin="0,0,0,4" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <TextBlock Text="{Binding AnalysisText}"
+                                   Style="{StaticResource AnalysisTextStyle}" />
+                    </ScrollViewer>
+                </DockPanel>
             </Border>
         </Grid>
     </Grid>

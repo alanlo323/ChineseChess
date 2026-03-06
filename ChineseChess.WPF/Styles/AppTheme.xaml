@@ -230,6 +230,98 @@
         <Setter Property="Margin" Value="0,6,0,10" />
     </Style>
 
+    <!-- TabControl 主樣式：移除預設藍框，改用木質主題 -->
+    <Style x:Key="TabControlStyle" TargetType="TabControl">
+        <Setter Property="Background" Value="{StaticResource PaperBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TabPanel x:Name="HeaderPanel"
+                                  Grid.Row="0"
+                                  Panel.ZIndex="1"
+                                  Background="Transparent"
+                                  IsItemsHost="True"
+                                  Margin="0,0,0,2" />
+                        <Border Grid.Row="1"
+                                Background="{StaticResource PaperBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="10">
+                            <ContentPresenter ContentSource="SelectedContent" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- TabItem 樣式：正常木質紙色，選中時金棕色，Hover 只在未選中時作用 -->
+    <Style x:Key="TabItemStyle" TargetType="TabItem">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="14,6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="tabBorder"
+                            Background="{StaticResource PaperBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1,1,1,0"
+                            CornerRadius="8,8,0,0"
+                            Padding="{TemplateBinding Padding}"
+                            Margin="0,0,3,0"
+                            SnapsToDevicePixels="True">
+                        <TextBlock x:Name="headerText"
+                                   Text="{TemplateBinding Header}"
+                                   Foreground="{StaticResource InkMutedBrush}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="tabBorder" Property="Background">
+                                <Setter.Value>
+                                    <SolidColorBrush Color="{StaticResource ButtonNormalColor}" />
+                                </Setter.Value>
+                            </Setter>
+                            <Setter TargetName="headerText" Property="Foreground" Value="White" />
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True" />
+                                <Condition Property="IsSelected" Value="False" />
+                            </MultiTrigger.Conditions>
+                            <MultiTrigger.Setters>
+                                <Setter TargetName="tabBorder" Property="Background" Value="{StaticResource ButtonHoverBrush}" />
+                                <Setter TargetName="headerText" Property="Foreground" Value="{StaticResource InkBrush}" />
+                            </MultiTrigger.Setters>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- FormLabelStyle：Slider / ComboBox 前的小標籤，非粗體，墨色較淡 -->
+    <Style x:Key="FormLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{StaticResource InkMutedBrush}" />
+    </Style>
+
+    <!-- CompactButtonStyle：繼承 ActionButtonStyle，縮小 Padding 供並排使用 -->
+    <Style x:Key="CompactButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+
     <Style x:Key="PanelGroupStyle" TargetType="GroupBox">
         <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
         <Setter Property="FontWeight" Value="SemiBold" />

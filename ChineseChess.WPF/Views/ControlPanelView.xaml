@@ -6,67 +6,96 @@
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ControlPanelViewModel}">
-    <StackPanel Margin="8">
-        <TextBlock Text="象棋演算法對弈"
+    <DockPanel Margin="12" LastChildFill="True">
+
+        <!-- 標題區 -->
+        <TextBlock DockPanel.Dock="Top"
+                   Text="象棋 AI 對弈"
                    FontSize="20"
                    FontWeight="SemiBold"
                    Foreground="{StaticResource InkBrush}" />
-
-        <Border Height="1"
+        <Border DockPanel.Dock="Top"
+                Height="1"
                 Background="{StaticResource WoodDarkBrush}"
                 Opacity="0.35"
                 Margin="0,10,0,0" />
 
-        <!-- 兩欄主佈局 -->
-        <Grid Margin="0,12,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+        <!-- 局面訊息卡 -->
+        <Border DockPanel.Dock="Top"
+                Style="{StaticResource SubPanelCardStyle}"
+                Margin="0,10,0,0">
+            <TextBlock Text="{Binding StatusMessage}"
+                       Style="{StaticResource StatusTextStyle}"
+                       FontWeight="Medium" />
+        </Border>
 
-            <!-- 左欄：狀態 + 設定 -->
-            <StackPanel Grid.Column="0">
-                <Border Style="{StaticResource SubPanelCardStyle}" Margin="0,0,0,10">
-                    <StackPanel>
-                        <TextBlock Text="局面訊息"
-                                   Style="{StaticResource SectionTitleStyle}" />
-                        <TextBlock Text="{Binding StatusMessage}"
-                                   Style="{StaticResource StatusTextStyle}"
-                                   Margin="0,6,0,0"
-                                   FontWeight="Medium" />
-                    </StackPanel>
-                </Border>
+        <!-- 主要操作列 -->
+        <UniformGrid DockPanel.Dock="Top"
+                     Columns="3"
+                     Margin="0,10,0,0">
+            <Button Content="開始對局"
+                    Command="{Binding StartGameCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Margin="0,0,6,0"
+                    Padding="10,8" />
+            <Button Content="悔棋"
+                    Command="{Binding UndoCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Margin="0,0,6,0"
+                    Padding="10,8" />
+            <Button Content="提示走法"
+                    Command="{Binding HintCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Padding="10,8" />
+        </UniformGrid>
 
-                <GroupBox Header="設定"
-                          Style="{StaticResource PanelGroupStyle}">
-                    <StackPanel Margin="0,2">
-                        <TextBlock Text="遊戲模式" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,6" />
+        <!-- TabControl 三分頁 -->
+        <TabControl Margin="0,10,0,0"
+                    Style="{StaticResource TabControlStyle}"
+                    ItemContainerStyle="{StaticResource TabItemStyle}">
+
+            <!-- 設定頁 -->
+            <TabItem Header="設定">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="0,8">
+                        <TextBlock Text="遊戲模式"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,4" />
                         <ComboBox ItemsSource="{Binding GameModes}"
                                   SelectedItem="{Binding SelectedMode}"
                                   Style="{StaticResource InputControlStyle}"
                                   Margin="0,0,0,10" />
 
+                        <Border Height="1"
+                                Background="{StaticResource WoodDarkBrush}"
+                                Opacity="0.20"
+                                Margin="0,0,0,10" />
+
                         <CheckBox Content="智能提示（選子時自動分析走法）"
                                   IsChecked="{Binding IsSmartHintEnabled}"
                                   Foreground="{StaticResource InkBrush}"
-                                  Margin="0,0,0,6" />
+                                  Margin="0,0,0,8" />
 
                         <TextBlock Text="{Binding SmartHintDepth, StringFormat=智能提示深度（目前：{0}）}"
-                                   Style="{StaticResource SectionTitleStyle}"
-                                   Margin="0,0,0,6" />
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,4" />
                         <Slider Minimum="1"
                                 Maximum="8"
                                 Value="{Binding SmartHintDepth}"
                                 AutoToolTipPlacement="TopLeft"
                                 TickFrequency="1"
                                 IsSnapToTickEnabled="True"
-                                Style="{StaticResource DifficultySliderStyle}"
+                                Style="{StaticResource DifficultySliderStyle}" />
+
+                        <Border Height="1"
+                                Background="{StaticResource WoodDarkBrush}"
+                                Opacity="0.20"
                                 Margin="0,0,0,10" />
 
                         <TextBlock Text="{Binding SearchDepth, StringFormat=搜尋深度（目前：{0}）}"
-                                   Style="{StaticResource SectionTitleStyle}"
-                                   Margin="0,0,0,6" />
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,4" />
                         <Slider Minimum="1"
                                 Maximum="10"
                                 Value="{Binding SearchDepth}"
@@ -76,8 +105,8 @@
                                 Style="{StaticResource DifficultySliderStyle}" />
 
                         <TextBlock Text="{Binding SearchThinkingTime, StringFormat=思考時間（目前：{0} 秒）}"
-                                   Style="{StaticResource SectionTitleStyle}"
-                                   Margin="0,8,0,6" />
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,4" />
                         <Slider Minimum="1"
                                 Maximum="30"
                                 Value="{Binding SearchThinkingTime}"
@@ -86,69 +115,94 @@
                                 IsSnapToTickEnabled="True"
                                 Style="{StaticResource DifficultySliderStyle}" />
                     </StackPanel>
-                </GroupBox>
-            </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
-            <!-- 右欄：操作按鈕 + AI 控制 + 資料管理 -->
-            <StackPanel Grid.Column="2">
-                <Button Content="開始對局"
-                        Command="{Binding StartGameCommand}"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Margin="0,0,0,8"
-                        Padding="10,8" />
-
-                <Button Content="悔棋"
-                        Command="{Binding UndoCommand}"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Margin="0,0,0,8"
-                        Padding="10,8" />
-
-                <Button Content="提示走法"
-                        Command="{Binding HintCommand}"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Margin="0,0,0,0"
-                        Padding="10,8" />
-
-                <GroupBox Header="AI 思考控制"
-                          Style="{StaticResource PanelGroupStyle}">
-                    <StackPanel Margin="0,2">
-                        <Button Content="停止思考"
+            <!-- AI 控制頁 -->
+            <TabItem Header="AI 控制">
+                <StackPanel Margin="0,8">
+                    <TextBlock Text="思考控制"
+                               Style="{StaticResource SectionTitleStyle}" />
+                    <UniformGrid Columns="3" Margin="0,6,0,0">
+                        <Button Content="停止"
                                 Command="{Binding StopThinkingCommand}"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Margin="0,0,0,8"
-                                Padding="10,8" />
-                        <Button Content="暫停思考"
+                                Style="{StaticResource CompactButtonStyle}"
+                                Margin="0,0,6,0" />
+                        <Button Content="暫停"
                                 Command="{Binding PauseThinkingCommand}"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Margin="0,0,0,8"
-                                Padding="10,8" />
-                        <Button Content="繼續思考"
+                                Style="{StaticResource CompactButtonStyle}"
+                                Margin="0,0,6,0" />
+                        <Button Content="繼續"
                                 Command="{Binding ResumeThinkingCommand}"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Padding="10,8" />
-                    </StackPanel>
-                </GroupBox>
+                                Style="{StaticResource CompactButtonStyle}" />
+                    </UniformGrid>
 
-                <GroupBox Header="資料管理"
-                          Style="{StaticResource PanelGroupStyle}">
-                    <StackPanel Margin="0,2">
-                        <Button Content="匯出TT表"
+                    <Border Height="1"
+                            Background="{StaticResource WoodDarkBrush}"
+                            Opacity="0.20"
+                            Margin="0,14,0,14" />
+
+                    <TextBlock Text="資料管理"
+                               Style="{StaticResource SectionTitleStyle}" />
+                    <UniformGrid Columns="2" Margin="0,6,0,0">
+                        <Button Content="匯出 TT 表"
                                 Command="{Binding ExportTranspositionTableCommand}"
                                 Style="{StaticResource ActionButtonStyle}"
-                                Margin="0,0,0,8"
+                                Margin="0,0,6,0"
                                 Padding="10,8" />
-                        <Button Content="匯入TT表"
+                        <Button Content="匯入 TT 表"
                                 Command="{Binding ImportTranspositionTableCommand}"
                                 Style="{StaticResource ActionButtonStyle}"
                                 Padding="10,8" />
-                    </StackPanel>
-                </GroupBox>
+                    </UniformGrid>
+                </StackPanel>
+            </TabItem>
 
-                <GroupBox Header="搜尋統計"
-                          Style="{StaticResource PanelGroupStyle}">
-                    <StackPanel Margin="0,2">
+            <!-- 統計頁 -->
+            <TabItem Header="統計">
+                <DockPanel Margin="0,8">
+                    <Button DockPanel.Dock="Bottom"
+                            Content="刷新統計"
+                            Command="{Binding RefreshTTStatsCommand}"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Margin="0,10,0,0"
+                            Padding="10,6" />
+                    <StackPanel>
+                        <TextBlock Text="搜尋效能"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,0,0,6" />
                         <Grid>
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="已搜尋節點："
+                                       Style="{StaticResource FormLabelStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Column="1" Text="{Binding SearchNodes}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,10,4" />
+                            <TextBlock Grid.Column="2" Text="搜尋速度："
+                                       Style="{StaticResource FormLabelStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Column="3" Text="{Binding SearchNps}"
+                                       Style="{StaticResource StatusTextStyle}" />
+                        </Grid>
+
+                        <Border Height="1"
+                                Background="{StaticResource WoodDarkBrush}"
+                                Opacity="0.20"
+                                Margin="0,8,0,8" />
+
+                        <TextBlock Text="置換表 (TT)"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,0,0,6" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
@@ -157,114 +211,48 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <!-- 搜尋節點 -->
-                            <TextBlock Grid.Row="0" Grid.Column="0"
-                                       Text="已搜尋節點："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,4" />
-                            <TextBlock Grid.Row="0" Grid.Column="1"
-                                       Text="{Binding SearchNodes}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,4" />
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="容量："
+                                       Style="{StaticResource FormLabelStyle}" Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding TtCapacity}"
+                                       Style="{StaticResource StatusTextStyle}" Margin="0,0,10,4" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="有效條目："
+                                       Style="{StaticResource FormLabelStyle}" Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding TtOccupied}"
+                                       Style="{StaticResource StatusTextStyle}" Margin="0,0,0,4" />
 
-                            <TextBlock Grid.Row="1" Grid.Column="0"
-                                       Text="搜尋速度："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,8" />
-                            <TextBlock Grid.Row="1" Grid.Column="1"
-                                       Text="{Binding SearchNps}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="填滿率："
+                                       Style="{StaticResource FormLabelStyle}" Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TtFillRate}"
+                                       Style="{StaticResource StatusTextStyle}" Margin="0,0,10,4" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="記憶體："
+                                       Style="{StaticResource FormLabelStyle}" Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding TtMemoryMb}"
+                                       Style="{StaticResource StatusTextStyle}" Margin="0,0,0,4" />
 
-                            <!-- TT 快取資訊 -->
-                            <TextBlock Grid.Row="2" Grid.Column="0"
-                                       Text="TT 容量："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,4" />
-                            <TextBlock Grid.Row="2" Grid.Column="1"
-                                       Text="{Binding TtCapacity}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,4" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="世代："
+                                       Style="{StaticResource FormLabelStyle}" Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TtGeneration}"
+                                       Style="{StaticResource StatusTextStyle}" Margin="0,0,10,4" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="查詢："
+                                       Style="{StaticResource FormLabelStyle}" Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding TtProbes}"
+                                       Style="{StaticResource StatusTextStyle}" Margin="0,0,0,4" />
 
-                            <TextBlock Grid.Row="3" Grid.Column="0"
-                                       Text="TT 有效條目："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,4" />
-                            <TextBlock Grid.Row="3" Grid.Column="1"
-                                       Text="{Binding TtOccupied}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="4" Grid.Column="0"
-                                       Text="TT 填滿率："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,4" />
-                            <TextBlock Grid.Row="4" Grid.Column="1"
-                                       Text="{Binding TtFillRate}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="5" Grid.Column="0"
-                                       Text="TT 記憶體："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,4" />
-                            <TextBlock Grid.Row="5" Grid.Column="1"
-                                       Text="{Binding TtMemoryMb}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="6" Grid.Column="0"
-                                       Text="TT 世代："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,4" />
-                            <TextBlock Grid.Row="6" Grid.Column="1"
-                                       Text="{Binding TtGeneration}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="7" Grid.Column="0"
-                                       Text="TT 查詢："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,4" />
-                            <TextBlock Grid.Row="7" Grid.Column="1"
-                                       Text="{Binding TtProbes}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="8" Grid.Column="0"
-                                       Text="TT 命中："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,4" />
-                            <TextBlock Grid.Row="8" Grid.Column="1"
-                                       Text="{Binding TtHits}"
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="9" Grid.Column="0"
-                                       Text="TT 命中率："
-                                       Style="{StaticResource StatusTextStyle}"
-                                       Margin="0,0,6,0" />
-                            <TextBlock Grid.Row="9" Grid.Column="1"
-                                       Text="{Binding TtHitRate}"
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="命中："
+                                       Style="{StaticResource FormLabelStyle}" Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding TtHits}"
+                                       Style="{StaticResource StatusTextStyle}" Margin="0,0,10,4" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="命中率："
+                                       Style="{StaticResource FormLabelStyle}" Margin="0,0,6,0" />
+                            <TextBlock Grid.Row="3" Grid.Column="3" Text="{Binding TtHitRate}"
                                        Style="{StaticResource StatusTextStyle}" />
                         </Grid>
-
-                        <Button Content="刷新統計"
-                                Command="{Binding RefreshTTStatsCommand}"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Margin="0,8,0,0"
-                                Padding="10,6" />
                     </StackPanel>
-                </GroupBox>
-            </StackPanel>
-        </Grid>
-    </StackPanel>
+                </DockPanel>
+            </TabItem>
+
+        </TabControl>
+    </DockPanel>
 </UserControl>
