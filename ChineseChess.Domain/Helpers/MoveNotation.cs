@@ -12,8 +12,8 @@ namespace ChineseChess.Domain.Helpers;
 public static class MoveNotation
 {
     // PieceType: None=0, King=1, Advisor=2, Elephant=3, Horse=4, Rook=5, Cannon=6, Pawn=7
-    private static readonly string[] RedNames   = { "?", "帥", "仕", "相", "傌", "俥", "炮", "兵" };
-    private static readonly string[] BlackNames = { "?", "將", "士", "象", "馬", "車", "砲", "卒" };
+    private static readonly string[] RedNames   = { "?", "帥", "仕", "相", "俥", "傌", "炮", "兵" };
+    private static readonly string[] BlackNames = { "?", "將", "士", "象", "車", "馬", "砲", "卒" };
 
     /// <summary>
     /// 將走法轉換為標準象棋記譜法。
