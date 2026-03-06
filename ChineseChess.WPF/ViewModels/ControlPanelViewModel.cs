@@ -1,6 +1,7 @@
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Enums;
+using ChineseChess.Domain.Helpers;
 using ChineseChess.WPF.Core;
 using Microsoft.Win32;
 using System;
@@ -193,8 +194,9 @@ public class ControlPanelViewModel : ObservableObject
                 }
                 else
                 {
-                    var turn = _gameService.CurrentBoard.Turn;
-                    StatusMessage = $"提示完成：{hint.BestMove} | 分數：{FormatHintScore(hint.Score)}（{(turn == PieceColor.Red ? "紅方" : "黑方")}）";
+                    var turn     = _gameService.CurrentBoard.Turn;
+                    var notation = MoveNotation.ToNotation(hint.BestMove, _gameService.CurrentBoard);
+                    StatusMessage = $"提示完成：{notation} | 分數：{FormatHintScore(hint.Score)}（{(turn == PieceColor.Red ? "紅方" : "黑方")}）";
                 }
             }
             catch (Exception ex)

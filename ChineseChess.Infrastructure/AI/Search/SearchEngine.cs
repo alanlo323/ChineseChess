@@ -1,5 +1,6 @@
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
+using ChineseChess.Domain.Helpers;
 using ChineseChess.Infrastructure.AI.Evaluators;
 using System;
 using System.Collections.Concurrent;
@@ -236,14 +237,15 @@ public class SearchEngine : IAiEngine
                     result.Depth = depth;
                     result.Nodes = GetTotalNodes();
 
+                    var bestMoveNotation = MoveNotation.ToNotation(bestMove, board);
                     lock (progressStateLock)
                     {
                         progressState.CurrentDepth = depth;
                         progressState.Score = score;
-                        progressState.BestMove = bestMove.ToString();
+                        progressState.BestMove = bestMoveNotation;
                     }
 
-                    ReportProgress(false, depth, score, bestMove.ToString());
+                    ReportProgress(false, depth, score, bestMoveNotation);
                 }
             }
             catch (OperationCanceledException)

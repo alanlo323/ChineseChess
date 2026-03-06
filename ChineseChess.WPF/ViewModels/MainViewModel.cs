@@ -1,6 +1,7 @@
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
+using ChineseChess.Domain.Helpers;
 using ChineseChess.WPF.Core;
 
 namespace ChineseChess.WPF.ViewModels;
@@ -71,7 +72,8 @@ public class MainViewModel : ObservableObject
         var turnLabel = _gameService.CurrentBoard.Turn == PieceColor.Red ? "紅方" : "黑方";
         var scoreText = FormatScoreWithPerspective(hint.Score, turnLabel);
 
-        return $"提示：{hint.BestMove} | 分數: {scoreText} | 深度: {hint.Depth} | 節點: {hint.Nodes}";
+        var notation = MoveNotation.ToNotation(hint.BestMove, _gameService.CurrentBoard);
+        return $"提示：{notation} | 分數: {scoreText} | 深度: {hint.Depth} | 節點: {hint.Nodes}";
     }
 
     private static string FormatScoreWithPerspective(int score, string turnLabel)

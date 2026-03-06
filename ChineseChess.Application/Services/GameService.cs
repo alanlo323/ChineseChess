@@ -2,6 +2,7 @@ using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
+using ChineseChess.Domain.Helpers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -243,16 +244,18 @@ public class GameService : IGameService
             {
                 if (applyBestMove)
                 {
-                    var searchTurn = _board.Turn;
+                    var searchTurn   = _board.Turn;
+                    var moveNotation = MoveNotation.ToNotation(result.BestMove, _board);
                     _board.MakeMove(result.BestMove);
                     NotifyUpdate();
-                    GameMessage?.Invoke($"AI played {result.BestMove} (Score: {FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方")})");
-                    ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn));
+                    GameMessage?.Invoke($"AI 走了 {moveNotation}（分數：{FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方")}）");
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, moveNotation));
                 }
                 else
                 {
+                    var moveNotation = MoveNotation.ToNotation(result.BestMove, _board);
                     HintReady?.Invoke(result);
-                    ThinkingProgress?.Invoke(FormatHintProgress(result, _board.Turn));
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, _board.Turn, moveNotation));
                 }
                 
                 if (applyBestMove && !CheckGameOver() && _currentMode == GameMode.AiVsAi)
@@ -412,8 +415,9 @@ public class GameService : IGameService
                 var best = evaluations.FirstOrDefault(e => e.IsBest);
                 if (best != null)
                 {
-                    string scoreStr = best.Score > 0 ? $"+{best.Score}" : best.Score.ToString();
-                    ThinkingProgress?.Invoke($"智能提示完成：最佳走法 {best.Move} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法");
+                    string scoreStr    = best.Score > 0 ? $"+{best.Score}" : best.Score.ToString();
+                    string bestNotation = MoveNotation.ToNotation(best.Move, _board);
+                    ThinkingProgress?.Invoke($"智能提示完成：最佳走法 {bestNotation} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法");
                 }
                 SmartHintReady?.Invoke(evaluations);
             }
@@ -440,7 +444,7 @@ public class GameService : IGameService
         return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {scoreText}，建議 {bestMove}";
     }
 
-    private static string FormatHintProgress(SearchResult result, PieceColor searchTurn)
+    private static string FormatHintProgress(SearchResult result, PieceColor searchTurn, string? notation = null)
     {
         if (result.BestMove.IsNull)
         {
@@ -449,8 +453,9 @@ public class GameService : IGameService
 
         var turnLabel = searchTurn == PieceColor.Red ? "紅方" : "黑方";
         var scoreText = FormatScore(result.Score, turnLabel);
+        var moveText  = notation ?? result.BestMove.ToString();
 
-        return $"提示完成：{result.BestMove} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes}";
+        return $"提示完成：{moveText} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes}";
     }
 
     private static string FormatScore(int score, string turnLabel)
