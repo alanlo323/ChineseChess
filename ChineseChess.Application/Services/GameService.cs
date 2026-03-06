@@ -27,7 +27,7 @@ public class GameService : IGameService
     public GameMode CurrentMode => _currentMode;
     public bool IsThinking => _isThinking;
     public Move? LastMove => _board.TryGetLastMove(out var lastMove) ? lastMove : null;
-    public bool IsSmartHintEnabled { get; set; } = false;
+    public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
     public long LastSearchNodes => Interlocked.Read(ref _lastSearchNodes);
     public long LastSearchNps => Interlocked.Read(ref _lastSearchNps);

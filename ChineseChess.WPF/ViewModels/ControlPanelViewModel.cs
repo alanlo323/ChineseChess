@@ -17,7 +17,7 @@ public class ControlPanelViewModel : ObservableObject
     private string _statusMessage = "Ready";
     private int _searchDepth = 5;
     private int _searchThinkingTime = 3;
-    private bool _isSmartHintEnabled = false;
+    private bool _isSmartHintEnabled = true;
     private int _smartHintDepth = 2;
     private TTStatistics _ttStats = new TTStatistics();
 
