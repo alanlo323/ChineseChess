@@ -47,12 +47,14 @@ public class MoveEvaluation
 
 public class TTStatistics
 {
-    public ulong Capacity { get; set; }      // 表格容量（條目數）
-    public double MemoryMb { get; set; }     // 記憶體用量（MB）
-    public byte Generation { get; set; }     // 當前世代（每局遞增）
-    public long TotalProbes { get; set; }    // 累計查詢次數
-    public long Hits { get; set; }           // 命中次數
-    public double HitRate { get; set; }      // 命中率（0.0–1.0）
+    public ulong Capacity { get; set; }          // 表格容量（條目數）
+    public double MemoryMb { get; set; }         // 記憶體用量（MB）
+    public byte Generation { get; set; }         // 當前世代（每局遞增）
+    public long TotalProbes { get; set; }        // 累計查詢次數
+    public long Hits { get; set; }               // 命中次數
+    public double HitRate { get; set; }          // 命中率（0.0–1.0）
+    public long OccupiedEntries { get; set; }    // 已佔用條目數（有效節點）
+    public double FillRate { get; set; }         // 填滿率（0.0–1.0）
 }
 
 public interface IAiEngine

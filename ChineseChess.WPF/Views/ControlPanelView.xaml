@@ -161,6 +161,8 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
                             <!-- 搜尋節點 -->
@@ -193,46 +195,64 @@
                                        Margin="0,0,0,4" />
 
                             <TextBlock Grid.Row="3" Grid.Column="0"
-                                       Text="TT 記憶體："
+                                       Text="TT 有效條目："
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,6,4" />
                             <TextBlock Grid.Row="3" Grid.Column="1"
-                                       Text="{Binding TtMemoryMb}"
+                                       Text="{Binding TtOccupied}"
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,0,4" />
 
                             <TextBlock Grid.Row="4" Grid.Column="0"
-                                       Text="TT 世代："
+                                       Text="TT 填滿率："
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,6,4" />
                             <TextBlock Grid.Row="4" Grid.Column="1"
-                                       Text="{Binding TtGeneration}"
+                                       Text="{Binding TtFillRate}"
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,0,4" />
 
                             <TextBlock Grid.Row="5" Grid.Column="0"
-                                       Text="TT 查詢："
+                                       Text="TT 記憶體："
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,6,4" />
                             <TextBlock Grid.Row="5" Grid.Column="1"
-                                       Text="{Binding TtProbes}"
+                                       Text="{Binding TtMemoryMb}"
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,0,4" />
 
                             <TextBlock Grid.Row="6" Grid.Column="0"
-                                       Text="TT 命中："
+                                       Text="TT 世代："
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,6,4" />
                             <TextBlock Grid.Row="6" Grid.Column="1"
-                                       Text="{Binding TtHits}"
+                                       Text="{Binding TtGeneration}"
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,0,4" />
 
                             <TextBlock Grid.Row="7" Grid.Column="0"
+                                       Text="TT 查詢："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="7" Grid.Column="1"
+                                       Text="{Binding TtProbes}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Grid.Row="8" Grid.Column="0"
+                                       Text="TT 命中："
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,6,4" />
+                            <TextBlock Grid.Row="8" Grid.Column="1"
+                                       Text="{Binding TtHits}"
+                                       Style="{StaticResource StatusTextStyle}"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Grid.Row="9" Grid.Column="0"
                                        Text="TT 命中率："
                                        Style="{StaticResource StatusTextStyle}"
                                        Margin="0,0,6,0" />
-                            <TextBlock Grid.Row="7" Grid.Column="1"
+                            <TextBlock Grid.Row="9" Grid.Column="1"
                                        Text="{Binding TtHitRate}"
                                        Style="{StaticResource StatusTextStyle}" />
                         </Grid>

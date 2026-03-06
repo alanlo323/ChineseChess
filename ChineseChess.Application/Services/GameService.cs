@@ -33,6 +33,7 @@ public class GameService : IGameService
     public long LastSearchNps => Interlocked.Read(ref _lastSearchNps);
     private long _lastSearchNodes;
     private long _lastSearchNps;
+    private long _completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
 
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
@@ -53,6 +54,9 @@ public class GameService : IGameService
         _aiCts?.Cancel();
         _aiPauseSignal.Set();
         _board = new Board(); // 重置為標準初始局
+        Interlocked.Exchange(ref _completedGameNodes, 0);
+        Interlocked.Exchange(ref _lastSearchNodes, 0);
+        Interlocked.Exchange(ref _lastSearchNps, 0);
         _board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
         
         NotifyUpdate();
@@ -209,9 +213,10 @@ public class GameService : IGameService
             ThreadCount = _aiSettings.ThreadCount,
             PauseSignal = _aiPauseSignal
         };
+        long baseNodes = Interlocked.Read(ref _completedGameNodes);
         var progress = new Progress<SearchProgress>(p =>
         {
-            Interlocked.Exchange(ref _lastSearchNodes, p.Nodes);
+            Interlocked.Exchange(ref _lastSearchNodes, baseNodes + p.Nodes);
             Interlocked.Exchange(ref _lastSearchNps, p.NodesPerSecond);
             ThinkingProgress?.Invoke(FormatThinkingProgress(p));
         });
@@ -268,6 +273,11 @@ public class GameService : IGameService
         finally
         {
             _isThinking = false;
+            if (result != null)
+            {
+                Interlocked.Add(ref _completedGameNodes, result.Nodes);
+                Interlocked.Exchange(ref _lastSearchNodes, Interlocked.Read(ref _completedGameNodes));
+            }
             if (applyBestMove)
             {
                 NotifyUpdate();

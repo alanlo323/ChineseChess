@@ -10,6 +10,7 @@
         Title="象棋 AI 對弈"
         Icon="/Resources/app.ico"
         Height="800" Width="980" MinWidth="900" MinHeight="640"
+        WindowStartupLocation="CenterScreen"
         Style="{StaticResource AppWindowStyle}">
 
     <Window.Triggers>
@@ -47,7 +48,7 @@
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" MinHeight="180" MaxHeight="260" />
+                <RowDefinition Height="Auto" MinHeight="100" MaxHeight="150" />
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0"

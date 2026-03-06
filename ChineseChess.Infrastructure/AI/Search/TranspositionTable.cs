@@ -53,6 +53,7 @@ public class TranspositionTable
     private byte _generation;
     private long _totalProbes;
     private long _probeHits;
+    private long _occupiedCount;
 
     // Pack 版面（共 64 位元）：
     //   bits  0-15 : score      （16 位元，透過 cast 轉為有號）
@@ -107,6 +108,10 @@ public class TranspositionTable
         ulong index = key % _size;
         ulong packed = Pack((short)ClampScore(score), (byte)depth, flag, bestMove.From, bestMove.To, _generation);
 
+        // 若舊槽為空（首次寫入），記錄佔用數；多執行緒下允許些微高估
+        if (_keys[index] == 0)
+            Interlocked.Increment(ref _occupiedCount);
+
         Volatile.Write(ref _data[index], packed);
         Volatile.Write(ref _keys[index], key ^ packed);
     }
@@ -118,12 +123,14 @@ public class TranspositionTable
         _generation = 0;
         Interlocked.Exchange(ref _totalProbes, 0);
         Interlocked.Exchange(ref _probeHits, 0);
+        Interlocked.Exchange(ref _occupiedCount, 0);
     }
 
     public TTStatistics GetStatistics()
     {
         long probes = Interlocked.Read(ref _totalProbes);
         long hits = Interlocked.Read(ref _probeHits);
+        long occupied = Interlocked.Read(ref _occupiedCount);
         return new TTStatistics
         {
             Capacity = _size,
@@ -131,7 +138,9 @@ public class TranspositionTable
             Generation = _generation,
             TotalProbes = probes,
             Hits = hits,
-            HitRate = probes > 0 ? (double)hits / probes : 0.0
+            HitRate = probes > 0 ? (double)hits / probes : 0.0,
+            OccupiedEntries = occupied,
+            FillRate = _size > 0 ? (double)occupied / _size : 0.0
         };
     }
 
@@ -210,6 +219,7 @@ public class TranspositionTable
         _generation = generation;
         System.Array.Copy(keys, _keys, expectedLength);
         System.Array.Copy(data, _data, expectedLength);
+        Interlocked.Exchange(ref _occupiedCount, CountOccupied());
     }
 
     public void ExportToJson(Stream output)
@@ -273,6 +283,17 @@ public class TranspositionTable
         _generation = snapshot.Generation;
         System.Array.Copy(snapshot.Keys, _keys, (int)_size);
         System.Array.Copy(snapshot.Data, _data, (int)_size);
+        Interlocked.Exchange(ref _occupiedCount, CountOccupied());
+    }
+
+    private long CountOccupied()
+    {
+        long count = 0;
+        for (int i = 0; i < _keys.Length; i++)
+        {
+            if (_keys[i] != 0) count++;
+        }
+        return count;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

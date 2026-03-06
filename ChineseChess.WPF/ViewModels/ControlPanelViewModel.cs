@@ -86,6 +86,8 @@ public class ControlPanelViewModel : ObservableObject
     public string TtCapacity => $"{_ttStats.Capacity:N0}";
     public string TtMemoryMb => $"{_ttStats.MemoryMb:F1} MB";
     public string TtGeneration => _ttStats.Generation.ToString();
+    public string TtOccupied => $"{_ttStats.OccupiedEntries:N0}";
+    public string TtFillRate => $"{_ttStats.FillRate:P1}";
     public string TtProbes => $"{_ttStats.TotalProbes:N0}";
     public string TtHits => $"{_ttStats.Hits:N0}";
     public string TtHitRate => $"{_ttStats.HitRate:P1}";
@@ -226,6 +228,8 @@ public class ControlPanelViewModel : ObservableObject
         OnPropertyChanged(nameof(TtCapacity));
         OnPropertyChanged(nameof(TtMemoryMb));
         OnPropertyChanged(nameof(TtGeneration));
+        OnPropertyChanged(nameof(TtOccupied));
+        OnPropertyChanged(nameof(TtFillRate));
         OnPropertyChanged(nameof(TtProbes));
         OnPropertyChanged(nameof(TtHits));
         OnPropertyChanged(nameof(TtHitRate));
