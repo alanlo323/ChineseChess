@@ -329,17 +329,6 @@ M460,402 L470,402 M470,402 L470,412" />
                                      VerticalAlignment="Center"
                                      Visibility="{Binding IsLastMoveFrom, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                            <Border x:Name="HintFromRing"
-                                            Width="44"
-                                            Height="44"
-                                            BorderBrush="{StaticResource HintFromBrush}"
-                                            BorderThickness="3"
-                                            CornerRadius="22"
-                                            Opacity="0.9"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Visibility="{Binding IsHintFrom, Converter={StaticResource BooleanToVisibilityConverter}}" />
-
                                     <Border x:Name="HintToRing"
                                             Width="46"
                                             Height="46"
@@ -477,6 +466,26 @@ M460,402 L470,402 M470,402 L470,412" />
                                                 </Style.Triggers>
                                             </Style>
                                         </Grid.Style>
+
+                                        <Border x:Name="HintFromPieceRing"
+                                                Width="46"
+                                                Height="46"
+                                                BorderBrush="{StaticResource HintFromBrush}"
+                                                BorderThickness="3"
+                                                CornerRadius="23"
+                                                Opacity="0.95"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsHitTestVisible="False"
+                                                Panel.ZIndex="20"
+                                                Visibility="{Binding IsHintFrom, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="10"
+                                                                  ShadowDepth="0"
+                                                                  Opacity="0.8"
+                                                                  Color="#FFBE6E1A" />
+                                            </Border.Effect>
+                                        </Border>
 
                                         <!-- 底盤漸層 (立體陰影) -->
                                         <Ellipse Width="46" Height="46">
