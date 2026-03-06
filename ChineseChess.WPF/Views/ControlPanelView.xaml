@@ -88,32 +88,6 @@
                                 IsSnapToTickEnabled="True"
                                 Style="{StaticResource DifficultySliderStyle}" />
 
-                        <Border Height="1"
-                                Background="{StaticResource WoodDarkBrush}"
-                                Opacity="0.20"
-                                Margin="0,0,0,10" />
-
-                        <TextBlock Text="{Binding SearchDepth, StringFormat=搜尋深度（目前：{0}）}"
-                                   Style="{StaticResource FormLabelStyle}"
-                                   Margin="0,0,0,4" />
-                        <Slider Minimum="1"
-                                Maximum="10"
-                                Value="{Binding SearchDepth}"
-                                AutoToolTipPlacement="TopLeft"
-                                TickFrequency="1"
-                                IsSnapToTickEnabled="True"
-                                Style="{StaticResource DifficultySliderStyle}" />
-
-                        <TextBlock Text="{Binding SearchThinkingTime, StringFormat=思考時間（目前：{0} 秒）}"
-                                   Style="{StaticResource FormLabelStyle}"
-                                   Margin="0,0,0,4" />
-                        <Slider Minimum="1"
-                                Maximum="30"
-                                Value="{Binding SearchThinkingTime}"
-                                AutoToolTipPlacement="TopLeft"
-                                TickFrequency="1"
-                                IsSnapToTickEnabled="True"
-                                Style="{StaticResource DifficultySliderStyle}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -136,6 +110,34 @@
                                 Command="{Binding ResumeThinkingCommand}"
                                 Style="{StaticResource CompactButtonStyle}" />
                     </UniformGrid>
+
+                    <Border Height="1"
+                            Background="{StaticResource WoodDarkBrush}"
+                            Opacity="0.20"
+                            Margin="0,14,0,14" />
+
+                    <TextBlock Text="搜尋參數"
+                               Style="{StaticResource SectionTitleStyle}" />
+                    <TextBlock Text="{Binding SearchDepth, StringFormat=搜尋深度（目前：{0}）}"
+                               Style="{StaticResource FormLabelStyle}"
+                               Margin="0,6,0,4" />
+                    <Slider Minimum="1"
+                            Maximum="10"
+                            Value="{Binding SearchDepth}"
+                            AutoToolTipPlacement="TopLeft"
+                            TickFrequency="1"
+                            IsSnapToTickEnabled="True"
+                            Style="{StaticResource DifficultySliderStyle}" />
+                    <TextBlock Text="{Binding SearchThinkingTime, StringFormat=思考時間（目前：{0} 秒）}"
+                               Style="{StaticResource FormLabelStyle}"
+                               Margin="0,8,0,4" />
+                    <Slider Minimum="1"
+                            Maximum="30"
+                            Value="{Binding SearchThinkingTime}"
+                            AutoToolTipPlacement="TopLeft"
+                            TickFrequency="1"
+                            IsSnapToTickEnabled="True"
+                            Style="{StaticResource DifficultySliderStyle}" />
 
                     <Border Height="1"
                             Background="{StaticResource WoodDarkBrush}"
