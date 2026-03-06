@@ -1,6 +1,7 @@
 using ChineseChess.Domain.Enums;
 using System;
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 
@@ -26,6 +27,16 @@ public class ColorConverter : IValueConverter
     {
         throw new NotImplementedException();
     }
+}
+
+/// <summary>bool → Visibility 反轉（true → Collapsed，false → Visible）</summary>
+public class InverseBoolToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is Visibility.Collapsed;
 }
 
 /// <summary>

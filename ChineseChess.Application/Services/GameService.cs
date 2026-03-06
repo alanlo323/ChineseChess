@@ -14,12 +14,14 @@ namespace ChineseChess.Application.Services;
 
 public class GameService : IGameService
 {
-    private readonly IAiEngine _aiEngine;
+    private readonly IAiEngine _aiEngine;          // 紅方（或共用）引擎
+    private IAiEngine? _aiEngineBlack;             // 黑方引擎（獨立TT模式才有值）
     private readonly BookmarkManager _bookmarkManager;
     private Board _board;
     private GameMode _currentMode;
     private bool _isThinking;
-    private SearchSettings _aiSettings = new SearchSettings();
+    private SearchSettings _redAiSettings  = new SearchSettings();
+    private SearchSettings _blackAiSettings = new SearchSettings();
     private CancellationTokenSource? _aiCts;
     private CancellationTokenSource? _smartHintCts;
     private readonly ManualResetEventSlim _aiPauseSignal = new ManualResetEventSlim(true);
@@ -32,6 +34,7 @@ public class GameService : IGameService
     public int SmartHintDepth { get; set; } = 2;
     public long LastSearchNodes => Interlocked.Read(ref _lastSearchNodes);
     public long LastSearchNps => Interlocked.Read(ref _lastSearchNps);
+    public bool UseSharedTranspositionTable { get; set; } = false;
     private long _lastSearchNodes;
     private long _lastSearchNps;
     private long _completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
@@ -59,11 +62,23 @@ public class GameService : IGameService
         Interlocked.Exchange(ref _lastSearchNodes, 0);
         Interlocked.Exchange(ref _lastSearchNps, 0);
         _board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
-        
+
+        // AiVsAi：依設定初始化黑方引擎
+        if (_currentMode == GameMode.AiVsAi)
+        {
+            _aiEngineBlack = UseSharedTranspositionTable
+                ? null                           // 共用：直接用 _aiEngine
+                : _aiEngine.CloneWithCopiedTT(); // 獨立：從紅方 TT 複製一份
+        }
+        else
+        {
+            _aiEngineBlack = null;
+        }
+
         NotifyUpdate();
         GameMessage?.Invoke("Game Started");
 
-        if (_currentMode == GameMode.AiVsAi || (_currentMode == GameMode.PlayerVsAi && _board.Turn == PieceColor.Black)) 
+        if (_currentMode == GameMode.AiVsAi || (_currentMode == GameMode.PlayerVsAi && _board.Turn == PieceColor.Black))
         {
             // 若 AI 先手（例如自訂 FEN 或 AiVsAi），就觸發 AI 下棋。
             // 一般標準局面在 PvAI 下，紅方（Player）預設先行，除非有其他設定。
@@ -91,7 +106,6 @@ public class GameService : IGameService
         }
 
         _aiPauseSignal.Reset();
-        // ThinkingProgress?.Invoke("AI 思考已暫停");
         return Task.CompletedTask;
     }
 
@@ -104,7 +118,6 @@ public class GameService : IGameService
         }
 
         _aiPauseSignal.Set();
-        // ThinkingProgress?.Invoke("AI 思考已繼續");
         return Task.CompletedTask;
     }
 
@@ -207,11 +220,15 @@ public class GameService : IGameService
         var boardSnapshot = _board.Clone();
         SearchResult? result = null;
         var continueAiLoop = false;
+
+        // 依目前輪次選擇對應的引擎與設定
+        var activeEngine   = GetCurrentEngine();
+        var activeSettings = GetCurrentSettings();
         var settings = new SearchSettings
         {
-            Depth = _aiSettings.Depth,
-            TimeLimitMs = _aiSettings.TimeLimitMs,
-            ThreadCount = _aiSettings.ThreadCount,
+            Depth       = activeSettings.Depth,
+            TimeLimitMs = activeSettings.TimeLimitMs,
+            ThreadCount = activeSettings.ThreadCount,
             PauseSignal = _aiPauseSignal
         };
         long baseNodes = Interlocked.Read(ref _completedGameNodes);
@@ -221,17 +238,17 @@ public class GameService : IGameService
             Interlocked.Exchange(ref _lastSearchNps, p.NodesPerSecond);
             ThinkingProgress?.Invoke(FormatThinkingProgress(p));
         });
-        
+
         try
         {
-            result = await _aiEngine.SearchAsync(
+            result = await activeEngine.SearchAsync(
                 boardSnapshot,
                 settings,
                 cts.Token,
                 progress);
-            
+
             if (cts.Token.IsCancellationRequested) return null;
-            
+
             if (result.BestMove.IsNull)
             {
                 ThinkingProgress?.Invoke("AI 思考完成：目前無可用著法");
@@ -257,7 +274,7 @@ public class GameService : IGameService
                     HintReady?.Invoke(result);
                     ThinkingProgress?.Invoke(FormatHintProgress(result, _board.Turn, moveNotation));
                 }
-                
+
                 if (applyBestMove && !CheckGameOver() && _currentMode == GameMode.AiVsAi)
                 {
                     // 繼續執行下一輪
@@ -293,6 +310,22 @@ public class GameService : IGameService
         }
 
         return result;
+    }
+
+    // 根據目前輪次選擇引擎（AiVsAi 獨立TT 時，黑方用 _aiEngineBlack）
+    private IAiEngine GetCurrentEngine()
+    {
+        if (_currentMode == GameMode.AiVsAi && _aiEngineBlack != null && _board.Turn == PieceColor.Black)
+            return _aiEngineBlack;
+        return _aiEngine;
+    }
+
+    // 根據目前輪次選擇設定
+    private SearchSettings GetCurrentSettings()
+    {
+        if (_currentMode == GameMode.AiVsAi && _board.Turn == PieceColor.Black)
+            return _blackAiSettings;
+        return _redAiSettings;
     }
 
     private bool CheckGameOver()
@@ -374,9 +407,29 @@ public class GameService : IGameService
 
     public void SetDifficulty(int depth, int timeMs, int threadCount = 0)
     {
-        _aiSettings.Depth = depth;
-        _aiSettings.TimeLimitMs = timeMs;
-        if (threadCount > 0) _aiSettings.ThreadCount = threadCount;
+        _redAiSettings.Depth      = depth;
+        _redAiSettings.TimeLimitMs = timeMs;
+        _blackAiSettings.Depth     = depth;
+        _blackAiSettings.TimeLimitMs = timeMs;
+        if (threadCount > 0)
+        {
+            _redAiSettings.ThreadCount   = threadCount;
+            _blackAiSettings.ThreadCount = threadCount;
+        }
+    }
+
+    public void SetRedAiDifficulty(int depth, int timeMs, int threadCount = 0)
+    {
+        _redAiSettings.Depth      = depth;
+        _redAiSettings.TimeLimitMs = timeMs;
+        if (threadCount > 0) _redAiSettings.ThreadCount = threadCount;
+    }
+
+    public void SetBlackAiDifficulty(int depth, int timeMs, int threadCount = 0)
+    {
+        _blackAiSettings.Depth      = depth;
+        _blackAiSettings.TimeLimitMs = timeMs;
+        if (threadCount > 0) _blackAiSettings.ThreadCount = threadCount;
     }
 
     public async Task<SearchResult> GetHintAsync()
@@ -386,6 +439,39 @@ public class GameService : IGameService
     }
 
     public TTStatistics GetTTStatistics() => _aiEngine.GetTTStatistics();
+
+    public TTStatistics? GetBlackTTStatistics()
+    {
+        if (_aiEngineBlack == null) return null;
+        return _aiEngineBlack.GetTTStatistics();
+    }
+
+    public async Task MergeTranspositionTablesAsync(CancellationToken ct = default)
+    {
+        if (_aiEngineBlack == null)
+        {
+            ThinkingProgress?.Invoke("合併 TT：兩個引擎共用同一個 TT，無需合併");
+            return;
+        }
+
+        try
+        {
+            await EnsureAiStoppedForPersistenceAsync(ct);
+            ThinkingProgress?.Invoke("合併兩方 TT 中...");
+            // 雙向合併：讓兩方都取得最深的分析結果
+            _aiEngine.MergeTranspositionTableFrom(_aiEngineBlack);
+            _aiEngineBlack.MergeTranspositionTableFrom(_aiEngine);
+            ThinkingProgress?.Invoke("TT 合併完成");
+        }
+        catch (OperationCanceledException)
+        {
+            ThinkingProgress?.Invoke("TT 合併已取消");
+        }
+        catch (Exception ex)
+        {
+            ThinkingProgress?.Invoke($"TT 合併失敗：{ex.Message}");
+        }
+    }
 
     public async Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default)
     {

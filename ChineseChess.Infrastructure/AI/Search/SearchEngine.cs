@@ -33,6 +33,13 @@ public class SearchEngine : IAiEngine
         _tt = new TranspositionTable(64);
     }
 
+    // 以既有 TT 建立引擎（CloneWithCopiedTT 專用）
+    private SearchEngine(TranspositionTable tt)
+    {
+        _evaluator = new HandcraftedEvaluator();
+        _tt = tt;
+    }
+
     public Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
     {
         return Task.Run(() =>
@@ -393,4 +400,16 @@ public class SearchEngine : IAiEngine
     }
 
     public TTStatistics GetTTStatistics() => _tt.GetStatistics();
+
+    /// <inheritdoc/>
+    public IAiEngine CloneWithCopiedTT() => new SearchEngine(_tt.Clone());
+
+    /// <inheritdoc/>
+    public void MergeTranspositionTableFrom(IAiEngine other)
+    {
+        if (other is SearchEngine otherEngine)
+        {
+            _tt.MergeFrom(otherEngine._tt);
+        }
+    }
 }

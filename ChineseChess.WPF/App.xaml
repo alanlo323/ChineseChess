@@ -12,6 +12,7 @@
             <converters:ColorConverter x:Key="ColorConverter" />
             <converters:PieceTextConverter x:Key="PieceTextConverter" />
             <converters:SmartHintScoreToBrushConverter x:Key="SmartHintScoreToBrushConverter" />
+            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

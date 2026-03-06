@@ -75,11 +75,77 @@ public class TranspositionTable
         _generation = 0;
     }
 
+    // 私有建構子：直接以條目數建立空表（Clone 專用）
+    private TranspositionTable(ulong size)
+    {
+        _size = Math.Max(size, 1024);
+        _keys = new ulong[_size];
+        _data = new ulong[_size];
+        _generation = 0;
+    }
+
     public byte Generation => _generation;
 
     public void NewGeneration()
     {
         _generation++;
+    }
+
+    /// <summary>
+    /// 建立本 TT 的深度複製。複製後兩表彼此獨立，世代與資料跟原表一致，
+    /// 但統計（查詢次數、命中）從零開始。
+    /// </summary>
+    public TranspositionTable Clone()
+    {
+        var clone = new TranspositionTable(_size);
+        System.Array.Copy(_keys, clone._keys, (int)_size);
+        System.Array.Copy(_data, clone._data, (int)_size);
+        clone._generation = _generation;
+        Interlocked.Exchange(ref clone._occupiedCount, Interlocked.Read(ref _occupiedCount));
+        return clone;
+    }
+
+    /// <summary>
+    /// 將 <paramref name="other"/> 中的所有有效條目合併進本表，
+    /// 採「深度優先」策略：僅在 other 條目搜尋深度大於本表現有條目時才取代。
+    /// 兩表大小可以不同；合併時依 zobrist key 重新計算本表索引。
+    /// </summary>
+    public void MergeFrom(TranspositionTable other)
+    {
+        for (ulong i = 0; i < other._size; i++)
+        {
+            ulong otherKeyXorData = Volatile.Read(ref other._keys[i]);
+            ulong otherData       = Volatile.Read(ref other._data[i]);
+
+            if (otherKeyXorData == 0) continue; // 空槽，跳過
+
+            // _keys[i] = zobristKey ^ _data[i] → 還原 zobrist key
+            ulong zobristKey = otherKeyXorData ^ otherData;
+            byte  otherDepth = (byte)((otherData >> 16) & 0xFF);
+
+            // 計算本表中該 key 的對應槽位
+            ulong ourIndex     = zobristKey % _size;
+            ulong myKeyXorData = Volatile.Read(ref _keys[ourIndex]);
+            ulong myData       = Volatile.Read(ref _data[ourIndex]);
+
+            if (myKeyXorData == 0)
+            {
+                // 本表槽位為空，直接填入
+                Interlocked.Increment(ref _occupiedCount);
+                Volatile.Write(ref _data[ourIndex], otherData);
+                Volatile.Write(ref _keys[ourIndex], zobristKey ^ otherData);
+            }
+            else
+            {
+                // 深度優先替換：只有 other 的深度更大才覆寫
+                byte myDepth = (byte)((myData >> 16) & 0xFF);
+                if (otherDepth > myDepth)
+                {
+                    Volatile.Write(ref _data[ourIndex], otherData);
+                    Volatile.Write(ref _keys[ourIndex], zobristKey ^ otherData);
+                }
+            }
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
