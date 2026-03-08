@@ -1,3 +1,4 @@
+using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Enums;
@@ -16,15 +17,15 @@ public class ControlPanelViewModel : ObservableObject
     private readonly IGameService _gameService;
     private GameMode _selectedMode = GameMode.PlayerVsAi;
     private string _statusMessage = "Ready";
-    private int _searchDepth = 5;
-    private int _searchThinkingTime = 3;
-    private int _redSearchDepth = 5;
-    private int _redSearchThinkingTime = 3;
-    private int _blackSearchDepth = 5;
-    private int _blackSearchThinkingTime = 3;
-    private bool _useSharedTT = false;
-    private bool _isSmartHintEnabled = true;
-    private int _smartHintDepth = 2;
+    private int _searchDepth;
+    private int _searchThinkingTime;
+    private int _redSearchDepth;
+    private int _redSearchThinkingTime;
+    private int _blackSearchDepth;
+    private int _blackSearchThinkingTime;
+    private bool _useSharedTT;
+    private bool _isSmartHintEnabled;
+    private int _smartHintDepth;
     private TTStatistics _ttStats = new TTStatistics();
     private TTStatistics? _blackTtStats = null;
 
@@ -215,9 +216,23 @@ public class ControlPanelViewModel : ObservableObject
     public ICommand RefreshTTStatsCommand { get; }
     public ICommand MergeTranspositionTablesCommand { get; }
 
-    public ControlPanelViewModel(IGameService gameService)
+    public ControlPanelViewModel(IGameService gameService, GameSettings settings)
     {
         _gameService = gameService;
+
+        _searchDepth            = settings.SearchDepth;
+        _searchThinkingTime     = settings.SearchThinkingTimeSeconds;
+        _redSearchDepth         = settings.RedSearchDepth;
+        _redSearchThinkingTime  = settings.RedSearchThinkingTimeSeconds;
+        _blackSearchDepth       = settings.BlackSearchDepth;
+        _blackSearchThinkingTime = settings.BlackSearchThinkingTimeSeconds;
+        _useSharedTT            = settings.UseSharedTranspositionTable;
+        _isSmartHintEnabled     = settings.IsSmartHintEnabled;
+        _smartHintDepth         = settings.SmartHintDepth;
+
+        _gameService.IsSmartHintEnabled = _isSmartHintEnabled;
+        _gameService.SmartHintDepth     = _smartHintDepth;
+        _gameService.UseSharedTranspositionTable = _useSharedTT;
 
         RefreshTTStatsCommand = new RelayCommand(_ => RefreshTTStats());
         StartGameCommand = new RelayCommand(async _ => await _gameService.StartGameAsync(SelectedMode));

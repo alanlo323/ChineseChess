@@ -1,8 +1,10 @@
+using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Services;
 using ChineseChess.Infrastructure.AI.Search;
 using ChineseChess.WPF.ViewModels;
 using MainWindowView = ChineseChess.WPF.Views.MainWindow;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Windows;
@@ -22,7 +24,17 @@ public partial class App : System.Windows.Application
 
     private static IServiceProvider ConfigureServices()
     {
+        var config = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+            .Build();
+
+        var gameSettings = new GameSettings();
+        config.GetSection("GameSettings").Bind(gameSettings);
+
         var services = new ServiceCollection();
+
+        services.AddSingleton(gameSettings);
 
         // 基礎設施（Infrastructure）
         services.AddSingleton<IAiEngine, SearchEngine>();

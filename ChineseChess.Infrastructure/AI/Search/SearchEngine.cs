@@ -1,3 +1,4 @@
+using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Helpers;
@@ -27,11 +28,14 @@ public class SearchEngine : IAiEngine
         public string? BestMove;
     }
 
-    public SearchEngine()
+    public SearchEngine(GameSettings settings)
     {
         _evaluator = new HandcraftedEvaluator();
-        _tt = new TranspositionTable(64);
+        _tt = new TranspositionTable(settings.TranspositionTableSizeMb);
     }
+
+    // 測試用：使用預設設定
+    public SearchEngine() : this(new GameSettings()) { }
 
     // 以既有 TT 建立引擎（CloneWithCopiedTT 專用）
     private SearchEngine(TranspositionTable tt)

@@ -21,11 +21,11 @@ public class MainViewModel : ObservableObject
         set => SetProperty(ref _analysisText, value);
     }
 
-    public MainViewModel(IGameService gameService)
+    public MainViewModel(IGameService gameService, ChessBoardViewModel chessBoard, ControlPanelViewModel controlPanel)
     {
         _gameService = gameService;
-        ChessBoard = new ChessBoardViewModel(gameService);
-        ControlPanel = new ControlPanelViewModel(gameService);
+        ChessBoard = chessBoard;
+        ControlPanel = controlPanel;
 
         gameService.HintReady += hint => OnHintReady(hint);
         gameService.ThinkingProgress += progress => OnThinkingProgress(progress);
