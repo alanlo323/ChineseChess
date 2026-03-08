@@ -186,7 +186,13 @@ internal sealed class SearchWorker
             ttMove = entry.BestMove;
         }
 
-        // 2. 葉節點：進入 quiescence
+        // 2. 重覆局面偵測（搜尋中用 2 次閾值視為和棋，回傳 0）
+        if (ply > 0 && _board.IsDrawByRepetition(threshold: 2))
+        {
+            return 0;
+        }
+
+        // 3. 葉節點：進入 quiescence
         if (depth <= 0)
         {
             return Quiescence(alpha, beta, 0);

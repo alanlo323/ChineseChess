@@ -5,7 +5,8 @@
       "Bash(dotnet build --no-restore -v quiet)",
       "Bash(powershell:*)",
       "Bash(dotnet build:*)",
-      "Bash(dotnet test:*)"
+      "Bash(dotnet test:*)",
+      "Bash(ls found:*)"
     ]
   },
   "outputStyle": "Explanatory"

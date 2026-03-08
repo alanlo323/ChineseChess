@@ -58,6 +58,7 @@ public class GameService : IGameService
         _aiCts?.Cancel();
         _aiPauseSignal.Set();
         _board = new Board(); // 重置為標準初始局
+        _isGameOver = false;
         Interlocked.Exchange(ref _completedGameNodes, 0);
         Interlocked.Exchange(ref _lastSearchNodes, 0);
         Interlocked.Exchange(ref _lastSearchNps, 0);
@@ -254,6 +255,7 @@ public class GameService : IGameService
     public async Task HumanMoveAsync(Move move)
     {
         if (_isThinking) return;
+        if (_isGameOver) return;
         if (_currentMode == GameMode.AiVsAi) return;
         if (move.From >= Board.BoardSize || move.To >= Board.BoardSize || move.From == move.To)
         {
@@ -398,11 +400,30 @@ public class GameService : IGameService
         return _redAiSettings;
     }
 
+    private bool _isGameOver;
+
     private bool CheckGameOver()
     {
+        // 和棋優先判定（三次重覆局面）
+        if (_board.IsDrawByRepetition())
+        {
+            _isGameOver = true;
+            GameMessage?.Invoke("和棋！三次重覆局面");
+            return true;
+        }
+
+        // 和棋判定（六十步無吃子）
+        if (_board.IsDrawByNoCapture())
+        {
+            _isGameOver = true;
+            GameMessage?.Invoke("和棋！六十步無吃子");
+            return true;
+        }
+
         var currentTurn = _board.Turn;
         if (_board.GenerateLegalMoves().Any()) return false;
 
+        _isGameOver = true;
         var winner = currentTurn == PieceColor.Red ? "黑方" : "紅方";
         if (_board.IsCheck(currentTurn))
             GameMessage?.Invoke($"將死！{winner}獲勝！");

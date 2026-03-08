@@ -16,19 +16,29 @@ public class Board : IBoard
     private readonly Piece[] _pieces = new Piece[BoardSize];
     private PieceColor _turn;
     private ulong _zobristKey;
-    
+
     // Undo 用的歷史紀錄
     private readonly Stack<GameState> _history = new Stack<GameState>();
+
+    // 和棋判定用：Zobrist Key 歷史（每次 MakeMove 後紀錄）
+    private readonly List<ulong> _zobristHistory = new List<ulong>();
+
+    // 無吃子半回合計數器（達 60 觸發和棋）
+    private int _halfMoveClock;
 
     private struct GameState
     {
         public Move Move;
         public Piece CapturedPiece;
         public bool IsNullMove;
+        public int PreviousHalfMoveClock;
     }
 
     public PieceColor Turn => _turn;
     public ulong ZobristKey => _zobristKey;
+
+    /// <summary>無吃子半回合計數。每走一步無吃子 +1，吃子後歸零。</summary>
+    public int HalfMoveClock => _halfMoveClock;
 
     public Board()
     {
@@ -36,7 +46,9 @@ public class Board : IBoard
         for (int i = 0; i < BoardSize; i++) _pieces[i] = Piece.None;
         _turn = PieceColor.Red;
         _zobristKey = 0;
-        
+        // 記錄初始局面（空棋盤）的 Key，供和棋判定使用
+        _zobristHistory.Add(_zobristKey);
+
         // Turn 的初始 Zobrist（若要納入 Turn）
         // _zobristKey ^= ZobristHash.SideToMoveKey; // 若紅方先手且要對黑方 XOR，反之亦然。
         // 假設 Turn 在黑方時將 SideToMoveKey 包進 Key？
@@ -101,12 +113,21 @@ public class Board : IBoard
         _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
         _zobristKey ^= ZobristHash.SideToMoveKey;
 
+        // 維護無吃子計數
+        bool isCapture = !target.IsNone;
+        int previousHalfMoveClock = _halfMoveClock;
+        _halfMoveClock = isCapture ? 0 : _halfMoveClock + 1;
+
         // 推入歷史紀錄
         _history.Push(new GameState
         {
             Move = move,
             CapturedPiece = target,
+            PreviousHalfMoveClock = previousHalfMoveClock,
         });
+
+        // 記錄走完後的 Zobrist Key 到歷史列表（和棋判定用）
+        _zobristHistory.Add(_zobristKey);
     }
 
     public void UnmakeMove(Move move)
@@ -119,6 +140,15 @@ public class Board : IBoard
             _history.Push(state);
             throw new InvalidOperationException("Unmake move does not match history.");
         }
+
+        // 移除最後一筆 Zobrist 歷史（和棋判定用）
+        if (!state.IsNullMove && _zobristHistory.Count > 0)
+        {
+            _zobristHistory.RemoveAt(_zobristHistory.Count - 1);
+        }
+
+        // 還原無吃子計數
+        _halfMoveClock = state.PreviousHalfMoveClock;
 
         // 回復行棋方
         _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
@@ -216,6 +246,8 @@ public class Board : IBoard
         for (int i = 0; i < BoardSize; i++) _pieces[i] = Piece.None;
         _zobristKey = 0;
         _history.Clear();
+        _zobristHistory.Clear();
+        _halfMoveClock = 0;
 
         for (int r = 0; r < 10; r++)
         {
@@ -259,7 +291,10 @@ public class Board : IBoard
             _ => throw new ArgumentException("Invalid FEN side to move.")
         }; // 'w' 為標準表示，'r' 可能也會被使用
         if (_turn == PieceColor.Black) _zobristKey ^= ZobristHash.SideToMoveKey;
-        
+
+        // 記錄解析後局面的 Key 為起始點（和棋判定用）
+        _zobristHistory.Add(_zobristKey);
+
         // TODO：解析著法時計數（move clocks / counters）
     }
 
@@ -727,7 +762,55 @@ public class Board : IBoard
         Array.Copy(_pieces, b._pieces, BoardSize);
         b._turn = _turn;
         b._zobristKey = _zobristKey;
-        // 搜尋時通常不複製歷史堆疊；若要做深度複製（deep clone）才需要它
+        b._halfMoveClock = _halfMoveClock;
+        // 複製 Zobrist 歷史以便 Clone 後繼續做和棋判定
+        b._zobristHistory.AddRange(_zobristHistory);
+        // 搜尋時不複製 Undo 堆疊（僅 Clone 棋盤狀態）
         return b;
+    }
+
+    // --- 和棋判定 ---
+
+    /// <summary>
+    /// 判定是否達到重覆局面和棋條件。
+    /// 預設閾值為 3（同一局面出現三次，含當前局面）。
+    /// _zobristHistory 的最後一筆就是當前局面 Key（由 MakeMove 和 ParseFen 維護）。
+    /// </summary>
+    public bool IsDrawByRepetition(int threshold = 3)
+    {
+        int count = _zobristHistory.Count;
+        if (count == 0) return false;
+
+        // _zobristHistory 最後一筆是當前局面
+        ulong currentKey = _zobristHistory[count - 1];
+        int occurrences = 1; // 當前局面本身算一次
+
+        // 每隔 2 步才是同一行棋方的局面，從倒數第 3 筆（隔 2）開始往前找
+        for (int i = count - 3; i >= 0; i -= 2)
+        {
+            if (_zobristHistory[i] == currentKey)
+            {
+                occurrences++;
+                if (occurrences >= threshold) return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 判定是否達到無吃子步數和棋條件（六十步）。
+    /// </summary>
+    public bool IsDrawByNoCapture(int limit = 60)
+    {
+        return _halfMoveClock >= limit;
+    }
+
+    /// <summary>
+    /// 判定是否達到任一和棋條件（三次重覆局面或六十步無吃子）。
+    /// </summary>
+    public bool IsDraw()
+    {
+        return IsDrawByRepetition() || IsDrawByNoCapture();
     }
 }
