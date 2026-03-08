@@ -99,6 +99,29 @@ public class FenTests
         Assert.Contains("B", fen); // 紅象
     }
 
+    /// <summary>
+    /// 回歸測試：確認開局車馬位置正確。
+    /// 背景：PieceTextConverter 曾將 Horse 和 Rook 的中文字對調，
+    /// 導致畫面上車和馬看起來位置互換，但 Domain 層的類型本身一直是正確的。
+    /// </summary>
+    [Fact]
+    public void InitialPosition_CornersAreRooks_AndAdjacentAreHorses()
+    {
+        var board = new Board(InitialFen);
+
+        // 四個角落必須是車（Rook），而非馬（Horse）
+        Assert.Equal(PieceType.Rook, board.GetPiece(0).Type);   // 黑方左車 (row0, col0)
+        Assert.Equal(PieceType.Rook, board.GetPiece(8).Type);   // 黑方右車 (row0, col8)
+        Assert.Equal(PieceType.Rook, board.GetPiece(81).Type);  // 紅方左車 (row9, col0)
+        Assert.Equal(PieceType.Rook, board.GetPiece(89).Type);  // 紅方右車 (row9, col8)
+
+        // 角落旁邊必須是馬（Horse），而非車（Rook）
+        Assert.Equal(PieceType.Horse, board.GetPiece(1).Type);  // 黑方左馬 (row0, col1)
+        Assert.Equal(PieceType.Horse, board.GetPiece(7).Type);  // 黑方右馬 (row0, col7)
+        Assert.Equal(PieceType.Horse, board.GetPiece(82).Type); // 紅方左馬 (row9, col1)
+        Assert.Equal(PieceType.Horse, board.GetPiece(88).Type); // 紅方右馬 (row9, col7)
+    }
+
     [Fact]
     public void ParseFen_EmptyBoard_AllPiecesNone()
     {

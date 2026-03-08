@@ -210,6 +210,8 @@ public class ControlPanelViewModel : ObservableObject
     public ICommand ResumeThinkingCommand { get; }
     public ICommand ExportTranspositionTableCommand { get; }
     public ICommand ImportTranspositionTableCommand { get; }
+    public ICommand ExportBlackTranspositionTableCommand { get; }
+    public ICommand ImportBlackTranspositionTableCommand { get; }
     public ICommand RefreshTTStatsCommand { get; }
     public ICommand MergeTranspositionTablesCommand { get; }
 
@@ -291,6 +293,62 @@ public class ControlPanelViewModel : ObservableObject
             catch (Exception ex)
             {
                 StatusMessage = $"TT 表匯入失敗：{ex.Message}";
+            }
+        });
+
+        ExportBlackTranspositionTableCommand = new RelayCommand(async _ =>
+        {
+            try
+            {
+                var dialog = new SaveFileDialog
+                {
+                    Title = "匯出黑方 TT 表",
+                    Filter = "Chinese Chess TT|*.cctt;*.json|Binary|*.cctt|JSON|*.json|All files|*.*",
+                    FileName = $"transposition-table-black-{DateTime.Now:yyyyMMdd_HHmmss}.cctt"
+                };
+
+                if (dialog.ShowDialog() != true) return;
+
+                var asJson = string.Equals(
+                    Path.GetExtension(dialog.FileName),
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase);
+
+                StatusMessage = "匯出黑方 TT 表中...";
+                await _gameService.ExportBlackTranspositionTableAsync(dialog.FileName, asJson);
+                StatusMessage = "黑方 TT 表匯出完成";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"黑方 TT 表匯出失敗：{ex.Message}";
+            }
+        });
+
+        ImportBlackTranspositionTableCommand = new RelayCommand(async _ =>
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = "匯入黑方 TT 表",
+                    Filter = "Chinese Chess TT|*.cctt;*.json|Binary|*.cctt|JSON|*.json|All files|*.*",
+                    CheckFileExists = true
+                };
+
+                if (dialog.ShowDialog() != true) return;
+
+                var asJson = string.Equals(
+                    Path.GetExtension(dialog.FileName),
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase);
+
+                StatusMessage = "匯入黑方 TT 表中...";
+                await _gameService.ImportBlackTranspositionTableAsync(dialog.FileName, asJson);
+                StatusMessage = "黑方 TT 表匯入完成";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"黑方 TT 表匯入失敗：{ex.Message}";
             }
         });
 

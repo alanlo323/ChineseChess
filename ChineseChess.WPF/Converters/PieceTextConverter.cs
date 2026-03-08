@@ -20,8 +20,8 @@ public class PieceTextConverter : IValueConverter
             PieceType.King => piece.Color == PieceColor.Red ? "帥" : "將",
             PieceType.Advisor => piece.Color == PieceColor.Red ? "仕" : "士",
             PieceType.Elephant => piece.Color == PieceColor.Red ? "相" : "象",
-            PieceType.Horse => piece.Color == PieceColor.Red ? "俥" : "車",
-            PieceType.Rook => piece.Color == PieceColor.Red ? "傌" : "馬",
+            PieceType.Horse => piece.Color == PieceColor.Red ? "傌" : "馬",
+            PieceType.Rook => piece.Color == PieceColor.Red ? "俥" : "車",
             PieceType.Cannon => piece.Color == PieceColor.Red ? "炮" : "砲",
             PieceType.Pawn => piece.Color == PieceColor.Red ? "兵" : "卒",
             _ => string.Empty

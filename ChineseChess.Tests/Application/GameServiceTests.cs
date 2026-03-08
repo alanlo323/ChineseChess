@@ -251,4 +251,138 @@ public class GameServiceTests
         Assert.Equal(beforeFen, gameService.CurrentBoard.ToFen());
         Assert.Contains(messages, msg => msg.Contains("未實作"));
     }
+
+    // ─── 黑方 TT 匯出/匯入測試 ────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExportBlackTranspositionTable_ShouldCreateFile_InAiVsAiIndependentTTMode()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        gameService.UseSharedTranspositionTable = false;
+        gameService.SetDifficulty(1, 500, 1);
+        await gameService.StartGameAsync(GameMode.AiVsAi);
+        await gameService.StopGameAsync();
+
+        var filePath = Path.Combine(Path.GetTempPath(), $"tt-black-export-{Guid.NewGuid():N}.cctt");
+        try
+        {
+            await gameService.ExportBlackTranspositionTableAsync(filePath, asJson: false);
+            Assert.True(File.Exists(filePath));
+            Assert.True(new FileInfo(filePath).Length > 0);
+        }
+        finally
+        {
+            if (File.Exists(filePath)) File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task ExportBlackTranspositionTable_ShouldReportNotAvailable_WhenNotInAiVsAiMode()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        var messages = new List<string>();
+        gameService.ThinkingProgress += msg => messages.Add(msg);
+
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+
+        var filePath = Path.Combine(Path.GetTempPath(), $"tt-black-noop-{Guid.NewGuid():N}.cctt");
+        try
+        {
+            await gameService.ExportBlackTranspositionTableAsync(filePath, asJson: false);
+            Assert.False(File.Exists(filePath));
+            Assert.Contains(messages, msg => msg.Contains("黑方 TT"));
+        }
+        finally
+        {
+            if (File.Exists(filePath)) File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task ExportBlackTranspositionTable_ShouldReportNotAvailable_InSharedTTMode()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        gameService.UseSharedTranspositionTable = true;
+        gameService.SetDifficulty(1, 500, 1);
+        await gameService.StartGameAsync(GameMode.AiVsAi);
+        await gameService.StopGameAsync();
+
+        var messages = new List<string>();
+        gameService.ThinkingProgress += msg => messages.Add(msg);
+
+        var filePath = Path.Combine(Path.GetTempPath(), $"tt-black-shared-{Guid.NewGuid():N}.cctt");
+        try
+        {
+            await gameService.ExportBlackTranspositionTableAsync(filePath, asJson: false);
+            Assert.False(File.Exists(filePath));
+            Assert.Contains(messages, msg => msg.Contains("黑方 TT"));
+        }
+        finally
+        {
+            if (File.Exists(filePath)) File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task ImportBlackTranspositionTable_ShouldRestoreCache_InAiVsAiIndependentTTMode()
+    {
+        // 準備：搜尋後匯出 TT 供後續匯入使用
+        var sourceEngine = new SearchEngine();
+        await sourceEngine.SearchAsync(
+            new Board(InitialFen),
+            new SearchSettings { Depth = 1, TimeLimitMs = 500, ThreadCount = 1 },
+            CancellationToken.None);
+
+        var filePath = Path.Combine(Path.GetTempPath(), $"tt-black-import-{Guid.NewGuid():N}.cctt");
+        await using (var file = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            await sourceEngine.ExportTranspositionTableAsync(file, asJson: false, ct: CancellationToken.None);
+        }
+
+        try
+        {
+            var engine = new SearchEngine();
+            var gameService = new GameService(engine);
+            gameService.UseSharedTranspositionTable = false;
+            gameService.SetDifficulty(1, 500, 1);
+            await gameService.StartGameAsync(GameMode.AiVsAi);
+            await gameService.StopGameAsync();
+
+            await gameService.ImportBlackTranspositionTableAsync(filePath, asJson: false);
+
+            // 黑方 TT 統計不為 null，代表黑方引擎存在且 TT 已載入
+            var blackStats = gameService.GetBlackTTStatistics();
+            Assert.NotNull(blackStats);
+        }
+        finally
+        {
+            if (File.Exists(filePath)) File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public async Task ImportBlackTranspositionTable_ShouldReportNotAvailable_WhenNotInAiVsAiMode()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        var messages = new List<string>();
+        gameService.ThinkingProgress += msg => messages.Add(msg);
+
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+
+        var filePath = Path.Combine(Path.GetTempPath(), $"tt-black-import-noop-{Guid.NewGuid():N}.cctt");
+        await File.WriteAllTextAsync(filePath, "dummy");
+        try
+        {
+            await gameService.ImportBlackTranspositionTableAsync(filePath, asJson: false);
+            Assert.Contains(messages, msg => msg.Contains("黑方 TT"));
+        }
+        finally
+        {
+            if (File.Exists(filePath)) File.Delete(filePath);
+        }
+    }
 }

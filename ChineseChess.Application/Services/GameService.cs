@@ -181,6 +181,76 @@ public class GameService : IGameService
         }
     }
 
+    public async Task ExportBlackTranspositionTableAsync(string filePath, bool asJson, CancellationToken ct = default)
+    {
+        if (_aiEngineBlack == null)
+        {
+            ThinkingProgress?.Invoke("黑方 TT 不存在（非獨立 TT 模式）");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            ThinkingProgress?.Invoke("黑方 TT 匯出失敗：未指定檔案路徑");
+            return;
+        }
+
+        try
+        {
+            await EnsureAiStoppedForPersistenceAsync(ct);
+            ThinkingProgress?.Invoke("黑方 TT 匯出中...");
+            await using var file = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            await _aiEngineBlack.ExportTranspositionTableAsync(file, asJson, ct);
+            ThinkingProgress?.Invoke("黑方 TT 匯出完成");
+        }
+        catch (OperationCanceledException)
+        {
+            ThinkingProgress?.Invoke("黑方 TT 匯出已取消");
+        }
+        catch (Exception ex)
+        {
+            ThinkingProgress?.Invoke($"黑方 TT 匯出失敗：{ex.Message}");
+        }
+    }
+
+    public async Task ImportBlackTranspositionTableAsync(string filePath, bool asJson, CancellationToken ct = default)
+    {
+        if (_aiEngineBlack == null)
+        {
+            ThinkingProgress?.Invoke("黑方 TT 不存在（非獨立 TT 模式）");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            ThinkingProgress?.Invoke("黑方 TT 匯入失敗：未指定檔案路徑");
+            return;
+        }
+
+        if (!File.Exists(filePath))
+        {
+            ThinkingProgress?.Invoke("黑方 TT 匯入失敗：檔案不存在");
+            return;
+        }
+
+        try
+        {
+            await EnsureAiStoppedForPersistenceAsync(ct);
+            ThinkingProgress?.Invoke("黑方 TT 匯入中...");
+            await using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await _aiEngineBlack.ImportTranspositionTableAsync(file, asJson, ct);
+            ThinkingProgress?.Invoke("黑方 TT 匯入完成");
+        }
+        catch (OperationCanceledException)
+        {
+            ThinkingProgress?.Invoke("黑方 TT 匯入已取消");
+        }
+        catch (Exception ex)
+        {
+            ThinkingProgress?.Invoke($"黑方 TT 匯入失敗：{ex.Message}");
+        }
+    }
+
     public async Task HumanMoveAsync(Move move)
     {
         if (_isThinking) return;
