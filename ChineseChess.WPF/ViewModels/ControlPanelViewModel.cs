@@ -10,6 +10,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Timers;
 using System.Windows.Input;
 
 namespace ChineseChess.WPF.ViewModels;
@@ -30,8 +33,10 @@ public class ControlPanelViewModel : ObservableObject
     private int _smartHintDepth;
     private TTStatistics _ttStats = new TTStatistics();
     private TTStatistics? _blackTtStats = null;
-    private int _ttExploreMaxDepth = 6;
-    private string _ttExplorerText = "（尚未執行）";
+    private const int TTExploreMaxDepth = 20;   // 固定最大深度（TT 搜尋深度通常 ≤ 10，此值足以顯示全樹）
+    private string _ttExplorerText = "（初始化中...）";
+    private readonly System.Timers.Timer _ttExplorerTimer;
+    private int _ttExplorerBusy;   // Interlocked 防止重疊執行（0 = 閒置，1 = 執行中）
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
@@ -207,12 +212,6 @@ public class ControlPanelViewModel : ObservableObject
 
     // ─── TT 探索 ──────────────────────────────────────────────────────────
 
-    public int TTExploreMaxDepth
-    {
-        get => _ttExploreMaxDepth;
-        set => SetProperty(ref _ttExploreMaxDepth, value);
-    }
-
     public string TTExplorerText
     {
         get => _ttExplorerText;
@@ -233,8 +232,6 @@ public class ControlPanelViewModel : ObservableObject
     public ICommand ImportBlackTranspositionTableCommand { get; }
     public ICommand RefreshTTStatsCommand { get; }
     public ICommand MergeTranspositionTablesCommand { get; }
-    public ICommand EnumerateTTEntriesCommand { get; }
-    public ICommand ExploreTTTreeCommand { get; }
 
     public ControlPanelViewModel(IGameService gameService, GameSettings settings)
     {
@@ -426,55 +423,11 @@ public class ControlPanelViewModel : ObservableObject
             }
         });
 
-        EnumerateTTEntriesCommand = new RelayCommand(_ =>
-        {
-            try
-            {
-                var entries = _gameService.EnumerateTTEntries().ToList();
-                var byDepth = entries.GroupBy(e => e.Depth)
-                                     .OrderBy(g => g.Key)
-                                     .Select(g => $"  深度 {g.Key,2}：{g.Count(),6:N0} 條");
-                var byFlag = entries.GroupBy(e => e.Flag)
-                                    .OrderBy(g => g.Key)
-                                    .Select(g => $"  {g.Key,-12}：{g.Count(),6:N0} 條");
-                var sb = new System.Text.StringBuilder();
-                sb.AppendLine($"TT 有效條目總數：{entries.Count:N0}");
-                sb.AppendLine();
-                sb.AppendLine("── 深度分布 ──");
-                foreach (var line in byDepth) sb.AppendLine(line);
-                sb.AppendLine();
-                sb.AppendLine("── 旗標分布 ──");
-                foreach (var line in byFlag) sb.AppendLine(line);
-                TTExplorerText = sb.ToString();
-            }
-            catch (Exception ex)
-            {
-                TTExplorerText = $"枚舉失敗：{ex.Message}";
-            }
-        });
-
-        ExploreTTTreeCommand = new RelayCommand(_ =>
-        {
-            try
-            {
-                var root = _gameService.ExploreTTTree(_ttExploreMaxDepth);
-                if (root == null)
-                {
-                    TTExplorerText = "當前局面不在 TT 中（尚未搜尋過此局面）";
-                    return;
-                }
-                var sb = new System.Text.StringBuilder();
-                sb.AppendLine($"TT 搜尋樹（最大深度 {_ttExploreMaxDepth}）");
-                sb.AppendLine();
-                // 傳入當前棋盤（根節點的「父棋盤」即現局）
-                AppendTreeNode(sb, root, "", isRoot: true, parentBoard: _gameService.CurrentBoard);
-                TTExplorerText = sb.ToString();
-            }
-            catch (Exception ex)
-            {
-                TTExplorerText = $"探索失敗：{ex.Message}";
-            }
-        });
+        // TT 探索計時器：每秒在背景執行緒更新，透過 Dispatcher 推送至 UI
+        _ttExplorerTimer = new System.Timers.Timer(100);
+        _ttExplorerTimer.AutoReset = true;
+        _ttExplorerTimer.Elapsed += (_, _) => ScheduleTTExplorerRefresh();
+        _ttExplorerTimer.Start();
 
         _gameService.SetDifficulty(_searchDepth, _searchThinkingTime * 1000);
 
@@ -521,6 +474,97 @@ public class ControlPanelViewModel : ObservableObject
         OnPropertyChanged(nameof(SearchNodes));
         OnPropertyChanged(nameof(SearchNps));
         OnPropertyChanged(nameof(ShowDualTTStats));
+    }
+
+    /// <summary>
+    /// 計時器觸發時呼叫：若上一次更新尚未完成則跳過（防止重疊）。
+    /// 在 Task.Run 背景執行緒產生文字，再透過 Dispatcher 更新 UI。
+    /// </summary>
+    private void ScheduleTTExplorerRefresh()
+    {
+        // CAS：0→1 成功才進入，否則跳過此次
+        if (Interlocked.CompareExchange(ref _ttExplorerBusy, 1, 0) != 0) return;
+
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                string text = BuildTTExplorerText();
+                var app = global::System.Windows.Application.Current;
+                app?.Dispatcher.Invoke(() => TTExplorerText = text);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _ttExplorerBusy, 0);
+            }
+        });
+    }
+
+    private string BuildTTExplorerText()
+    {
+        var sb = new StringBuilder();
+
+        // ── 條目分布 ────────────────────────────────────────
+        sb.AppendLine("══ TT 條目分布 ══════════════════════════════");
+        try
+        {
+            var entries = _gameService.EnumerateTTEntries().ToList();
+            int total = entries.Count;
+            sb.AppendLine($"有效條目：{total:N0}");
+            sb.AppendLine();
+
+            if (total > 0)
+            {
+                // 深度分布（附簡易長條圖）
+                sb.AppendLine("深度分布：");
+                var byDepth = entries.GroupBy(e => e.Depth)
+                                     .OrderBy(g => g.Key)
+                                     .Select(g => (Depth: g.Key, Count: g.Count()))
+                                     .ToList();
+                int maxCount = byDepth.Max(x => x.Count);
+                const int BarWidth = 20;
+                foreach (var (depth, count) in byDepth)
+                {
+                    int bars = maxCount > 0 ? (int)Math.Round((double)count / maxCount * BarWidth) : 0;
+                    string bar = new string('█', bars).PadRight(BarWidth);
+                    sb.AppendLine($"  深度 {depth,2}：{count,7:N0} {bar}");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("旗標分布：");
+                foreach (var g in entries.GroupBy(e => e.Flag).OrderBy(g => g.Key))
+                    sb.AppendLine($"  {g.Key,-12}：{g.Count(),7:N0}");
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"（枚舉失敗：{ex.Message}）");
+        }
+
+        sb.AppendLine();
+
+        // ── 思路樹 ───────────────────────────────────────────
+        sb.AppendLine("══ 思路樹 ═══════════════════════════════════");
+        try
+        {
+            // 取快照以確保棋盤在整個遞迴中不被修改
+            var boardSnapshot = _gameService.CurrentBoard.Clone();
+            var root = _gameService.ExploreTTTree(TTExploreMaxDepth);
+            if (root == null)
+            {
+                sb.AppendLine("（當前局面不在 TT 中，尚未搜尋過此局面）");
+            }
+            else
+            {
+                AppendTreeNode(sb, root, "", isRoot: true, parentBoard: boardSnapshot);
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"（探索失敗：{ex.Message}）");
+        }
+
+        return sb.ToString();
     }
 
     private static void AppendTreeNode(
