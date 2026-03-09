@@ -45,6 +45,24 @@ public class MoveEvaluation
     public bool IsBest { get; set; }
 }
 
+public enum TTFlag : byte
+{
+    None = 0,
+    Exact = 1,
+    LowerBound = 2,
+    UpperBound = 3
+}
+
+public struct TTEntry
+{
+    public ulong Key;
+    public short Score;
+    public byte Depth;
+    public TTFlag Flag;
+    public Move BestMove;
+    public byte Generation;
+}
+
 public class TTStatistics
 {
     public ulong Capacity { get; set; }          // 表格容量（條目數）
@@ -55,6 +73,17 @@ public class TTStatistics
     public double HitRate { get; set; }          // 命中率（0.0–1.0）
     public long OccupiedEntries { get; set; }    // 已佔用條目數（有效節點）
     public double FillRate { get; set; }         // 填滿率（0.0–1.0）
+}
+
+/// <summary>
+/// TT 樹狀探索的單一節點。
+/// </summary>
+public class TTTreeNode
+{
+    public TTEntry Entry { get; init; }
+    /// <summary>從父節點走到此節點所執行的走法。根節點此欄位為預設值（無意義）。</summary>
+    public Move MoveToHere { get; init; }
+    public List<TTTreeNode> Children { get; init; } = [];
 }
 
 public interface IAiEngine
@@ -70,4 +99,16 @@ public interface IAiEngine
 
     /// <summary>將 <paramref name="other"/> 引擎的 TT 以深度優先策略合併進本引擎的 TT。</summary>
     void MergeTranspositionTableFrom(IAiEngine other);
+
+    /// <summary>
+    /// 枚舉 TT 中所有有效條目（惰性求值）。
+    /// 適合統計分析，不保證執行緒安全（讀取時 TT 可能仍在更新）。
+    /// </summary>
+    IEnumerable<TTEntry> EnumerateTTEntries();
+
+    /// <summary>
+    /// 從 <paramref name="board"/> 當前局面出發，沿 TT 中 BestMove 連結遞迴追蹤，
+    /// 建立搜尋樹節點結構。若當前局面不在 TT 中，回傳 <c>null</c>。
+    /// </summary>
+    TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6);
 }

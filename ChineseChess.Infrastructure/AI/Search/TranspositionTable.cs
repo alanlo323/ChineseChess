@@ -3,31 +3,13 @@ using ChineseChess.Domain.Entities;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 
 namespace ChineseChess.Infrastructure.AI.Search;
-
-public enum TTFlag : byte
-{
-    None = 0,
-    Exact = 1,
-    LowerBound = 2,
-    UpperBound = 3
-}
-
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public struct TTEntry
-{
-    public ulong Key;
-    public short Score;
-    public byte Depth;
-    public TTFlag Flag;
-    public Move BestMove;
-    public byte Generation;
-}
 
 public sealed class TTStateSnapshot
 {
@@ -394,5 +376,90 @@ public class TranspositionTable
         if (score > 30000) return 30000;
         if (score < -30000) return -30000;
         return score;
+    }
+
+    /// <summary>
+    /// 枚舉 TT 中所有有效條目（惰性求值）。
+    /// 有效條目的判斷依據：_keys[i] 不為零（XOR 驗證格式）。
+    /// </summary>
+    public IEnumerable<TTEntry> EnumerateEntries()
+    {
+        for (ulong i = 0; i < _size; i++)
+        {
+            ulong keyXorData = Volatile.Read(ref _keys[i]);
+            if (keyXorData == 0) continue;
+
+            ulong data = Volatile.Read(ref _data[i]);
+            ulong zobristKey = keyXorData ^ data;
+
+            // 二次確認：重新計算 XOR 應與 _keys[i] 吻合（防止撕裂讀取）
+            if ((zobristKey ^ data) != keyXorData) continue;
+
+            yield return Unpack(data, zobristKey);
+        }
+    }
+
+    /// <summary>
+    /// 從 <paramref name="board"/> 的當前局面出發，沿 TT 中的 BestMove 遞迴追蹤，
+    /// 建立探索樹。若當前局面不在 TT 中，回傳 <c>null</c>。
+    /// </summary>
+    /// <param name="board">起始局面（不會被修改）。</param>
+    /// <param name="maxDepth">最大探索深度（1 = 只回傳根節點）。</param>
+    public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6)
+    {
+        var visited = new HashSet<ulong>();
+        return ExploreNode(board.Clone(), maxDepth, visited, default);
+    }
+
+    private TTTreeNode? ExploreNode(IBoard board, int remainingDepth, HashSet<ulong> visited, Move moveToHere)
+    {
+        ulong key = board.ZobristKey;
+
+        // 防止同一局面被重複訪問（循環偵測）
+        if (!visited.Add(key)) return null;
+
+        ulong index = key % _size;
+        ulong keyXorData = Volatile.Read(ref _keys[index]);
+        ulong data = Volatile.Read(ref _data[index]);
+
+        // 驗證 TT 命中
+        if ((keyXorData ^ data) != key)
+        {
+            visited.Remove(key);
+            return null;
+        }
+
+        var entry = Unpack(data, key);
+        var node = new TTTreeNode
+        {
+            Entry = entry,
+            MoveToHere = moveToHere,
+            Children = []
+        };
+
+        // 深度已達上限，或無有效 BestMove，不再遞迴
+        bool hasBestMove = entry.BestMove.From != entry.BestMove.To;
+        if (remainingDepth <= 1 || !hasBestMove)
+        {
+            visited.Remove(key);
+            return node;
+        }
+
+        // 嘗試套用 BestMove 並遞迴探索子局面
+        try
+        {
+            var childBoard = board.Clone();
+            childBoard.MakeMove(entry.BestMove);
+            var child = ExploreNode(childBoard, remainingDepth - 1, visited, entry.BestMove);
+            if (child != null)
+                node.Children.Add(child);
+        }
+        catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            // BestMove 在當前局面非法（TT 碰撞、過期條目或走法不適用當前輪次），忽略
+        }
+
+        visited.Remove(key);
+        return node;
     }
 }

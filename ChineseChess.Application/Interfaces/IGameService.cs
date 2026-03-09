@@ -64,4 +64,14 @@ public interface IGameService
 
     // TT 合併（獨立TT模式下，將兩方 TT 雙向合併）
     Task MergeTranspositionTablesAsync(CancellationToken ct = default);
+
+    // TT 節點探索
+    /// <summary>枚舉紅方（或共用）TT 中所有有效條目。</summary>
+    IEnumerable<TTEntry> EnumerateTTEntries();
+
+    /// <summary>
+    /// 從當前局面出發，沿 TT BestMove 連結建立探索樹。
+    /// 若當前局面不在 TT 中，回傳 <c>null</c>。
+    /// </summary>
+    TTTreeNode? ExploreTTTree(int maxDepth = 6);
 }

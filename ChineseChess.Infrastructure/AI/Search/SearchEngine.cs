@@ -416,4 +416,11 @@ public class SearchEngine : IAiEngine
             _tt.MergeFrom(otherEngine._tt);
         }
     }
+
+    /// <inheritdoc/>
+    public IEnumerable<TTEntry> EnumerateTTEntries() => _tt.EnumerateEntries();
+
+    /// <inheritdoc/>
+    public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6) =>
+        _tt.ExploreTTTree(board, maxDepth);
 }

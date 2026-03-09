@@ -564,6 +564,11 @@ public class GameService : IGameService
         }
     }
 
+    public IEnumerable<TTEntry> EnumerateTTEntries() => _aiEngine.EnumerateTTEntries();
+
+    public TTTreeNode? ExploreTTTree(int maxDepth = 6) =>
+        _aiEngine.ExploreTTTree(CurrentBoard, maxDepth);
+
     public async Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default)
     {
         if (!IsSmartHintEnabled) return;

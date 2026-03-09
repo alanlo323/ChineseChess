@@ -1,3 +1,4 @@
+using ChineseChess.Application.Interfaces;
 using ChineseChess.Infrastructure.AI.Search;
 using System;
 using System.IO;
