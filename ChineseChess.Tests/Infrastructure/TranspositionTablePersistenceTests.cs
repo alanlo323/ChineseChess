@@ -3,6 +3,7 @@ using ChineseChess.Domain.Entities;
 using ChineseChess.Infrastructure.AI.Search;
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 using Xunit;
 
@@ -77,6 +78,90 @@ public class TranspositionTablePersistenceTests
 
         var table = new TranspositionTable(1);
         table.ImportFromBinary(ms); // 應能順利讀取舊版 v1 格式
+
+        Assert.Equal(generation, table.Generation);
+        Assert.Equal(0L, table.GetStatistics().OccupiedEntries);
+    }
+
+    [Fact]
+    public void TranspositionTable_V3_ExportedBinary_ShouldHaveVersion3InHeader()
+    {
+        // RED：目前 ExportToBinary 寫入 version=2，期望升版至 3（Columnar + Brotli）
+        var tt = new TranspositionTable(1);
+        using var ms = new MemoryStream();
+        tt.ExportToBinary(ms);
+        ms.Position = 0;
+
+        using var reader = new BinaryReader(ms);
+        reader.ReadBytes(4);          // 跳過 magic "CCTT"
+        uint version = reader.ReadUInt32();
+
+        Assert.Equal(3u, version);    // 期望 v3
+    }
+
+    [Fact]
+    public void TranspositionTable_V3_ShouldRoundTripAllFieldsAndEdgeCases()
+    {
+        // 測試負分、最大深度、所有 TTFlag 值、特殊棋步
+        var original = new TranspositionTable(1);
+        original.Store(0x1111_1111_1111_1111uL, -30000, 20, TTFlag.UpperBound, new Move(0, 89));
+        original.Store(0x2222_2222_2222_2222uL,  30000,  1, TTFlag.LowerBound, new Move(89, 0));
+        original.Store(0x3333_3333_3333_3333uL,      0,  8, TTFlag.Exact,      new Move(44, 55));
+        original.NewGeneration();
+        original.NewGeneration();
+        original.NewGeneration();
+
+        using var ms = new MemoryStream();
+        original.ExportToBinary(ms);
+        ms.Position = 0;
+
+        var restored = new TranspositionTable(1);
+        restored.ImportFromBinary(ms);
+
+        Assert.Equal((byte)3, restored.Generation);
+
+        Assert.True(restored.Probe(0x1111_1111_1111_1111uL, out var e1));
+        Assert.Equal(-30000, e1.Score);
+        Assert.Equal((byte)20, e1.Depth);
+        Assert.Equal(TTFlag.UpperBound, e1.Flag);
+        Assert.Equal(new Move(0, 89), e1.BestMove);
+
+        Assert.True(restored.Probe(0x2222_2222_2222_2222uL, out var e2));
+        Assert.Equal(30000, e2.Score);
+        Assert.Equal(TTFlag.LowerBound, e2.Flag);
+        Assert.Equal(new Move(89, 0), e2.BestMove);
+
+        Assert.True(restored.Probe(0x3333_3333_3333_3333uL, out var e3));
+        Assert.Equal(0, e3.Score);
+        Assert.Equal(TTFlag.Exact, e3.Flag);
+        Assert.Equal(new Move(44, 55), e3.BestMove);
+    }
+
+    [Fact]
+    public void TranspositionTable_V2GZip_ShouldStillImport()
+    {
+        // 手工建構 v2（GZip）格式，驗證匯入仍向後相容
+        const ulong ttSize = 65536UL;
+        const byte generation = 5;
+
+        using var ms = new MemoryStream();
+        using (var hw = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
+        {
+            hw.Write(new byte[] { 0x43, 0x43, 0x54, 0x54 }); // "CCTT"
+            hw.Write(2u);          // version = 2（GZip）
+            hw.Write(ttSize);      // size
+            hw.Write(generation);  // generation
+        }
+        using (var gzip = new GZipStream(ms, CompressionLevel.Fastest, leaveOpen: true))
+        using (var gw = new BinaryWriter(gzip, Encoding.UTF8, leaveOpen: true))
+        {
+            for (ulong i = 0; i < ttSize; i++) gw.Write(0uL); // keys（全零）
+            for (ulong i = 0; i < ttSize; i++) gw.Write(0uL); // data（全零）
+        }
+        ms.Position = 0;
+
+        var table = new TranspositionTable(1);
+        table.ImportFromBinary(ms);   // 應能順利讀取 v2 格式
 
         Assert.Equal(generation, table.Generation);
         Assert.Equal(0L, table.GetStatistics().OccupiedEntries);

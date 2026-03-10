@@ -28,8 +28,9 @@ public sealed class TTStateSnapshot
 public class TranspositionTable
 {
     private static readonly byte[] BinaryHeader = "CCTT"u8.ToArray();
-    private const uint BinaryVersion = 2u;        // v2：GZip 壓縮 payload
-    private const uint LegacyBinaryVersion = 1u;  // v1：舊版無壓縮（向後相容）
+    private const uint BinaryVersion      = 3u;  // v3：Columnar + Quotient key + Brotli
+    private const uint GzipBinaryVersion  = 2u;  // v2：GZip 壓縮（向後相容讀取）
+    private const uint LegacyBinaryVersion = 1u; // v1：無壓縮（向後相容讀取）
 
     private readonly ulong[] _keys;
     private readonly ulong[] _data;
@@ -194,6 +195,22 @@ public class TranspositionTable
         };
     }
 
+    /// <summary>
+    /// 以 v3 格式（Columnar + Quotient key + Brotli）匯出 TT 快照。
+    ///
+    /// 欄位佈局（單一 BrotliStream，Columnar 順序）：
+    ///   Col 0: Key quotient（VarUInt64，0=空槽，k+1=有效，k = (key-i) / _size）
+    ///   Col 1: Score  (int16)
+    ///   Col 2: Depth  (byte)
+    ///   Col 3: Flag   (byte, 0-3)
+    ///   Col 4: From   (byte, 0-89)
+    ///   Col 5: To     (byte, 0-89)
+    ///   Col 6: Gen    (byte)
+    ///
+    /// Quotient 編碼利用 TT 不變量：Store() 保證 key % _size == index，
+    /// 因此 key = index + k × _size，只需儲存商 k 即可還原完整 key，
+    /// 省去 key 的低位元（約 22 bits），降低 key 欄的資料量。
+    /// </summary>
     public void ExportToBinary(Stream output)
     {
         if (output == null)
@@ -201,27 +218,63 @@ public class TranspositionTable
             throw new ArgumentNullException(nameof(output));
         }
 
-        // 標頭以明文寫入（供匯入時識別版本，再決定是否解壓縮）
-        using (var headerWriter = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
+        // 標頭明文寫入，供匯入時讀取版本再決定解壓方式
+        using (var hw = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            headerWriter.Write(BinaryHeader);
-            headerWriter.Write(BinaryVersion);
-            headerWriter.Write(_size);
-            headerWriter.Write(_generation);
+            hw.Write(BinaryHeader);
+            hw.Write(BinaryVersion); // v3
+            hw.Write(_size);
+            hw.Write(_generation);
         }
 
-        // Payload 以 GZip 壓縮寫入（v2）
-        using var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true);
-        using var dataWriter = new BinaryWriter(gzip, System.Text.Encoding.UTF8, leaveOpen: true);
-        for (int i = 0; i < _keys.Length; i++)
+        // Payload：Columnar 欄位順序寫入單一 BrotliStream（quality 4，速度/壓縮平衡）
+        using var brotli = new BrotliStream(output, CompressionLevel.Optimal, leaveOpen: true);
+        using var bw = new BinaryWriter(brotli, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        int size = (int)_size;
+
+        // Col 0：Key quotient（VarUInt64）——隨機資料，欄位分離可減少干擾
+        for (int i = 0; i < size; i++)
         {
-            dataWriter.Write(_keys[i]);
+            ulong kxd = Volatile.Read(ref _keys[i]);
+            if (kxd == 0) { WriteVarUInt64(bw, 0); continue; }
+            ulong d = Volatile.Read(ref _data[i]);
+            ulong key = kxd ^ d;
+            WriteVarUInt64(bw, (key - (ulong)i) / _size + 1); // +1 使 0 成為空槽哨兵
         }
-        for (int i = 0; i < _data.Length; i++)
+
+        // Col 1-6：低熵欄位，獨立欄位後 Brotli 可發揮最大壓縮效果
+        for (int i = 0; i < size; i++)
         {
-            dataWriter.Write(_data[i]);
+            ulong kxd = Volatile.Read(ref _keys[i]);
+            bw.Write(kxd == 0 ? (short)0 : (short)(ushort)(Volatile.Read(ref _data[i]) & 0xFFFF));
         }
-        // dataWriter Dispose 後 gzip Flush，gzip Dispose 後將壓縮結尾寫入 output
+        for (int i = 0; i < size; i++)
+        {
+            ulong kxd = Volatile.Read(ref _keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 16) & 0xFF));
+        }
+        for (int i = 0; i < size; i++)
+        {
+            ulong kxd = Volatile.Read(ref _keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 24) & 0x3));
+        }
+        for (int i = 0; i < size; i++)
+        {
+            ulong kxd = Volatile.Read(ref _keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 26) & 0x7F));
+        }
+        for (int i = 0; i < size; i++)
+        {
+            ulong kxd = Volatile.Read(ref _keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 33) & 0x7F));
+        }
+        for (int i = 0; i < size; i++)
+        {
+            ulong kxd = Volatile.Read(ref _keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 40) & 0xFF));
+        }
+        // bw Dispose → brotli Flush → brotli Dispose → 壓縮結尾寫入 output
     }
 
     public void ImportFromBinary(Stream input)
@@ -240,7 +293,7 @@ public class TranspositionTable
         }
 
         uint version = headerReader.ReadUInt32();
-        if (version != BinaryVersion && version != LegacyBinaryVersion)
+        if (version != BinaryVersion && version != GzipBinaryVersion && version != LegacyBinaryVersion)
         {
             throw new InvalidDataException($"Unsupported TT binary version: {version}");
         }
@@ -257,30 +310,81 @@ public class TranspositionTable
         }
 
         byte generation = headerReader.ReadByte();
-        int expectedLength = (int)size;
+        int n = (int)size;
 
-        var keys = new ulong[expectedLength];
-        var data = new ulong[expectedLength];
+        _generation = generation;
 
         if (version == LegacyBinaryVersion)
         {
             // v1：舊版無壓縮格式（向後相容）
-            for (int i = 0; i < expectedLength; i++) keys[i] = headerReader.ReadUInt64();
-            for (int i = 0; i < expectedLength; i++) data[i] = headerReader.ReadUInt64();
+            var keys = new ulong[n];
+            var data = new ulong[n];
+            for (int i = 0; i < n; i++) keys[i] = headerReader.ReadUInt64();
+            for (int i = 0; i < n; i++) data[i] = headerReader.ReadUInt64();
+            System.Array.Copy(keys, _keys, n);
+            System.Array.Copy(data, _data, n);
+        }
+        else if (version == GzipBinaryVersion)
+        {
+            // v2：GZip 壓縮格式（向後相容）
+            using var gzip = new GZipStream(input, CompressionMode.Decompress, leaveOpen: true);
+            using var dr = new BinaryReader(gzip, System.Text.Encoding.UTF8, leaveOpen: true);
+            var keys = new ulong[n];
+            var data = new ulong[n];
+            for (int i = 0; i < n; i++) keys[i] = dr.ReadUInt64();
+            for (int i = 0; i < n; i++) data[i] = dr.ReadUInt64();
+            System.Array.Copy(keys, _keys, n);
+            System.Array.Copy(data, _data, n);
         }
         else
         {
-            // v2：GZip 壓縮格式
-            using var gzip = new GZipStream(input, CompressionMode.Decompress, leaveOpen: true);
-            using var dataReader = new BinaryReader(gzip, System.Text.Encoding.UTF8, leaveOpen: true);
-            for (int i = 0; i < expectedLength; i++) keys[i] = dataReader.ReadUInt64();
-            for (int i = 0; i < expectedLength; i++) data[i] = dataReader.ReadUInt64();
+            // v3：Columnar + Quotient key + Brotli
+            ImportV3Columnar(input, n);
         }
 
-        _generation = generation;
-        System.Array.Copy(keys, _keys, expectedLength);
-        System.Array.Copy(data, _data, expectedLength);
         Interlocked.Exchange(ref _occupiedCount, CountOccupied());
+    }
+
+    /// <summary>
+    /// 讀取 v3 Columnar 格式並重建 TT 陣列。
+    /// 欄位順序與 ExportToBinary v3 一致（quotient → score → depth → flag → from → to → gen）。
+    /// key 重建公式：key = index + (quotient - 1) × _size
+    /// </summary>
+    private void ImportV3Columnar(Stream input, int n)
+    {
+        var quotients = new ulong[n];
+        var scores    = new short[n];
+        var depths    = new byte[n];
+        var flags     = new byte[n];
+        var froms     = new byte[n];
+        var tos       = new byte[n];
+        var gens      = new byte[n];
+
+        using var brotli = new BrotliStream(input, CompressionMode.Decompress, leaveOpen: true);
+        using var dr = new BinaryReader(brotli, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        for (int i = 0; i < n; i++) quotients[i] = ReadVarUInt64(dr);
+        for (int i = 0; i < n; i++) scores[i]    = dr.ReadInt16();
+        for (int i = 0; i < n; i++) depths[i]    = dr.ReadByte();
+        for (int i = 0; i < n; i++) flags[i]     = dr.ReadByte();
+        for (int i = 0; i < n; i++) froms[i]     = dr.ReadByte();
+        for (int i = 0; i < n; i++) tos[i]       = dr.ReadByte();
+        for (int i = 0; i < n; i++) gens[i]      = dr.ReadByte();
+
+        System.Array.Clear(_keys, 0, n);
+        System.Array.Clear(_data, 0, n);
+
+        for (int i = 0; i < n; i++)
+        {
+            if (quotients[i] == 0) continue; // 空槽
+
+            ulong k          = quotients[i] - 1;
+            ulong zobristKey = (ulong)i + k * _size;
+            ulong packed     = Pack(scores[i], depths[i], (TTFlag)flags[i], froms[i], tos[i], gens[i]);
+
+            _data[i] = packed;
+            _keys[i] = zobristKey ^ packed;
+        }
     }
 
     public void ExportToJson(Stream output)
@@ -355,6 +459,35 @@ public class TranspositionTable
             if (_keys[i] != 0) count++;
         }
         return count;
+    }
+
+    /// <summary>
+    /// VarUInt64 編碼（Protocol-Buffers 相容的 base-128 varint）。
+    /// 每個 byte 的 MSB=1 表示後面還有 byte，MSB=0 表示最後一個 byte。
+    /// 範圍 0–127 用 1 byte；2^42 約用 6 bytes（vs 固定 8 bytes 省 25%）。
+    /// </summary>
+    private static void WriteVarUInt64(BinaryWriter w, ulong value)
+    {
+        while (value >= 0x80)
+        {
+            w.Write((byte)((value & 0x7F) | 0x80));
+            value >>= 7;
+        }
+        w.Write((byte)value);
+    }
+
+    private static ulong ReadVarUInt64(BinaryReader r)
+    {
+        ulong result = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            b = r.ReadByte();
+            result |= (ulong)(b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0 && shift < 63);
+        return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
