@@ -73,6 +73,8 @@ public class TTStatistics
     public double HitRate { get; set; }          // 命中率（0.0–1.0）
     public long OccupiedEntries { get; set; }    // 已佔用條目數（有效節點）
     public double FillRate { get; set; }         // 填滿率（0.0–1.0）
+    public long CollisionCount { get; set; }     // QP 探測碰撞次數（遇到不同 key 的非空槽位）
+    public double CollisionRate { get; set; }    // 碰撞率（CollisionCount / TotalProbes）
 }
 
 /// <summary>

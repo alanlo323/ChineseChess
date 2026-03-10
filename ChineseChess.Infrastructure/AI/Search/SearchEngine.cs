@@ -50,6 +50,7 @@ public class SearchEngine : IAiEngine
         {
             int threadCount = Math.Clamp(settings.ThreadCount, 1, 128);
             tt.NewGeneration();
+            tt.TryAutoResize(); // 碰撞率過高時自動擴容（僅在搜尋開始前呼叫，確保 thread-safe）
             var pauseSignal = settings.PauseSignal ?? new ManualResetEventSlim(true);
 
             // 用獨立的 timeLimitCts 管理思考時間，讓監控任務依「實際搜尋時間」取消

@@ -84,9 +84,9 @@ public class TranspositionTablePersistenceTests
     }
 
     [Fact]
-    public void TranspositionTable_V3_ExportedBinary_ShouldHaveVersion3InHeader()
+    public void TranspositionTable_ExportedBinary_ShouldHaveVersion4InHeader()
     {
-        // RED：目前 ExportToBinary 寫入 version=2，期望升版至 3（Columnar + Brotli）
+        // v4：Full key + Columnar + Brotli（QP 相容格式）
         var tt = new TranspositionTable(1);
         using var ms = new MemoryStream();
         tt.ExportToBinary(ms);
@@ -96,11 +96,11 @@ public class TranspositionTablePersistenceTests
         reader.ReadBytes(4);          // 跳過 magic "CCTT"
         uint version = reader.ReadUInt32();
 
-        Assert.Equal(3u, version);    // 期望 v3
+        Assert.Equal(4u, version);    // 期望 v4（QP 相容）
     }
 
     [Fact]
-    public void TranspositionTable_V3_ShouldRoundTripAllFieldsAndEdgeCases()
+    public void TranspositionTable_V4_ShouldRoundTripAllFieldsAndEdgeCases()
     {
         // 測試負分、最大深度、所有 TTFlag 值、特殊棋步
         var original = new TranspositionTable(1);

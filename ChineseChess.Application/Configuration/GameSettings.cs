@@ -19,7 +19,7 @@ public class GameSettings
 
     // ─── TT 設定 ─────────────────────────────────────────────────────────
     public bool UseSharedTranspositionTable { get; set; } = false;
-    public int TranspositionTableSizeMb { get; set; } = 64;
+    public int TranspositionTableSizeMb { get; set; } = 128;
 
     // ─── 智能提示 ─────────────────────────────────────────────────────────
     public bool IsSmartHintEnabled { get; set; } = true;
