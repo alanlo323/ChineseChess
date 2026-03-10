@@ -63,9 +63,9 @@ public class TranspositionTable
     // 私有建構子：直接以條目數建立空表（Clone 專用）
     private TranspositionTable(ulong size)
     {
-        size = Math.Max(size, 1024);
-        keys = new ulong[size];
-        data = new ulong[size];
+        this.size = Math.Max(size, 1024);
+        keys = new ulong[this.size];
+        data = new ulong[this.size];
         generation = 0;
     }
 
