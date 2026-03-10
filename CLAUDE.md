@@ -2,7 +2,7 @@
 
 ## Project Overview
 Chinese Chess (Xiangqi) game with AI engine, built as a WPF desktop application.
-- **Language**: C# with .NET 9.0
+- **Language**: C# with .NET 10
 - **UI**: WPF (Windows-only), canvas-based board rendering
 - **Architecture**: Clean Architecture with 4 project layers
 
