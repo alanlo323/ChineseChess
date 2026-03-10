@@ -1,6 +1,7 @@
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
+using ChineseChess.Domain.Helpers;
 using ChineseChess.Infrastructure.AI.Evaluators;
 using ChineseChess.Infrastructure.AI.Search;
 using System.Collections.Generic;
@@ -102,8 +103,10 @@ public class SearchTests
         var deeper = await engine2.SearchAsync(
             new Board(InitialFen), new SearchSettings { Depth = 3, ThreadCount = 1 }, CancellationToken.None);
 
-        Assert.True(deeper.Nodes > shallow.Nodes);
-        Assert.True(deeper.Depth > shallow.Depth);
+        Assert.True(deeper.Nodes > shallow.Nodes,
+            $"Deeper search should visit more nodes. shallow={shallow.Nodes}, deeper={deeper.Nodes}");
+        Assert.True(deeper.Depth > shallow.Depth,
+            $"Deeper search should complete a deeper iteration. shallowDepth={shallow.Depth}, deeperDepth={deeper.Depth}");
     }
 
     [Fact]
@@ -403,6 +406,140 @@ public class SearchTests
         Assert.Equal(first.BestMove, second.BestMove);
     }
 
+    [Fact]
+    public async Task Search_ShouldPopulatePvLine_WithBestMoveNotation()
+    {
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000, ThreadCount = 1 };
+
+        var result = await engine.SearchAsync(board, settings, CancellationToken.None);
+
+        Assert.False(result.BestMove.IsNull);
+        Assert.False(string.IsNullOrWhiteSpace(result.PvLine));
+
+        var expectedFirstMove = MoveNotation.ToNotation(result.BestMove, board);
+        Assert.Equal(expectedFirstMove, ExtractFirstPvMove(result.PvLine));
+    }
+
+    [Fact]
+    public async Task Search_PvLineShouldMatchTtRootAndPreserveBoardState()
+    {
+        var board = new Board(InitialFen);
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 3, TimeLimitMs = 12000, ThreadCount = 1 };
+        var fenBefore = board.ToFen();
+        var keyBefore = board.ZobristKey;
+        var turnBefore = board.Turn;
+
+        var result = await engine.SearchAsync(board, settings, CancellationToken.None);
+
+        Assert.False(string.IsNullOrWhiteSpace(result.PvLine));
+
+        var ttRoot = engine.ExploreTTTree(board, maxDepth: 1);
+        Assert.NotNull(ttRoot);
+        Assert.Equal(result.BestMove, ttRoot!.Entry.BestMove);
+        Assert.Equal(MoveNotation.ToNotation(ttRoot.Entry.BestMove, board), ExtractFirstPvMove(result.PvLine));
+
+        Assert.Equal(fenBefore, board.ToFen());
+        Assert.Equal(keyBefore, board.ZobristKey);
+        Assert.Equal(turnBefore, board.Turn);
+    }
+
+    [Fact]
+    public async Task Search_MultiThreadedIndependentRuns_ShouldKeepStablePvLine()
+    {
+        var board = new Board(InitialFen);
+        var firstEngine = new SearchEngine();
+        var secondEngine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 3, TimeLimitMs = 12000, ThreadCount = 2 };
+
+        var first = await firstEngine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
+        byte firstGeneration = firstEngine.GetTTStatistics().Generation;
+
+        var second = await secondEngine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
+        byte secondGeneration = secondEngine.GetTTStatistics().Generation;
+
+        Assert.False(first.BestMove.IsNull);
+        Assert.False(second.BestMove.IsNull);
+        Assert.False(string.IsNullOrWhiteSpace(first.PvLine));
+        Assert.False(string.IsNullOrWhiteSpace(second.PvLine));
+
+        Assert.Equal(first.BestMove, second.BestMove);
+        Assert.Equal(first.PvLine, second.PvLine);
+
+        AssertPvLineMatchesCurrentTtChain(firstEngine, new Board(board.ToFen()), first, firstGeneration);
+        AssertPvLineMatchesCurrentTtChain(secondEngine, new Board(board.ToFen()), second, secondGeneration);
+    }
+
+    [Fact]
+    public async Task Search_RepeatedSearchWithWarmTt_ShouldKeepPvLineCorrectForCurrentGeneration()
+    {
+        var warmupBoard = new Board(InitialFen);
+        var targetBoard = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABN1 w - - 0 1");
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 3, TimeLimitMs = 12000, ThreadCount = 1 };
+
+        var warmup = await engine.SearchAsync(new Board(warmupBoard.ToFen()), settings, CancellationToken.None);
+        byte warmupGeneration = engine.GetTTStatistics().Generation;
+        var firstTarget = await engine.SearchAsync(new Board(targetBoard.ToFen()), settings, CancellationToken.None);
+        byte firstTargetGeneration = engine.GetTTStatistics().Generation;
+        AssertPvLineMatchesCurrentTtChain(engine, new Board(targetBoard.ToFen()), firstTarget, firstTargetGeneration);
+
+        var secondTarget = await engine.SearchAsync(new Board(targetBoard.ToFen()), settings, CancellationToken.None);
+        byte secondTargetGeneration = engine.GetTTStatistics().Generation;
+
+        Assert.False(warmup.BestMove.IsNull);
+        Assert.False(firstTarget.BestMove.IsNull);
+        Assert.False(secondTarget.BestMove.IsNull);
+        Assert.False(string.IsNullOrWhiteSpace(firstTarget.PvLine));
+        Assert.False(string.IsNullOrWhiteSpace(secondTarget.PvLine));
+
+        Assert.True(firstTargetGeneration > warmupGeneration);
+        Assert.True(secondTargetGeneration > firstTargetGeneration);
+        Assert.Equal(firstTarget.BestMove, secondTarget.BestMove);
+        Assert.Equal(firstTarget.PvLine, secondTarget.PvLine);
+
+        AssertPvLineMatchesCurrentTtChain(engine, new Board(targetBoard.ToFen()), secondTarget, secondTargetGeneration);
+    }
+
+    [Fact]
+    public async Task Search_TacticalCheckPosition_ShouldProduceAtLeastTwoPvMoves()
+    {
+        var board = new Board("3ak4/9/9/9/9/9/9/9/4r4/4K4 w - - 0 1");
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 3, TimeLimitMs = 12000, ThreadCount = 1 };
+
+        var result = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
+        byte generation = engine.GetTTStatistics().Generation;
+
+        Assert.False(result.BestMove.IsNull);
+        AssertPvLineHasAtLeastMoves(result, 2);
+        AssertPvLineMatchesCurrentTtChain(engine, new Board(board.ToFen()), result, generation);
+    }
+
+    [Fact]
+    public async Task Search_TacticalExchangePosition_WithWarmTt_ShouldProduceAtLeastThreePvMoves()
+    {
+        var board = new Board("2r1k4/9/9/9/9/2p1R1p2/9/9/9/3K5 w - - 0 1");
+        var engine = new SearchEngine();
+        var settings = new SearchSettings { Depth = 3, TimeLimitMs = 12000, ThreadCount = 1 };
+
+        var first = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
+        byte firstGeneration = engine.GetTTStatistics().Generation;
+        Assert.False(first.BestMove.IsNull);
+        AssertPvLineHasAtLeastMoves(first, 3);
+        AssertPvLineMatchesCurrentTtChain(engine, new Board(board.ToFen()), first, firstGeneration);
+
+        var second = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
+        byte secondGeneration = engine.GetTTStatistics().Generation;
+        Assert.False(second.BestMove.IsNull);
+        AssertPvLineHasAtLeastMoves(second, 3);
+        Assert.Equal(first.BestMove, second.BestMove);
+        Assert.Equal(first.PvLine, second.PvLine);
+        AssertPvLineMatchesCurrentTtChain(engine, new Board(board.ToFen()), second, secondGeneration);
+    }
+
     // --- Null-Move / 棋盤測試 ---
 
     [Fact]
@@ -455,5 +592,140 @@ public class SearchTests
         {
             Assert.Equal(PieceType.Rook, captured.Type);
         }
+    }
+
+    [Fact]
+    public void MoveOrdering_CheckingMove_ShouldOutrankQuietMove()
+    {
+        var board = new Board("4k4/9/9/9/9/9/9/3R5/9/3K5 w - - 0 1");
+        var worker = CreateWorker(board);
+        var checkingMove = new Move(66, 67);
+        var quietMove = new Move(66, 65);
+        var moves = new List<Move> { quietMove, checkingMove };
+
+        Assert.Contains(checkingMove, board.GenerateLegalMoves());
+        Assert.Contains(quietMove, board.GenerateLegalMoves());
+
+        worker.OrderMoves(moves, Move.Null, ply: 0);
+
+        Assert.Equal(checkingMove, moves[0]);
+        Assert.True(worker.ScoreMove(checkingMove, Move.Null, ply: 0) >
+            worker.ScoreMove(quietMove, Move.Null, ply: 0));
+    }
+
+    [Fact]
+    public void MoveOrdering_SafeCapture_ShouldOutrankRecapturableCapture()
+    {
+        var board = new Board("2r1k4/9/9/9/9/2p1R1p2/9/9/9/3K5 w - - 0 1");
+        var worker = CreateWorker(board);
+        var guardedCapture = new Move(49, 47);
+        var safeCapture = new Move(49, 51);
+        var moves = new List<Move> { guardedCapture, safeCapture };
+
+        Assert.Contains(guardedCapture, board.GenerateLegalMoves());
+        Assert.Contains(safeCapture, board.GenerateLegalMoves());
+
+        worker.OrderMoves(moves, Move.Null, ply: 0);
+
+        Assert.Equal(safeCapture, moves[0]);
+        Assert.True(worker.ScoreMove(safeCapture, Move.Null, ply: 0) >
+            worker.ScoreMove(guardedCapture, Move.Null, ply: 0));
+    }
+
+    [Fact]
+    public void SearchWorker_SafeCapture_ShouldTriggerCaptureExtension()
+    {
+        var board = new Board("2r1k4/9/9/9/9/2p1R1p2/9/9/9/3K5 w - - 0 1");
+        var worker = CreateWorker(board);
+        var safeCapture = new Move(49, 51);
+
+        Assert.Contains(safeCapture, board.GenerateLegalMoves());
+        Assert.True(worker.ShouldExtendForCapture(safeCapture));
+    }
+
+    [Fact]
+    public void SearchWorker_RecapturableLowValueCapture_ShouldNotTriggerCaptureExtension()
+    {
+        var board = new Board("2r1k4/9/9/9/9/2p1R1p2/9/9/9/3K5 w - - 0 1");
+        var worker = CreateWorker(board);
+        var guardedCapture = new Move(49, 47);
+
+        Assert.Contains(guardedCapture, board.GenerateLegalMoves());
+        Assert.False(worker.ShouldExtendForCapture(guardedCapture));
+    }
+
+    [Fact]
+    public void SearchWorker_QuietMoveCreatingImmediateThreat_ShouldTriggerThreatExtension()
+    {
+        var board = new Board("4k4/9/9/9/9/1R2P2n1/9/9/9/4K4 w - - 0 1");
+        var worker = CreateWorker(board);
+        var threatMove = new Move(49, 40);
+
+        Assert.Contains(threatMove, board.GenerateLegalMoves());
+        Assert.True(worker.CreatesImmediateThreat(threatMove));
+    }
+
+    [Fact]
+    public void SearchWorker_QuietMoveKeepingExistingThreat_ShouldNotTriggerThreatExtension()
+    {
+        var board = new Board("4k4/9/9/9/9/1R5n1/9/9/9/3K5 w - - 0 1");
+        var worker = CreateWorker(board);
+        var quietMove = new Move(84, 75);
+
+        Assert.Contains(quietMove, board.GenerateLegalMoves());
+        Assert.False(worker.CreatesImmediateThreat(quietMove));
+    }
+
+    private static string ExtractFirstPvMove(string pvLine)
+    {
+        var firstToken = pvLine
+            .Split(' ', System.StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+
+        return firstToken ?? string.Empty;
+    }
+
+    private static IReadOnlyList<string> ExtractPvMoves(string pvLine)
+    {
+        return pvLine
+            .Split(' ', System.StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+    }
+
+    private static void AssertPvLineHasAtLeastMoves(SearchResult result, int minimumMoves)
+    {
+        var pvMoves = ExtractPvMoves(result.PvLine);
+        Assert.True(pvMoves.Count >= minimumMoves,
+            $"Expected PvLine to contain at least {minimumMoves} moves, but got {pvMoves.Count}: {result.PvLine}");
+    }
+
+    private static void AssertPvLineMatchesCurrentTtChain(SearchEngine engine, IBoard board, SearchResult result, byte expectedGeneration)
+    {
+        var pvMoves = ExtractPvMoves(result.PvLine);
+        Assert.NotEmpty(pvMoves);
+        Assert.Equal(MoveNotation.ToNotation(result.BestMove, board), pvMoves[0]);
+
+        var currentBoard = board.Clone();
+        for (int i = 0; i < pvMoves.Count; i++)
+        {
+            var ttNode = engine.ExploreTTTree(currentBoard, maxDepth: 1);
+            Assert.NotNull(ttNode);
+            Assert.False(ttNode!.Entry.BestMove.IsNull);
+            Assert.Equal(expectedGeneration, ttNode.Entry.Generation);
+            Assert.Contains(ttNode.Entry.BestMove, currentBoard.GenerateLegalMoves());
+            Assert.Equal(MoveNotation.ToNotation(ttNode.Entry.BestMove, currentBoard), pvMoves[i]);
+            currentBoard.MakeMove(ttNode.Entry.BestMove);
+        }
+    }
+
+    private static SearchWorker CreateWorker(IBoard board)
+    {
+        return new SearchWorker(
+            board,
+            new HandcraftedEvaluator(),
+            new TranspositionTable(sizeMb: 4),
+            CancellationToken.None,
+            CancellationToken.None,
+            new ManualResetEventSlim(true));
     }
 }

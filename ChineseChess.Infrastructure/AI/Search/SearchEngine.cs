@@ -248,6 +248,7 @@ public class SearchEngine : IAiEngine
                     result.Score = score;
                     result.Depth = depth;
                     result.Nodes = GetTotalNodes();
+                    result.PvLine = BuildPrincipalVariation(board, depth);
 
                     var bestMoveNotation = MoveNotation.ToNotation(bestMove, board);
                     lock (progressStateLock)
@@ -291,6 +292,43 @@ public class SearchEngine : IAiEngine
             result.Nodes = GetTotalNodes();
             return result;
         }, ct);
+    }
+
+    private string BuildPrincipalVariation(IBoard rootBoard, int maxPly)
+    {
+        if (maxPly <= 0)
+        {
+            return string.Empty;
+        }
+
+        var pvBoard = rootBoard.Clone();
+        var visited = new HashSet<ulong>();
+        var pvMoves = new List<string>(maxPly);
+
+        for (int ply = 0; ply < maxPly; ply++)
+        {
+            ulong key = pvBoard.ZobristKey;
+            if (!visited.Add(key))
+            {
+                break;
+            }
+
+            if (!tt.Probe(key, out var entry) || entry.BestMove.IsNull)
+            {
+                break;
+            }
+
+            var legalMoves = pvBoard.GenerateLegalMoves();
+            if (!legalMoves.Contains(entry.BestMove))
+            {
+                break;
+            }
+
+            pvMoves.Add(MoveNotation.ToNotation(entry.BestMove, pvBoard));
+            pvBoard.MakeMove(entry.BestMove);
+        }
+
+        return string.Join(" ", pvMoves);
     }
 
     // 深度門檻：>= 此值時改用多執行緒（每個走法獨立 worker 平行跑）

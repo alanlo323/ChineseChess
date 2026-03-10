@@ -31,6 +31,10 @@ internal sealed class SearchWorker
     private const int MateScore = 20000;
     private const int QuiescenceMaxPly = 8;
     private const int MaxSearchPly = 128;
+    private const int CheckMoveBonus = 95_000;
+    private const int SafeCaptureBonus = 1_500;
+    private const int GuardedCapturePenaltyMultiplier = 12;
+    private const int HighValueTacticalThreshold = 270;
 
     private static readonly int[] PieceValues = { 0, 10000, 120, 120, 270, 600, 285, 30 };
     private static readonly int[] FutilityMargins = { 0, 200, 500 };
@@ -250,8 +254,16 @@ internal sealed class SearchWorker
         for (int i = 0; i < moves.Count; i++)
         {
             var move = moves[i];
-            bool isCapture = !board.GetPiece(move.To).IsNone;
+            var movingPiece = board.GetPiece(move.From);
+            var targetPiece = board.GetPiece(move.To);
+            bool isCapture = !targetPiece.IsNone;
             bool isKiller = IsKillerMove(ply, move);
+            bool threatCandidate = !isCapture
+                && ply == 0
+                && depth >= 2
+                && depth <= 3
+                && i < 4;
+            bool hadImmediateThreat = threatCandidate && SideToMoveHasHighValueCapture();
 
             // 7. Futility 剪枝：若無望則略過靜態著法
             if (futilityPruning && i > 0 && !isCapture && !isKiller)
@@ -263,7 +275,16 @@ internal sealed class SearchWorker
 
             // 8. 將軍延伸（Check Extension）
             bool givesCheck = board.IsCheck(board.Turn);
-            int extension = givesCheck ? 1 : 0;
+            bool recapturable = isCapture && IsCurrentSquareRecapturable(move.To);
+            bool extendCapture = isCapture
+                && ply <= 1
+                && ShouldExtendForCapture(movingPiece, targetPiece, recapturable);
+            bool extendThreat = !isCapture
+                && !givesCheck
+                && threatCandidate
+                && !hadImmediateThreat
+                && CreatesImmediateThreatFromCurrentPosition();
+            int extension = (givesCheck || extendCapture || extendThreat) ? 1 : 0;
 
             int score;
 
@@ -355,7 +376,7 @@ internal sealed class SearchWorker
 
     // --- 著法排序 ---
 
-    private void OrderMoves(List<Move> moves, Move ttMove, int ply)
+    internal void OrderMoves(List<Move> moves, Move ttMove, int ply)
     {
         var scored = new int[moves.Count];
         for (int i = 0; i < moves.Count; i++)
@@ -379,7 +400,7 @@ internal sealed class SearchWorker
         }
     }
 
-    private int ScoreMove(Move move, Move ttMove, int ply)
+    internal int ScoreMove(Move move, Move ttMove, int ply)
     {
         if (move == ttMove) return 1_000_000;
 
@@ -392,7 +413,17 @@ internal sealed class SearchWorker
         {
             int victimVal = PieceValues[(int)targetPiece.Type];
             int attackerVal = PieceValues[(int)movingPiece.Type];
-            return 100_000 + victimVal * 10 - attackerVal;
+            int score = 100_000 + victimVal * 10 - attackerVal;
+            if (ply == 0)
+            {
+                score += EvaluateCaptureSafety(move, movingPiece, targetPiece);
+            }
+            return score;
+        }
+
+        if (ply == 0 && MoveGivesCheck(move))
+        {
+            return CheckMoveBonus + historyTable[move.From, move.To];
         }
 
         if (ply < MaxSearchPly)
@@ -402,6 +433,32 @@ internal sealed class SearchWorker
         }
 
         return historyTable[move.From, move.To];
+    }
+
+    internal bool ShouldExtendForCapture(Move move)
+    {
+        var movingPiece = board.GetPiece(move.From);
+        var targetPiece = board.GetPiece(move.To);
+        if (movingPiece.IsNone || targetPiece.IsNone)
+        {
+            return false;
+        }
+
+        return ShouldExtendForCapture(movingPiece, targetPiece, IsMoveRecapturable(move));
+    }
+
+    internal bool CreatesImmediateThreat(Move move)
+    {
+        bool hadThreatBefore = SideToMoveHasHighValueCapture();
+        board.MakeMove(move);
+        try
+        {
+            return !hadThreatBefore && CreatesImmediateThreatFromCurrentPosition();
+        }
+        finally
+        {
+            board.UnmakeMove(move);
+        }
     }
 
     private void UpdateKillers(int ply, Move move)
@@ -437,6 +494,112 @@ internal sealed class SearchWorker
                 if (attackers >= 2) return true;
             }
         }
+        return false;
+    }
+
+    private int EvaluateCaptureSafety(Move move, Piece movingPiece, Piece targetPiece)
+    {
+        if (movingPiece.IsNone || targetPiece.IsNone)
+        {
+            return 0;
+        }
+
+        if (IsMoveRecapturable(move))
+        {
+            return -PieceValues[(int)movingPiece.Type] * GuardedCapturePenaltyMultiplier;
+        }
+
+        return SafeCaptureBonus;
+    }
+
+    private bool MoveGivesCheck(Move move)
+    {
+        board.MakeMove(move);
+        try
+        {
+            return board.IsCheck(board.Turn);
+        }
+        finally
+        {
+            board.UnmakeMove(move);
+        }
+    }
+
+    private bool IsMoveRecapturable(Move move)
+    {
+        board.MakeMove(move);
+        try
+        {
+            return IsCurrentSquareRecapturable(move.To);
+        }
+        finally
+        {
+            board.UnmakeMove(move);
+        }
+    }
+
+    private bool IsCurrentSquareRecapturable(int square)
+    {
+        foreach (var reply in board.GenerateLegalMoves())
+        {
+            if (reply.To == square)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ShouldExtendForCapture(Piece movingPiece, Piece targetPiece, bool recapturable)
+    {
+        if (movingPiece.IsNone || targetPiece.IsNone)
+        {
+            return false;
+        }
+
+        int victimValue = PieceValues[(int)targetPiece.Type];
+        if (victimValue >= HighValueTacticalThreshold)
+        {
+            return true;
+        }
+
+        return !recapturable;
+    }
+
+    private bool CreatesImmediateThreatFromCurrentPosition()
+    {
+        board.MakeNullMove();
+        try
+        {
+            foreach (var threatMove in board.GenerateLegalMoves())
+            {
+                var targetPiece = board.GetPiece(threatMove.To);
+                if (!targetPiece.IsNone && PieceValues[(int)targetPiece.Type] >= HighValueTacticalThreshold)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        finally
+        {
+            board.UnmakeNullMove();
+        }
+    }
+
+    private bool SideToMoveHasHighValueCapture()
+    {
+        foreach (var move in board.GenerateLegalMoves())
+        {
+            var targetPiece = board.GetPiece(move.To);
+            if (!targetPiece.IsNone && PieceValues[(int)targetPiece.Type] >= HighValueTacticalThreshold)
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
