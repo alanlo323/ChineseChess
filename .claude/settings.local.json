@@ -6,7 +6,8 @@
       "Bash(powershell:*)",
       "Bash(dotnet build:*)",
       "Bash(dotnet test:*)",
-      "Bash(ls found:*)"
+      "Bash(ls found:*)",
+      "Bash(dotnet run:*)"
     ]
   },
   "outputStyle": "Explanatory"

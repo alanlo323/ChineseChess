@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -27,7 +28,8 @@ public sealed class TTStateSnapshot
 public class TranspositionTable
 {
     private static readonly byte[] BinaryHeader = "CCTT"u8.ToArray();
-    private const uint BinaryVersion = 1u;
+    private const uint BinaryVersion = 2u;        // v2：GZip 壓縮 payload
+    private const uint LegacyBinaryVersion = 1u;  // v1：舊版無壓縮（向後相容）
 
     private readonly ulong[] _keys;
     private readonly ulong[] _data;
@@ -199,21 +201,27 @@ public class TranspositionTable
             throw new ArgumentNullException(nameof(output));
         }
 
-        using var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, true);
-        writer.Write(BinaryHeader);
-        writer.Write(BinaryVersion);
-        writer.Write(_size);
-        writer.Write(_generation);
+        // 標頭以明文寫入（供匯入時識別版本，再決定是否解壓縮）
+        using (var headerWriter = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            headerWriter.Write(BinaryHeader);
+            headerWriter.Write(BinaryVersion);
+            headerWriter.Write(_size);
+            headerWriter.Write(_generation);
+        }
 
+        // Payload 以 GZip 壓縮寫入（v2）
+        using var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true);
+        using var dataWriter = new BinaryWriter(gzip, System.Text.Encoding.UTF8, leaveOpen: true);
         for (int i = 0; i < _keys.Length; i++)
         {
-            writer.Write(_keys[i]);
+            dataWriter.Write(_keys[i]);
         }
-
         for (int i = 0; i < _data.Length; i++)
         {
-            writer.Write(_data[i]);
+            dataWriter.Write(_data[i]);
         }
+        // dataWriter Dispose 後 gzip Flush，gzip Dispose 後將壓縮結尾寫入 output
     }
 
     public void ImportFromBinary(Stream input)
@@ -223,21 +231,21 @@ public class TranspositionTable
             throw new ArgumentNullException(nameof(input));
         }
 
-        using var reader = new BinaryReader(input, System.Text.Encoding.UTF8, true);
+        using var headerReader = new BinaryReader(input, System.Text.Encoding.UTF8, leaveOpen: true);
 
-        var magic = reader.ReadBytes(BinaryHeader.Length);
+        var magic = headerReader.ReadBytes(BinaryHeader.Length);
         if (magic.Length != BinaryHeader.Length || !magic.SequenceEqual(BinaryHeader))
         {
             throw new InvalidDataException("The file is not a valid TT binary snapshot.");
         }
 
-        uint version = reader.ReadUInt32();
-        if (version != BinaryVersion)
+        uint version = headerReader.ReadUInt32();
+        if (version != BinaryVersion && version != LegacyBinaryVersion)
         {
             throw new InvalidDataException($"Unsupported TT binary version: {version}");
         }
 
-        ulong size = reader.ReadUInt64();
+        ulong size = headerReader.ReadUInt64();
         if (size == 0 || size > (ulong)_keys.Length)
         {
             throw new InvalidDataException($"Invalid TT table size in binary snapshot: {size}");
@@ -248,20 +256,25 @@ public class TranspositionTable
             throw new InvalidDataException($"TT size mismatch. Snapshot={size}, current={_size}");
         }
 
-        var generation = reader.ReadByte();
-
+        byte generation = headerReader.ReadByte();
         int expectedLength = (int)size;
+
         var keys = new ulong[expectedLength];
         var data = new ulong[expectedLength];
 
-        for (int i = 0; i < expectedLength; i++)
+        if (version == LegacyBinaryVersion)
         {
-            keys[i] = reader.ReadUInt64();
+            // v1：舊版無壓縮格式（向後相容）
+            for (int i = 0; i < expectedLength; i++) keys[i] = headerReader.ReadUInt64();
+            for (int i = 0; i < expectedLength; i++) data[i] = headerReader.ReadUInt64();
         }
-
-        for (int i = 0; i < expectedLength; i++)
+        else
         {
-            data[i] = reader.ReadUInt64();
+            // v2：GZip 壓縮格式
+            using var gzip = new GZipStream(input, CompressionMode.Decompress, leaveOpen: true);
+            using var dataReader = new BinaryReader(gzip, System.Text.Encoding.UTF8, leaveOpen: true);
+            for (int i = 0; i < expectedLength; i++) keys[i] = dataReader.ReadUInt64();
+            for (int i = 0; i < expectedLength; i++) data[i] = dataReader.ReadUInt64();
         }
 
         _generation = generation;
