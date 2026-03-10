@@ -14,30 +14,30 @@ namespace ChineseChess.Application.Services;
 
 public class GameService : IGameService
 {
-    private readonly IAiEngine _aiEngine;          // 紅方（或共用）引擎
-    private IAiEngine? _aiEngineBlack;             // 黑方引擎（獨立TT模式才有值）
-    private readonly BookmarkManager _bookmarkManager;
-    private Board _board;
-    private GameMode _currentMode;
-    private bool _isThinking;
-    private SearchSettings _redAiSettings  = new SearchSettings();
-    private SearchSettings _blackAiSettings = new SearchSettings();
-    private CancellationTokenSource? _aiCts;
-    private CancellationTokenSource? _smartHintCts;
-    private readonly ManualResetEventSlim _aiPauseSignal = new ManualResetEventSlim(true);
+    private readonly IAiEngine aiEngine;          // 紅方（或共用）引擎
+    private IAiEngine? aiEngineBlack;             // 黑方引擎（獨立TT模式才有值）
+    private readonly BookmarkManager bookmarkManager;
+    private Board board;
+    private GameMode currentMode;
+    private bool isThinking;
+    private SearchSettings redAiSettings  = new SearchSettings();
+    private SearchSettings blackAiSettings = new SearchSettings();
+    private CancellationTokenSource? aiCts;
+    private CancellationTokenSource? smartHintCts;
+    private readonly ManualResetEventSlim aiPauseSignal = new ManualResetEventSlim(true);
 
-    public IBoard CurrentBoard => _board;
-    public GameMode CurrentMode => _currentMode;
-    public bool IsThinking => _isThinking;
-    public Move? LastMove => _board.TryGetLastMove(out var lastMove) ? lastMove : null;
+    public IBoard CurrentBoard => board;
+    public GameMode CurrentMode => currentMode;
+    public bool IsThinking => isThinking;
+    public Move? LastMove => board.TryGetLastMove(out var lastMove) ? lastMove : null;
     public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
-    public long LastSearchNodes => Interlocked.Read(ref _lastSearchNodes);
-    public long LastSearchNps => Interlocked.Read(ref _lastSearchNps);
+    public long LastSearchNodes => Interlocked.Read(ref lastSearchNodes);
+    public long LastSearchNps => Interlocked.Read(ref lastSearchNps);
     public bool UseSharedTranspositionTable { get; set; } = false;
-    private long _lastSearchNodes;
-    private long _lastSearchNps;
-    private long _completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
+    private long lastSearchNodes;
+    private long lastSearchNps;
+    private long completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
 
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
@@ -47,43 +47,43 @@ public class GameService : IGameService
 
     public GameService(IAiEngine aiEngine)
     {
-        _aiEngine = aiEngine;
-        _bookmarkManager = new BookmarkManager();
-        _board = new Board(); // 初始局面
+        this.aiEngine = aiEngine;
+        bookmarkManager = new BookmarkManager();
+        board = new Board(); // 初始局面
     }
 
     public async Task StartGameAsync(GameMode mode)
     {
-        _currentMode = mode;
-        _aiCts?.Cancel();
-        _aiPauseSignal.Set();
-        _board = new Board(); // 重置為標準初始局
-        _isGameOver = false;
-        Interlocked.Exchange(ref _completedGameNodes, 0);
-        Interlocked.Exchange(ref _lastSearchNodes, 0);
-        Interlocked.Exchange(ref _lastSearchNps, 0);
-        _board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        currentMode = mode;
+        aiCts?.Cancel();
+        aiPauseSignal.Set();
+        board = new Board(); // 重置為標準初始局
+        isGameOver = false;
+        Interlocked.Exchange(ref completedGameNodes, 0);
+        Interlocked.Exchange(ref lastSearchNodes, 0);
+        Interlocked.Exchange(ref lastSearchNps, 0);
+        board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
 
         // AiVsAi：依設定初始化黑方引擎
-        if (_currentMode == GameMode.AiVsAi)
+        if (currentMode == GameMode.AiVsAi)
         {
-            _aiEngineBlack = UseSharedTranspositionTable
-                ? null                           // 共用：直接用 _aiEngine
-                : _aiEngine.CloneWithCopiedTT(); // 獨立：從紅方 TT 複製一份
+            aiEngineBlack = UseSharedTranspositionTable
+                ? null                           // 共用：直接用 aiEngine
+                : aiEngine.CloneWithCopiedTT(); // 獨立：從紅方 TT 複製一份
         }
         else
         {
-            _aiEngineBlack = null;
+            aiEngineBlack = null;
         }
 
         NotifyUpdate();
         GameMessage?.Invoke("Game Started");
 
-        if (_currentMode == GameMode.AiVsAi || (_currentMode == GameMode.PlayerVsAi && _board.Turn == PieceColor.Black))
+        if (currentMode == GameMode.AiVsAi || (currentMode == GameMode.PlayerVsAi && board.Turn == PieceColor.Black))
         {
             // 若 AI 先手（例如自訂 FEN 或 AiVsAi），就觸發 AI 下棋。
             // 一般標準局面在 PvAI 下，紅方（Player）預設先行，除非有其他設定。
-            if (_currentMode == GameMode.AiVsAi)
+            if (currentMode == GameMode.AiVsAi)
             {
                 await RunAiSearchAsync(applyBestMove: true);
             }
@@ -92,33 +92,33 @@ public class GameService : IGameService
 
     public Task StopGameAsync()
     {
-        _aiPauseSignal.Set();
-        _aiCts?.Cancel();
+        aiPauseSignal.Set();
+        aiCts?.Cancel();
         ThinkingProgress?.Invoke("AI 思考已停止");
         return Task.CompletedTask;
     }
 
     public Task PauseThinkingAsync()
     {
-        if (!_isThinking)
+        if (!isThinking)
         {
             ThinkingProgress?.Invoke("AI 目前未在思考中");
             return Task.CompletedTask;
         }
 
-        _aiPauseSignal.Reset();
+        aiPauseSignal.Reset();
         return Task.CompletedTask;
     }
 
     public Task ResumeThinkingAsync()
     {
-        if (!_isThinking)
+        if (!isThinking)
         {
             ThinkingProgress?.Invoke("AI 目前未在思考中");
             return Task.CompletedTask;
         }
 
-        _aiPauseSignal.Set();
+        aiPauseSignal.Set();
         return Task.CompletedTask;
     }
 
@@ -136,7 +136,7 @@ public class GameService : IGameService
 
             ThinkingProgress?.Invoke("TT 匯出中...");
             await using var file = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-            await _aiEngine.ExportTranspositionTableAsync(file, asJson, ct);
+            await aiEngine.ExportTranspositionTableAsync(file, asJson, ct);
             ThinkingProgress?.Invoke("TT 匯出完成");
         }
         catch (OperationCanceledException)
@@ -169,7 +169,7 @@ public class GameService : IGameService
 
             ThinkingProgress?.Invoke("TT 匯入中...");
             await using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            await _aiEngine.ImportTranspositionTableAsync(file, asJson, ct);
+            await aiEngine.ImportTranspositionTableAsync(file, asJson, ct);
             ThinkingProgress?.Invoke("TT 匯入完成");
         }
         catch (OperationCanceledException)
@@ -184,7 +184,7 @@ public class GameService : IGameService
 
     public async Task ExportBlackTranspositionTableAsync(string filePath, bool asJson, CancellationToken ct = default)
     {
-        if (_aiEngineBlack == null)
+        if (aiEngineBlack == null)
         {
             ThinkingProgress?.Invoke("黑方 TT 不存在（非獨立 TT 模式）");
             return;
@@ -201,7 +201,7 @@ public class GameService : IGameService
             await EnsureAiStoppedForPersistenceAsync(ct);
             ThinkingProgress?.Invoke("黑方 TT 匯出中...");
             await using var file = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-            await _aiEngineBlack.ExportTranspositionTableAsync(file, asJson, ct);
+            await aiEngineBlack.ExportTranspositionTableAsync(file, asJson, ct);
             ThinkingProgress?.Invoke("黑方 TT 匯出完成");
         }
         catch (OperationCanceledException)
@@ -216,7 +216,7 @@ public class GameService : IGameService
 
     public async Task ImportBlackTranspositionTableAsync(string filePath, bool asJson, CancellationToken ct = default)
     {
-        if (_aiEngineBlack == null)
+        if (aiEngineBlack == null)
         {
             ThinkingProgress?.Invoke("黑方 TT 不存在（非獨立 TT 模式）");
             return;
@@ -239,7 +239,7 @@ public class GameService : IGameService
             await EnsureAiStoppedForPersistenceAsync(ct);
             ThinkingProgress?.Invoke("黑方 TT 匯入中...");
             await using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            await _aiEngineBlack.ImportTranspositionTableAsync(file, asJson, ct);
+            await aiEngineBlack.ImportTranspositionTableAsync(file, asJson, ct);
             ThinkingProgress?.Invoke("黑方 TT 匯入完成");
         }
         catch (OperationCanceledException)
@@ -254,28 +254,28 @@ public class GameService : IGameService
 
     public async Task HumanMoveAsync(Move move)
     {
-        if (_isThinking) return;
-        if (_isGameOver) return;
-        if (_currentMode == GameMode.AiVsAi) return;
+        if (isThinking) return;
+        if (isGameOver) return;
+        if (currentMode == GameMode.AiVsAi) return;
         if (move.From >= Board.BoardSize || move.To >= Board.BoardSize || move.From == move.To)
         {
             GameMessage?.Invoke("非法落子：走法資料不完整");
             return;
         }
 
-        var legalMoves = _board.GenerateLegalMoves();
+        var legalMoves = board.GenerateLegalMoves();
         if (!legalMoves.Contains(move))
         {
             GameMessage?.Invoke("非法落子：這不是合法著法");
             return;
         }
 
-        _board.MakeMove(move);
+        board.MakeMove(move);
         NotifyUpdate();
 
         if (CheckGameOver()) return;
 
-        if (_currentMode == GameMode.PlayerVsAi)
+        if (currentMode == GameMode.PlayerVsAi)
         {
             await RunAiSearchAsync(applyBestMove: true);
         }
@@ -283,13 +283,13 @@ public class GameService : IGameService
 
     private async Task<SearchResult?> RunAiSearchAsync(bool applyBestMove)
     {
-        if (_isThinking) return null;
-        _isThinking = true;
+        if (isThinking) return null;
+        isThinking = true;
         ThinkingProgress?.Invoke("AI 思考中...");
 
-        _aiCts = new CancellationTokenSource();
-        var cts = _aiCts;
-        var boardSnapshot = _board.Clone();
+        aiCts = new CancellationTokenSource();
+        var cts = aiCts;
+        var boardSnapshot = board.Clone();
         SearchResult? result = null;
         var continueAiLoop = false;
 
@@ -301,13 +301,13 @@ public class GameService : IGameService
             Depth       = activeSettings.Depth,
             TimeLimitMs = activeSettings.TimeLimitMs,
             ThreadCount = activeSettings.ThreadCount,
-            PauseSignal = _aiPauseSignal
+            PauseSignal = aiPauseSignal
         };
-        long baseNodes = Interlocked.Read(ref _completedGameNodes);
+        long baseNodes = Interlocked.Read(ref completedGameNodes);
         var progress = new Progress<SearchProgress>(p =>
         {
-            Interlocked.Exchange(ref _lastSearchNodes, baseNodes + p.Nodes);
-            Interlocked.Exchange(ref _lastSearchNps, p.NodesPerSecond);
+            Interlocked.Exchange(ref lastSearchNodes, baseNodes + p.Nodes);
+            Interlocked.Exchange(ref lastSearchNps, p.NodesPerSecond);
             ThinkingProgress?.Invoke(FormatThinkingProgress(p));
         });
 
@@ -333,21 +333,21 @@ public class GameService : IGameService
             {
                 if (applyBestMove)
                 {
-                    var searchTurn   = _board.Turn;
-                    var moveNotation = MoveNotation.ToNotation(result.BestMove, _board);
-                    _board.MakeMove(result.BestMove);
+                    var searchTurn   = board.Turn;
+                    var moveNotation = MoveNotation.ToNotation(result.BestMove, board);
+                    board.MakeMove(result.BestMove);
                     NotifyUpdate();
                     GameMessage?.Invoke($"AI 走了 {moveNotation}（分數：{FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方")}）");
                     ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, moveNotation));
                 }
                 else
                 {
-                    var moveNotation = MoveNotation.ToNotation(result.BestMove, _board);
+                    var moveNotation = MoveNotation.ToNotation(result.BestMove, board);
                     HintReady?.Invoke(result);
-                    ThinkingProgress?.Invoke(FormatHintProgress(result, _board.Turn, moveNotation));
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, moveNotation));
                 }
 
-                if (applyBestMove && !CheckGameOver() && _currentMode == GameMode.AiVsAi)
+                if (applyBestMove && !CheckGameOver() && currentMode == GameMode.AiVsAi)
                 {
                     // 繼續執行下一輪
                     continueAiLoop = true;
@@ -364,11 +364,11 @@ public class GameService : IGameService
         }
         finally
         {
-            _isThinking = false;
+            isThinking = false;
             if (result != null)
             {
-                Interlocked.Add(ref _completedGameNodes, result.Nodes);
-                Interlocked.Exchange(ref _lastSearchNodes, Interlocked.Read(ref _completedGameNodes));
+                Interlocked.Add(ref completedGameNodes, result.Nodes);
+                Interlocked.Exchange(ref lastSearchNodes, Interlocked.Read(ref completedGameNodes));
             }
             if (applyBestMove)
             {
@@ -384,48 +384,48 @@ public class GameService : IGameService
         return result;
     }
 
-    // 根據目前輪次選擇引擎（AiVsAi 獨立TT 時，黑方用 _aiEngineBlack）
+    // 根據目前輪次選擇引擎（AiVsAi 獨立TT 時，黑方用 aiEngineBlack）
     private IAiEngine GetCurrentEngine()
     {
-        if (_currentMode == GameMode.AiVsAi && _aiEngineBlack != null && _board.Turn == PieceColor.Black)
-            return _aiEngineBlack;
-        return _aiEngine;
+        if (currentMode == GameMode.AiVsAi && aiEngineBlack != null && board.Turn == PieceColor.Black)
+            return aiEngineBlack;
+        return aiEngine;
     }
 
     // 根據目前輪次選擇設定
     private SearchSettings GetCurrentSettings()
     {
-        if (_currentMode == GameMode.AiVsAi && _board.Turn == PieceColor.Black)
-            return _blackAiSettings;
-        return _redAiSettings;
+        if (currentMode == GameMode.AiVsAi && board.Turn == PieceColor.Black)
+            return blackAiSettings;
+        return redAiSettings;
     }
 
-    private bool _isGameOver;
+    private bool isGameOver;
 
     private bool CheckGameOver()
     {
         // 和棋優先判定（三次重覆局面）
-        if (_board.IsDrawByRepetition())
+        if (board.IsDrawByRepetition())
         {
-            _isGameOver = true;
+            isGameOver = true;
             GameMessage?.Invoke("和棋！三次重覆局面");
             return true;
         }
 
         // 和棋判定（六十步無吃子）
-        if (_board.IsDrawByNoCapture())
+        if (board.IsDrawByNoCapture())
         {
-            _isGameOver = true;
+            isGameOver = true;
             GameMessage?.Invoke("和棋！六十步無吃子");
             return true;
         }
 
-        var currentTurn = _board.Turn;
-        if (_board.GenerateLegalMoves().Any()) return false;
+        var currentTurn = board.Turn;
+        if (board.GenerateLegalMoves().Any()) return false;
 
-        _isGameOver = true;
+        isGameOver = true;
         var winner = currentTurn == PieceColor.Red ? "黑方" : "紅方";
-        if (_board.IsCheck(currentTurn))
+        if (board.IsCheck(currentTurn))
             GameMessage?.Invoke($"將死！{winner}獲勝！");
         else
             GameMessage?.Invoke($"困斃！{winner}獲勝！"); // 中國象棋中困斃也算輸
@@ -435,13 +435,13 @@ public class GameService : IGameService
 
     public void Undo()
     {
-        if (_isThinking) return;
+        if (isThinking) return;
 
         bool didUndo = false;
 
         void TryUndo()
         {
-            if (!_board.TryGetLastMove(out _))
+            if (!board.TryGetLastMove(out _))
             {
                 GameMessage?.Invoke("無可悔棋步數");
                 return;
@@ -449,7 +449,7 @@ public class GameService : IGameService
 
             try
             {
-                _board.UndoMove();
+                board.UndoMove();
                 didUndo = true;
             }
             catch (InvalidOperationException)
@@ -459,9 +459,9 @@ public class GameService : IGameService
         }
 
         TryUndo();
-        if (_currentMode == GameMode.PlayerVsAi)
+        if (currentMode == GameMode.PlayerVsAi)
         {
-            if (_board.TryGetLastMove(out _))
+            if (board.TryGetLastMove(out _))
             {
                 TryUndo();
             }
@@ -483,44 +483,44 @@ public class GameService : IGameService
         GameMessage?.Invoke("Redo 功能未實作");
     }
 
-    public void AddBookmark(string name) => _bookmarkManager.AddBookmark(name, _board.ToFen());
+    public void AddBookmark(string name) => bookmarkManager.AddBookmark(name, board.ToFen());
     public void LoadBookmark(string name)
     {
-        var fen = _bookmarkManager.GetBookmark(name);
+        var fen = bookmarkManager.GetBookmark(name);
         if (fen != null)
         {
-            _board.ParseFen(fen);
+            board.ParseFen(fen);
             NotifyUpdate();
         }
     }
-    public void DeleteBookmark(string name) => _bookmarkManager.DeleteBookmark(name);
-    public IEnumerable<string> GetBookmarks() => _bookmarkManager.GetBookmarkNames();
+    public void DeleteBookmark(string name) => bookmarkManager.DeleteBookmark(name);
+    public IEnumerable<string> GetBookmarks() => bookmarkManager.GetBookmarkNames();
 
     public void SetDifficulty(int depth, int timeMs, int threadCount = 0)
     {
-        _redAiSettings.Depth      = depth;
-        _redAiSettings.TimeLimitMs = timeMs;
-        _blackAiSettings.Depth     = depth;
-        _blackAiSettings.TimeLimitMs = timeMs;
+        redAiSettings.Depth      = depth;
+        redAiSettings.TimeLimitMs = timeMs;
+        blackAiSettings.Depth     = depth;
+        blackAiSettings.TimeLimitMs = timeMs;
         if (threadCount > 0)
         {
-            _redAiSettings.ThreadCount   = threadCount;
-            _blackAiSettings.ThreadCount = threadCount;
+            redAiSettings.ThreadCount   = threadCount;
+            blackAiSettings.ThreadCount = threadCount;
         }
     }
 
     public void SetRedAiDifficulty(int depth, int timeMs, int threadCount = 0)
     {
-        _redAiSettings.Depth      = depth;
-        _redAiSettings.TimeLimitMs = timeMs;
-        if (threadCount > 0) _redAiSettings.ThreadCount = threadCount;
+        redAiSettings.Depth      = depth;
+        redAiSettings.TimeLimitMs = timeMs;
+        if (threadCount > 0) redAiSettings.ThreadCount = threadCount;
     }
 
     public void SetBlackAiDifficulty(int depth, int timeMs, int threadCount = 0)
     {
-        _blackAiSettings.Depth      = depth;
-        _blackAiSettings.TimeLimitMs = timeMs;
-        if (threadCount > 0) _blackAiSettings.ThreadCount = threadCount;
+        blackAiSettings.Depth      = depth;
+        blackAiSettings.TimeLimitMs = timeMs;
+        if (threadCount > 0) blackAiSettings.ThreadCount = threadCount;
     }
 
     public async Task<SearchResult> GetHintAsync()
@@ -529,17 +529,17 @@ public class GameService : IGameService
         return result ?? new SearchResult { BestMove = Move.Null };
     }
 
-    public TTStatistics GetTTStatistics() => _aiEngine.GetTTStatistics();
+    public TTStatistics GetTTStatistics() => aiEngine.GetTTStatistics();
 
     public TTStatistics? GetBlackTTStatistics()
     {
-        if (_aiEngineBlack == null) return null;
-        return _aiEngineBlack.GetTTStatistics();
+        if (aiEngineBlack == null) return null;
+        return aiEngineBlack.GetTTStatistics();
     }
 
     public async Task MergeTranspositionTablesAsync(CancellationToken ct = default)
     {
-        if (_aiEngineBlack == null)
+        if (aiEngineBlack == null)
         {
             ThinkingProgress?.Invoke("合併 TT：兩個引擎共用同一個 TT，無需合併");
             return;
@@ -550,8 +550,8 @@ public class GameService : IGameService
             await EnsureAiStoppedForPersistenceAsync(ct);
             ThinkingProgress?.Invoke("合併兩方 TT 中...");
             // 雙向合併：讓兩方都取得最深的分析結果
-            _aiEngine.MergeTranspositionTableFrom(_aiEngineBlack);
-            _aiEngineBlack.MergeTranspositionTableFrom(_aiEngine);
+            aiEngine.MergeTranspositionTableFrom(aiEngineBlack);
+            aiEngineBlack.MergeTranspositionTableFrom(aiEngine);
             ThinkingProgress?.Invoke("TT 合併完成");
         }
         catch (OperationCanceledException)
@@ -564,24 +564,24 @@ public class GameService : IGameService
         }
     }
 
-    public IEnumerable<TTEntry> EnumerateTTEntries() => _aiEngine.EnumerateTTEntries();
+    public IEnumerable<TTEntry> EnumerateTTEntries() => aiEngine.EnumerateTTEntries();
 
     public TTTreeNode? ExploreTTTree(int maxDepth = 6) =>
-        _aiEngine.ExploreTTTree(CurrentBoard, maxDepth);
+        aiEngine.ExploreTTTree(CurrentBoard, maxDepth);
 
     public async Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default)
     {
         if (!IsSmartHintEnabled) return;
 
         // 取消上一次尚未完成的智能提示搜尋
-        _smartHintCts?.Cancel();
-        _smartHintCts = new CancellationTokenSource();
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, _smartHintCts.Token);
+        smartHintCts?.Cancel();
+        smartHintCts = new CancellationTokenSource();
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, smartHintCts.Token);
 
         try
         {
-            var board = _board.Clone();
-            var moves = board.GenerateLegalMoves()
+            var boardSnapshot = board.Clone();
+            var moves = boardSnapshot.GenerateLegalMoves()
                 .Where(m => m.From == fromIndex)
                 .ToList();
 
@@ -590,7 +590,7 @@ public class GameService : IGameService
             ThinkingProgress?.Invoke($"智能提示：開始分析 {moves.Count} 個走法（深度 {SmartHintDepth}）...");
 
             var progress = new Progress<string>(msg => ThinkingProgress?.Invoke(msg));
-            var evaluations = await _aiEngine.EvaluateMovesAsync(board, moves, SmartHintDepth, linkedCts.Token, progress);
+            var evaluations = await aiEngine.EvaluateMovesAsync(boardSnapshot, moves, SmartHintDepth, linkedCts.Token, progress);
 
             if (!linkedCts.Token.IsCancellationRequested)
             {
@@ -598,7 +598,7 @@ public class GameService : IGameService
                 if (best != null)
                 {
                     string scoreStr    = best.Score > 0 ? $"+{best.Score}" : best.Score.ToString();
-                    string bestNotation = MoveNotation.ToNotation(best.Move, _board);
+                    string bestNotation = MoveNotation.ToNotation(best.Move, board);
                     ThinkingProgress?.Invoke($"智能提示完成：最佳走法 {bestNotation} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法");
                 }
                 SmartHintReady?.Invoke(evaluations);
@@ -618,7 +618,7 @@ public class GameService : IGameService
         var speed = progress.NodesPerSecond > 0
             ? $"{progress.NodesPerSecond:N0} nodes/s"
             : "n/a";
-        var turnLabel = _board.Turn == PieceColor.Red ? "紅方" : "黑方";
+        var turnLabel = board.Turn == PieceColor.Red ? "紅方" : "黑方";
         var scoreText = FormatScore(progress.Score, turnLabel);
         var bestMove = string.IsNullOrWhiteSpace(progress.BestMove) ? "待更新" : progress.BestMove;
         var mode = progress.IsHeartbeat ? "（即時）" : "（階段）";
@@ -661,14 +661,14 @@ public class GameService : IGameService
 
     private async Task EnsureAiStoppedForPersistenceAsync(CancellationToken ct)
     {
-        if (!_isThinking)
+        if (!isThinking)
         {
             return;
         }
 
-        _aiPauseSignal.Set();
-        _aiCts?.Cancel();
-        while (_isThinking)
+        aiPauseSignal.Set();
+        aiCts?.Cancel();
+        while (isThinking)
         {
             ct.ThrowIfCancellationRequested();
             await Task.Delay(10, ct);

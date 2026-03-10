@@ -19,33 +19,33 @@ namespace ChineseChess.WPF.ViewModels;
 
 public class ControlPanelViewModel : ObservableObject
 {
-    private readonly IGameService _gameService;
-    private GameMode _selectedMode = GameMode.PlayerVsAi;
-    private string _statusMessage = "Ready";
-    private int _searchDepth;
-    private int _searchThinkingTime;
-    private int _redSearchDepth;
-    private int _redSearchThinkingTime;
-    private int _blackSearchDepth;
-    private int _blackSearchThinkingTime;
-    private bool _useSharedTT;
-    private bool _isSmartHintEnabled;
-    private int _smartHintDepth;
-    private TTStatistics _ttStats = new TTStatistics();
-    private TTStatistics? _blackTtStats = null;
+    private readonly IGameService gameService;
+    private GameMode selectedMode = GameMode.PlayerVsAi;
+    private string statusMessage = "Ready";
+    private int searchDepth;
+    private int searchThinkingTime;
+    private int redSearchDepth;
+    private int redSearchThinkingTime;
+    private int blackSearchDepth;
+    private int blackSearchThinkingTime;
+    private bool useSharedTT;
+    private bool isSmartHintEnabled;
+    private int smartHintDepth;
+    private TTStatistics ttStats = new TTStatistics();
+    private TTStatistics? blackTtStats = null;
     private const int TTExploreMaxDepth = 20;   // 固定最大深度（TT 搜尋深度通常 ≤ 10，此值足以顯示全樹）
-    private string _ttExplorerText = "（初始化中...）";
-    private readonly System.Timers.Timer _ttExplorerTimer;
-    private int _ttExplorerBusy;   // Interlocked 防止重疊執行（0 = 閒置，1 = 執行中）
+    private string ttExplorerText = "（初始化中...）";
+    private readonly System.Timers.Timer ttExplorerTimer;
+    private int ttExplorerBusy;   // Interlocked 防止重疊執行（0 = 閒置，1 = 執行中）
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
     public GameMode SelectedMode
     {
-        get => _selectedMode;
+        get => selectedMode;
         set
         {
-            if (SetProperty(ref _selectedMode, value))
+            if (SetProperty(ref selectedMode, value))
             {
                 OnPropertyChanged(nameof(IsAiVsAiMode));
                 OnPropertyChanged(nameof(ShowDualTTStats));
@@ -53,36 +53,36 @@ public class ControlPanelViewModel : ObservableObject
         }
     }
 
-    public bool IsAiVsAiMode => _selectedMode == GameMode.AiVsAi;
+    public bool IsAiVsAiMode => selectedMode == GameMode.AiVsAi;
 
     public string StatusMessage
     {
-        get => _statusMessage;
-        set => SetProperty(ref _statusMessage, value);
+        get => statusMessage;
+        set => SetProperty(ref statusMessage, value);
     }
 
     // ─── 全域設定（非 AiVsAi 模式使用）────────────────────────────────────
 
     public int SearchDepth
     {
-        get => _searchDepth;
+        get => searchDepth;
         set
         {
-            if (SetProperty(ref _searchDepth, value))
+            if (SetProperty(ref searchDepth, value))
             {
-                _gameService.SetDifficulty(value, _searchThinkingTime * 1000);
+                gameService.SetDifficulty(value, searchThinkingTime * 1000);
             }
         }
     }
 
     public int SearchThinkingTime
     {
-        get => _searchThinkingTime;
+        get => searchThinkingTime;
         set
         {
-            if (SetProperty(ref _searchThinkingTime, value))
+            if (SetProperty(ref searchThinkingTime, value))
             {
-                _gameService.SetDifficulty(_searchDepth, value * 1000);
+                gameService.SetDifficulty(searchDepth, value * 1000);
             }
         }
     }
@@ -91,24 +91,24 @@ public class ControlPanelViewModel : ObservableObject
 
     public int RedSearchDepth
     {
-        get => _redSearchDepth;
+        get => redSearchDepth;
         set
         {
-            if (SetProperty(ref _redSearchDepth, value))
+            if (SetProperty(ref redSearchDepth, value))
             {
-                _gameService.SetRedAiDifficulty(value, _redSearchThinkingTime * 1000);
+                gameService.SetRedAiDifficulty(value, redSearchThinkingTime * 1000);
             }
         }
     }
 
     public int RedSearchThinkingTime
     {
-        get => _redSearchThinkingTime;
+        get => redSearchThinkingTime;
         set
         {
-            if (SetProperty(ref _redSearchThinkingTime, value))
+            if (SetProperty(ref redSearchThinkingTime, value))
             {
-                _gameService.SetRedAiDifficulty(_redSearchDepth, value * 1000);
+                gameService.SetRedAiDifficulty(redSearchDepth, value * 1000);
             }
         }
     }
@@ -117,24 +117,24 @@ public class ControlPanelViewModel : ObservableObject
 
     public int BlackSearchDepth
     {
-        get => _blackSearchDepth;
+        get => blackSearchDepth;
         set
         {
-            if (SetProperty(ref _blackSearchDepth, value))
+            if (SetProperty(ref blackSearchDepth, value))
             {
-                _gameService.SetBlackAiDifficulty(value, _blackSearchThinkingTime * 1000);
+                gameService.SetBlackAiDifficulty(value, blackSearchThinkingTime * 1000);
             }
         }
     }
 
     public int BlackSearchThinkingTime
     {
-        get => _blackSearchThinkingTime;
+        get => blackSearchThinkingTime;
         set
         {
-            if (SetProperty(ref _blackSearchThinkingTime, value))
+            if (SetProperty(ref blackSearchThinkingTime, value))
             {
-                _gameService.SetBlackAiDifficulty(_blackSearchDepth, value * 1000);
+                gameService.SetBlackAiDifficulty(blackSearchDepth, value * 1000);
             }
         }
     }
@@ -143,79 +143,79 @@ public class ControlPanelViewModel : ObservableObject
 
     public bool UseSharedTT
     {
-        get => _useSharedTT;
+        get => useSharedTT;
         set
         {
-            if (SetProperty(ref _useSharedTT, value))
+            if (SetProperty(ref useSharedTT, value))
             {
-                _gameService.UseSharedTranspositionTable = value;
+                gameService.UseSharedTranspositionTable = value;
                 OnPropertyChanged(nameof(ShowDualTTStats));
             }
         }
     }
 
     // 獨立TT且AI對AI模式才顯示雙欄統計
-    public bool ShowDualTTStats => IsAiVsAiMode && !_useSharedTT;
+    public bool ShowDualTTStats => IsAiVsAiMode && !useSharedTT;
 
     // ─── 智能提示 ─────────────────────────────────────────────────────────
 
     public bool IsSmartHintEnabled
     {
-        get => _isSmartHintEnabled;
+        get => isSmartHintEnabled;
         set
         {
-            if (SetProperty(ref _isSmartHintEnabled, value))
+            if (SetProperty(ref isSmartHintEnabled, value))
             {
-                _gameService.IsSmartHintEnabled = value;
+                gameService.IsSmartHintEnabled = value;
             }
         }
     }
 
     public int SmartHintDepth
     {
-        get => _smartHintDepth;
+        get => smartHintDepth;
         set
         {
-            if (SetProperty(ref _smartHintDepth, value))
+            if (SetProperty(ref smartHintDepth, value))
             {
-                _gameService.SmartHintDepth = value;
+                gameService.SmartHintDepth = value;
             }
         }
     }
 
     // ─── TT 統計（紅方 / 共用）────────────────────────────────────────────
 
-    public string TtCapacity => $"{_ttStats.Capacity:N0}";
-    public string TtMemoryMb => $"{_ttStats.MemoryMb:F1} MB";
-    public string TtGeneration => _ttStats.Generation.ToString();
-    public string TtOccupied => $"{_ttStats.OccupiedEntries:N0}";
-    public string TtFillRate => $"{_ttStats.FillRate:P1}";
-    public string TtProbes => $"{_ttStats.TotalProbes:N0}";
-    public string TtHits => $"{_ttStats.Hits:N0}";
-    public string TtHitRate => $"{_ttStats.HitRate:P1}";
+    public string TtCapacity => $"{ttStats.Capacity:N0}";
+    public string TtMemoryMb => $"{ttStats.MemoryMb:F1} MB";
+    public string TtGeneration => ttStats.Generation.ToString();
+    public string TtOccupied => $"{ttStats.OccupiedEntries:N0}";
+    public string TtFillRate => $"{ttStats.FillRate:P1}";
+    public string TtProbes => $"{ttStats.TotalProbes:N0}";
+    public string TtHits => $"{ttStats.Hits:N0}";
+    public string TtHitRate => $"{ttStats.HitRate:P1}";
 
     // ─── TT 統計（黑方，獨立TT模式）──────────────────────────────────────
 
-    public string BlackTtCapacity => $"{_blackTtStats?.Capacity ?? 0:N0}";
-    public string BlackTtMemoryMb => $"{_blackTtStats?.MemoryMb ?? 0:F1} MB";
-    public string BlackTtGeneration => (_blackTtStats?.Generation ?? 0).ToString();
-    public string BlackTtOccupied => $"{_blackTtStats?.OccupiedEntries ?? 0:N0}";
-    public string BlackTtFillRate => $"{_blackTtStats?.FillRate ?? 0:P1}";
-    public string BlackTtProbes => $"{_blackTtStats?.TotalProbes ?? 0:N0}";
-    public string BlackTtHits => $"{_blackTtStats?.Hits ?? 0:N0}";
-    public string BlackTtHitRate => $"{_blackTtStats?.HitRate ?? 0:P1}";
+    public string BlackTtCapacity => $"{blackTtStats?.Capacity ?? 0:N0}";
+    public string BlackTtMemoryMb => $"{blackTtStats?.MemoryMb ?? 0:F1} MB";
+    public string BlackTtGeneration => (blackTtStats?.Generation ?? 0).ToString();
+    public string BlackTtOccupied => $"{blackTtStats?.OccupiedEntries ?? 0:N0}";
+    public string BlackTtFillRate => $"{blackTtStats?.FillRate ?? 0:P1}";
+    public string BlackTtProbes => $"{blackTtStats?.TotalProbes ?? 0:N0}";
+    public string BlackTtHits => $"{blackTtStats?.Hits ?? 0:N0}";
+    public string BlackTtHitRate => $"{blackTtStats?.HitRate ?? 0:P1}";
 
     // ─── 搜尋效能 ─────────────────────────────────────────────────────────
 
-    public string SearchNodes => $"{_gameService.LastSearchNodes:N0}";
-    public string SearchNps => $"{_gameService.LastSearchNps:N0} 節點/秒";
+    public string SearchNodes => $"{gameService.LastSearchNodes:N0}";
+    public string SearchNps => $"{gameService.LastSearchNps:N0} 節點/秒";
 
     // ─── TT 探索 ──────────────────────────────────────────────────────────
 
     public string TTExplorerText
     {
-        get => _ttExplorerText;
-        private set => SetProperty(ref _ttExplorerText, value);
+        get => ttExplorerText;
+        private set => SetProperty(ref ttExplorerText, value);
     }
 
     // ─── 指令 ─────────────────────────────────────────────────────────────
@@ -235,41 +235,41 @@ public class ControlPanelViewModel : ObservableObject
 
     public ControlPanelViewModel(IGameService gameService, GameSettings settings)
     {
-        _gameService = gameService;
+        this.gameService = gameService;
 
-        _searchDepth            = settings.SearchDepth;
-        _searchThinkingTime     = settings.SearchThinkingTimeSeconds;
-        _redSearchDepth         = settings.RedSearchDepth;
-        _redSearchThinkingTime  = settings.RedSearchThinkingTimeSeconds;
-        _blackSearchDepth       = settings.BlackSearchDepth;
-        _blackSearchThinkingTime = settings.BlackSearchThinkingTimeSeconds;
-        _useSharedTT            = settings.UseSharedTranspositionTable;
-        _isSmartHintEnabled     = settings.IsSmartHintEnabled;
-        _smartHintDepth         = settings.SmartHintDepth;
+        searchDepth            = settings.SearchDepth;
+        searchThinkingTime     = settings.SearchThinkingTimeSeconds;
+        redSearchDepth         = settings.RedSearchDepth;
+        redSearchThinkingTime  = settings.RedSearchThinkingTimeSeconds;
+        blackSearchDepth       = settings.BlackSearchDepth;
+        blackSearchThinkingTime = settings.BlackSearchThinkingTimeSeconds;
+        useSharedTT            = settings.UseSharedTranspositionTable;
+        isSmartHintEnabled     = settings.IsSmartHintEnabled;
+        smartHintDepth         = settings.SmartHintDepth;
 
-        _gameService.IsSmartHintEnabled = _isSmartHintEnabled;
-        _gameService.SmartHintDepth     = _smartHintDepth;
-        _gameService.UseSharedTranspositionTable = _useSharedTT;
+        this.gameService.IsSmartHintEnabled = isSmartHintEnabled;
+        this.gameService.SmartHintDepth     = smartHintDepth;
+        this.gameService.UseSharedTranspositionTable = useSharedTT;
 
         RefreshTTStatsCommand = new RelayCommand(_ => RefreshTTStats());
-        StartGameCommand = new RelayCommand(async _ => await _gameService.StartGameAsync(SelectedMode));
-        UndoCommand = new RelayCommand(_ => _gameService.Undo());
+        StartGameCommand = new RelayCommand(async _ => await gameService.StartGameAsync(SelectedMode));
+        UndoCommand = new RelayCommand(_ => gameService.Undo());
 
         StopThinkingCommand = new RelayCommand(async _ =>
         {
             StatusMessage = "停止思考中...";
-            await _gameService.StopGameAsync();
+            await gameService.StopGameAsync();
             StatusMessage = "AI 思考已停止";
         });
         PauseThinkingCommand = new RelayCommand(async _ =>
         {
             StatusMessage = "正在暫停思考...";
-            await _gameService.PauseThinkingAsync();
+            await gameService.PauseThinkingAsync();
         });
         ResumeThinkingCommand = new RelayCommand(async _ =>
         {
             StatusMessage = "繼續思考中...";
-            await _gameService.ResumeThinkingAsync();
+            await gameService.ResumeThinkingAsync();
         });
 
         ExportTranspositionTableCommand = new RelayCommand(async _ =>
@@ -291,7 +291,7 @@ public class ControlPanelViewModel : ObservableObject
                     StringComparison.OrdinalIgnoreCase);
 
                 StatusMessage = "匯出 TT 表中...";
-                await _gameService.ExportTranspositionTableAsync(dialog.FileName, asJson);
+                await gameService.ExportTranspositionTableAsync(dialog.FileName, asJson);
                 StatusMessage = "TT 表匯出完成";
             }
             catch (Exception ex)
@@ -319,7 +319,7 @@ public class ControlPanelViewModel : ObservableObject
                     StringComparison.OrdinalIgnoreCase);
 
                 StatusMessage = "匯入 TT 表中...";
-                await _gameService.ImportTranspositionTableAsync(dialog.FileName, asJson);
+                await gameService.ImportTranspositionTableAsync(dialog.FileName, asJson);
                 StatusMessage = "TT 表匯入完成";
             }
             catch (Exception ex)
@@ -347,7 +347,7 @@ public class ControlPanelViewModel : ObservableObject
                     StringComparison.OrdinalIgnoreCase);
 
                 StatusMessage = "匯出黑方 TT 表中...";
-                await _gameService.ExportBlackTranspositionTableAsync(dialog.FileName, asJson);
+                await gameService.ExportBlackTranspositionTableAsync(dialog.FileName, asJson);
                 StatusMessage = "黑方 TT 表匯出完成";
             }
             catch (Exception ex)
@@ -375,7 +375,7 @@ public class ControlPanelViewModel : ObservableObject
                     StringComparison.OrdinalIgnoreCase);
 
                 StatusMessage = "匯入黑方 TT 表中...";
-                await _gameService.ImportBlackTranspositionTableAsync(dialog.FileName, asJson);
+                await gameService.ImportBlackTranspositionTableAsync(dialog.FileName, asJson);
                 StatusMessage = "黑方 TT 表匯入完成";
             }
             catch (Exception ex)
@@ -389,7 +389,7 @@ public class ControlPanelViewModel : ObservableObject
             try
             {
                 StatusMessage = "合併兩方 TT 中...";
-                await _gameService.MergeTranspositionTablesAsync();
+                await gameService.MergeTranspositionTablesAsync();
                 StatusMessage = "TT 合併完成";
                 RefreshTTStats();
             }
@@ -404,7 +404,7 @@ public class ControlPanelViewModel : ObservableObject
             try
             {
                 StatusMessage = "提示走法中...";
-                var hint = await _gameService.GetHintAsync();
+                var hint = await gameService.GetHintAsync();
 
                 if (hint.BestMove.IsNull)
                 {
@@ -412,8 +412,8 @@ public class ControlPanelViewModel : ObservableObject
                 }
                 else
                 {
-                    var turn     = _gameService.CurrentBoard.Turn;
-                    var notation = MoveNotation.ToNotation(hint.BestMove, _gameService.CurrentBoard);
+                    var turn     = gameService.CurrentBoard.Turn;
+                    var notation = MoveNotation.ToNotation(hint.BestMove, gameService.CurrentBoard);
                     StatusMessage = $"提示完成：{notation} | 分數：{FormatHintScore(hint.Score)}（{(turn == PieceColor.Red ? "紅方" : "黑方")}）";
                 }
             }
@@ -424,21 +424,21 @@ public class ControlPanelViewModel : ObservableObject
         });
 
         // TT 探索計時器：每秒在背景執行緒更新，透過 Dispatcher 推送至 UI
-        _ttExplorerTimer = new System.Timers.Timer(100);
-        _ttExplorerTimer.AutoReset = true;
-        _ttExplorerTimer.Elapsed += (_, _) => ScheduleTTExplorerRefresh();
-        _ttExplorerTimer.Start();
+        ttExplorerTimer = new System.Timers.Timer(100);
+        ttExplorerTimer.AutoReset = true;
+        ttExplorerTimer.Elapsed += (_, _) => ScheduleTTExplorerRefresh();
+        ttExplorerTimer.Start();
 
-        _gameService.SetDifficulty(_searchDepth, _searchThinkingTime * 1000);
+        gameService.SetDifficulty(searchDepth, searchThinkingTime * 1000);
 
-        _gameService.GameMessage += msg =>
+        gameService.GameMessage += msg =>
         {
             var app = global::System.Windows.Application.Current;
             if (app == null) { StatusMessage = msg; return; }
             app.Dispatcher.Invoke(() => StatusMessage = msg);
         };
 
-        _gameService.ThinkingProgress += _ =>
+        gameService.ThinkingProgress += _ =>
         {
             var app = global::System.Windows.Application.Current;
             if (app == null) return;
@@ -450,8 +450,8 @@ public class ControlPanelViewModel : ObservableObject
 
     private void RefreshTTStats()
     {
-        _ttStats      = _gameService.GetTTStatistics();
-        _blackTtStats = _gameService.GetBlackTTStatistics();
+        ttStats      = gameService.GetTTStatistics();
+        blackTtStats = gameService.GetBlackTTStatistics();
 
         OnPropertyChanged(nameof(TtCapacity));
         OnPropertyChanged(nameof(TtMemoryMb));
@@ -483,7 +483,7 @@ public class ControlPanelViewModel : ObservableObject
     private void ScheduleTTExplorerRefresh()
     {
         // CAS：0→1 成功才進入，否則跳過此次
-        if (Interlocked.CompareExchange(ref _ttExplorerBusy, 1, 0) != 0) return;
+        if (Interlocked.CompareExchange(ref ttExplorerBusy, 1, 0) != 0) return;
 
         System.Threading.Tasks.Task.Run(() =>
         {
@@ -495,7 +495,7 @@ public class ControlPanelViewModel : ObservableObject
             }
             finally
             {
-                Interlocked.Exchange(ref _ttExplorerBusy, 0);
+                Interlocked.Exchange(ref ttExplorerBusy, 0);
             }
         });
     }
@@ -508,7 +508,7 @@ public class ControlPanelViewModel : ObservableObject
         sb.AppendLine("══ TT 條目分布 ══════════════════════════════");
         try
         {
-            var entries = _gameService.EnumerateTTEntries().ToList();
+            var entries = gameService.EnumerateTTEntries().ToList();
             int total = entries.Count;
             sb.AppendLine($"有效條目：{total:N0}");
             sb.AppendLine();
@@ -548,8 +548,8 @@ public class ControlPanelViewModel : ObservableObject
         try
         {
             // 取快照以確保棋盤在整個遞迴中不被修改
-            var boardSnapshot = _gameService.CurrentBoard.Clone();
-            var root = _gameService.ExploreTTTree(TTExploreMaxDepth);
+            var boardSnapshot = gameService.CurrentBoard.Clone();
+            var root = gameService.ExploreTTTree(TTExploreMaxDepth);
             if (root == null)
             {
                 sb.AppendLine("（當前局面不在 TT 中，尚未搜尋過此局面）");

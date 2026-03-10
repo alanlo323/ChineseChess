@@ -45,7 +45,7 @@ public class GameServiceDrawTests
     private static void SetHalfMoveClock(Board board, int value)
     {
         var field = typeof(Board).GetField(
-            "_halfMoveClock",
+            "halfMoveClock",
             BindingFlags.NonPublic | BindingFlags.Instance);
         field!.SetValue(board, value);
     }

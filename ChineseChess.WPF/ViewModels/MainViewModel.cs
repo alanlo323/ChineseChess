@@ -8,22 +8,22 @@ namespace ChineseChess.WPF.ViewModels;
 
 public class MainViewModel : ObservableObject
 {
-    private readonly IGameService _gameService;
+    private readonly IGameService gameService;
 
     public ChessBoardViewModel ChessBoard { get; }
     public ControlPanelViewModel ControlPanel { get; }
-    
+
     // 分析面板資料
-    private string _analysisText = "Waiting for analysis...";
+    private string analysisText = "Waiting for analysis...";
     public string AnalysisText
     {
-        get => _analysisText;
-        set => SetProperty(ref _analysisText, value);
+        get => analysisText;
+        set => SetProperty(ref analysisText, value);
     }
 
     public MainViewModel(IGameService gameService, ChessBoardViewModel chessBoard, ControlPanelViewModel controlPanel)
     {
-        _gameService = gameService;
+        this.gameService = gameService;
         ChessBoard = chessBoard;
         ControlPanel = controlPanel;
 
@@ -69,10 +69,10 @@ public class MainViewModel : ObservableObject
             return "提示：目前局面沒有可行的最佳走法";
         }
 
-        var turnLabel = _gameService.CurrentBoard.Turn == PieceColor.Red ? "紅方" : "黑方";
+        var turnLabel = gameService.CurrentBoard.Turn == PieceColor.Red ? "紅方" : "黑方";
         var scoreText = FormatScoreWithPerspective(hint.Score, turnLabel);
 
-        var notation = MoveNotation.ToNotation(hint.BestMove, _gameService.CurrentBoard);
+        var notation = MoveNotation.ToNotation(hint.BestMove, gameService.CurrentBoard);
         return $"提示：{notation} | 分數: {scoreText} | 深度: {hint.Depth} | 節點: {hint.Nodes}";
     }
 

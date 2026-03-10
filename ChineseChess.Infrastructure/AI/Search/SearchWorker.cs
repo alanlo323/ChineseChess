@@ -16,16 +16,16 @@ namespace ChineseChess.Infrastructure.AI.Search;
 /// </summary>
 internal sealed class SearchWorker
 {
-    private readonly IBoard _board;
-    private readonly IEvaluator _evaluator;
-    private readonly TranspositionTable _tt;
-    private readonly CancellationToken _ct;         // 時間限制 + 使用者停止（合併）
-    private readonly CancellationToken _hardStopCt; // 僅使用者明確停止（暫停等待用）
-    private readonly ManualResetEventSlim _pauseSignal;
+    private readonly IBoard board;
+    private readonly IEvaluator evaluator;
+    private readonly TranspositionTable tt;
+    private readonly CancellationToken ct;         // 時間限制 + 使用者停止（合併）
+    private readonly CancellationToken hardStopCt; // 僅使用者明確停止（暫停等待用）
+    private readonly ManualResetEventSlim pauseSignal;
 
-    private long _nodesVisited;
-    private Move[,] _killerMoves;
-    private int[,] _historyTable;
+    private long nodesVisited;
+    private Move[,] killerMoves;
+    private int[,] historyTable;
 
     private const int Infinity = 30000;
     private const int MateScore = 20000;
@@ -35,18 +35,18 @@ internal sealed class SearchWorker
     private static readonly int[] PieceValues = { 0, 10000, 120, 120, 270, 600, 285, 30 };
     private static readonly int[] FutilityMargins = { 0, 200, 500 };
 
-    public long NodesVisited => Interlocked.Read(ref _nodesVisited);
+    public long NodesVisited => Interlocked.Read(ref nodesVisited);
 
     public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, CancellationToken hardStopCt, ManualResetEventSlim pauseSignal)
     {
-        _board = board;
-        _evaluator = evaluator;
-        _tt = tt;
-        _ct = ct;
-        _hardStopCt = hardStopCt;
-        _pauseSignal = pauseSignal;
-        _killerMoves = new Move[MaxSearchPly, 2];
-        _historyTable = new int[90, 90];
+        this.board = board;
+        this.evaluator = evaluator;
+        this.tt = tt;
+        this.ct = ct;
+        this.hardStopCt = hardStopCt;
+        this.pauseSignal = pauseSignal;
+        killerMoves = new Move[MaxSearchPly, 2];
+        historyTable = new int[90, 90];
     }
 
     /// <summary>
@@ -55,9 +55,9 @@ internal sealed class SearchWorker
     /// </summary>
     public SearchResult Search(int targetDepth)
     {
-        _nodesVisited = 0;
-        Array.Clear(_killerMoves, 0, _killerMoves.Length);
-        Array.Clear(_historyTable, 0, _historyTable.Length);
+        nodesVisited = 0;
+        Array.Clear(killerMoves, 0, killerMoves.Length);
+        Array.Clear(historyTable, 0, historyTable.Length);
         CheckPauseOrCancellation();
 
         var result = new SearchResult();
@@ -67,12 +67,12 @@ internal sealed class SearchWorker
             for (int depth = 1; depth <= targetDepth; depth++)
             {
                 CheckPauseOrCancellation();
-                if (_ct.IsCancellationRequested) break;
+                if (ct.IsCancellationRequested) break;
 
                 int score = Negamax(depth, 0, -Infinity, Infinity, false);
 
                 var bestMove = Move.Null;
-                if (_tt.Probe(_board.ZobristKey, out var entry))
+                if (tt.Probe(board.ZobristKey, out var entry))
                 {
                     bestMove = entry.BestMove;
                 }
@@ -80,7 +80,7 @@ internal sealed class SearchWorker
                 result.BestMove = bestMove;
                 result.Score = score;
                 result.Depth = depth;
-                result.Nodes = Interlocked.Read(ref _nodesVisited);
+                result.Nodes = Interlocked.Read(ref nodesVisited);
             }
         }
         catch (OperationCanceledException)
@@ -103,7 +103,7 @@ internal sealed class SearchWorker
 
     public Move ProbeBestMove()
     {
-        if (_tt.Probe(_board.ZobristKey, out var entry))
+        if (tt.Probe(board.ZobristKey, out var entry))
             return entry.BestMove;
         return Move.Null;
     }
@@ -115,9 +115,9 @@ internal sealed class SearchWorker
     public IReadOnlyList<MoveEvaluation> EvaluateRootMoves(
         IEnumerable<Move> moves, int depth, IProgress<string>? progress = null, string threadLabel = "單執行緒")
     {
-        _nodesVisited = 0;
-        Array.Clear(_killerMoves, 0, _killerMoves.Length);
-        Array.Clear(_historyTable, 0, _historyTable.Length);
+        nodesVisited = 0;
+        Array.Clear(killerMoves, 0, killerMoves.Length);
+        Array.Clear(historyTable, 0, historyTable.Length);
 
         var moveList = moves.ToList();
         var results = new List<(Move Move, int Score)>();
@@ -127,15 +127,15 @@ internal sealed class SearchWorker
 
         for (int i = 0; i < total; i++)
         {
-            if (_ct.IsCancellationRequested) break;
+            if (ct.IsCancellationRequested) break;
 
             var move = moveList[i];
             try
             {
-                _board.MakeMove(move);
+                board.MakeMove(move);
                 // Negamax 在 MakeMove 後已切換行棋方，取負號還原為「做出此走法的玩家」視角
                 int score = -Negamax(searchDepth, 1, -Infinity, Infinity, false);
-                _board.UnmakeMove(move);
+                board.UnmakeMove(move);
 
                 results.Add((move, score));
                 if (score > bestScore) bestScore = score;
@@ -146,7 +146,7 @@ internal sealed class SearchWorker
             catch (OperationCanceledException)
             {
                 // MakeMove 已執行，Negamax 中取消 → 還原棋盤後停止
-                _board.UnmakeMove(move);
+                board.UnmakeMove(move);
                 break;
             }
         }
@@ -166,15 +166,15 @@ internal sealed class SearchWorker
     private int Negamax(int depth, int ply, int alpha, int beta, bool skipNullMove)
     {
         CheckPauseOrCancellation();
-        Interlocked.Increment(ref _nodesVisited);
-        if (_nodesVisited % 2000 == 0)
+        Interlocked.Increment(ref nodesVisited);
+        if (nodesVisited % 2000 == 0)
             CheckPauseOrCancellation();
 
         bool isPvNode = (beta - alpha) > 1;
 
         // 1. TT 探測
         Move ttMove = Move.Null;
-        if (_tt.Probe(_board.ZobristKey, out var entry))
+        if (tt.Probe(board.ZobristKey, out var entry))
         {
             if (entry.Depth >= depth && !isPvNode)
             {
@@ -187,7 +187,7 @@ internal sealed class SearchWorker
         }
 
         // 2. 重覆局面偵測（搜尋中用 2 次閾值視為和棋，回傳 0）
-        if (ply > 0 && _board.IsDrawByRepetition(threshold: 2))
+        if (ply > 0 && board.IsDrawByRepetition(threshold: 2))
         {
             return 0;
         }
@@ -198,12 +198,12 @@ internal sealed class SearchWorker
             return Quiescence(alpha, beta, 0);
         }
 
-        bool inCheck = _board.IsCheck(_board.Turn);
+        bool inCheck = board.IsCheck(board.Turn);
 
         // 3. Razor 剪枝（depth == 3，且不在將軍/非 PV）
         if (depth == 3 && !inCheck && !isPvNode)
         {
-            int staticEval = _evaluator.Evaluate(_board);
+            int staticEval = evaluator.Evaluate(board);
             if (staticEval + 900 <= alpha)
             {
                 int razorScore = Quiescence(alpha, beta, 0);
@@ -215,9 +215,9 @@ internal sealed class SearchWorker
         if (depth >= 3 && !inCheck && !skipNullMove && HasSufficientMaterial())
         {
             int R = depth > 6 ? 3 : 2;
-            _board.MakeNullMove();
+            board.MakeNullMove();
             int nullScore = -Negamax(depth - 1 - R, ply + 1, -beta, -beta + 1, true);
-            _board.UnmakeNullMove();
+            board.UnmakeNullMove();
             if (nullScore >= beta) return beta;
         }
 
@@ -225,7 +225,7 @@ internal sealed class SearchWorker
         bool futilityPruning = false;
         if (depth <= 2 && !inCheck && !isPvNode)
         {
-            int staticEval = _evaluator.Evaluate(_board);
+            int staticEval = evaluator.Evaluate(board);
             if (staticEval + FutilityMargins[depth] <= alpha)
             {
                 futilityPruning = true;
@@ -233,7 +233,7 @@ internal sealed class SearchWorker
         }
 
         // 6. 產生並排序著法
-        var moves = _board.GenerateLegalMoves().ToList();
+        var moves = board.GenerateLegalMoves().ToList();
 
         if (moves.Count == 0)
         {
@@ -250,7 +250,7 @@ internal sealed class SearchWorker
         for (int i = 0; i < moves.Count; i++)
         {
             var move = moves[i];
-            bool isCapture = !_board.GetPiece(move.To).IsNone;
+            bool isCapture = !board.GetPiece(move.To).IsNone;
             bool isKiller = IsKillerMove(ply, move);
 
             // 7. Futility 剪枝：若無望則略過靜態著法
@@ -259,10 +259,10 @@ internal sealed class SearchWorker
                 continue;
             }
 
-            _board.MakeMove(move);
+            board.MakeMove(move);
 
             // 8. 將軍延伸（Check Extension）
-            bool givesCheck = _board.IsCheck(_board.Turn);
+            bool givesCheck = board.IsCheck(board.Turn);
             int extension = givesCheck ? 1 : 0;
 
             int score;
@@ -288,7 +288,7 @@ internal sealed class SearchWorker
                 score = -Negamax(depth - 1 + extension, ply + 1, -beta, -alpha, false);
             }
 
-            _board.UnmakeMove(move);
+            board.UnmakeMove(move);
 
             if (score > bestScore)
             {
@@ -305,33 +305,33 @@ internal sealed class SearchWorker
                         if (!isCapture)
                         {
                             UpdateKillers(ply, move);
-                            _historyTable[move.From, move.To] += depth * depth;
+                            historyTable[move.From, move.To] += depth * depth;
                         }
 
-                        _tt.Store(_board.ZobristKey, beta, depth, TTFlag.LowerBound, move);
+                        tt.Store(board.ZobristKey, beta, depth, TTFlag.LowerBound, move);
                         return beta;
                     }
                 }
             }
         }
 
-        _tt.Store(_board.ZobristKey, bestScore, depth, flag, bestMove);
+        tt.Store(board.ZobristKey, bestScore, depth, flag, bestMove);
         return bestScore;
     }
 
     private int Quiescence(int alpha, int beta, int ply)
     {
         CheckPauseOrCancellation();
-        Interlocked.Increment(ref _nodesVisited);
+        Interlocked.Increment(ref nodesVisited);
 
-        int eval = _evaluator.Evaluate(_board);
+        int eval = evaluator.Evaluate(board);
         if (eval >= beta) return beta;
         if (eval > alpha) alpha = eval;
 
         if (ply >= QuiescenceMaxPly) return alpha;
 
-        var captures = _board.GenerateLegalMoves()
-            .Where(m => !_board.GetPiece(m.To).IsNone)
+        var captures = board.GenerateLegalMoves()
+            .Where(m => !board.GetPiece(m.To).IsNone)
             .ToList();
 
         if (captures.Count == 0) return alpha;
@@ -342,9 +342,9 @@ internal sealed class SearchWorker
         {
             CheckPauseOrCancellation();
 
-            _board.MakeMove(move);
+            board.MakeMove(move);
             int score = -Quiescence(-beta, -alpha, ply + 1);
-            _board.UnmakeMove(move);
+            board.UnmakeMove(move);
 
             if (score >= beta) return beta;
             if (score > alpha) alpha = score;
@@ -383,8 +383,8 @@ internal sealed class SearchWorker
     {
         if (move == ttMove) return 1_000_000;
 
-        var movingPiece = _board.GetPiece(move.From);
-        var targetPiece = _board.GetPiece(move.To);
+        var movingPiece = board.GetPiece(move.From);
+        var targetPiece = board.GetPiece(move.To);
 
         if (movingPiece.IsNone) return int.MinValue;
 
@@ -397,28 +397,28 @@ internal sealed class SearchWorker
 
         if (ply < MaxSearchPly)
         {
-            if (move == _killerMoves[ply, 0]) return 90_000;
-            if (move == _killerMoves[ply, 1]) return 89_000;
+            if (move == killerMoves[ply, 0]) return 90_000;
+            if (move == killerMoves[ply, 1]) return 89_000;
         }
 
-        return _historyTable[move.From, move.To];
+        return historyTable[move.From, move.To];
     }
 
     private void UpdateKillers(int ply, Move move)
     {
         if (ply >= MaxSearchPly) return;
 
-        if (move != _killerMoves[ply, 0])
+        if (move != killerMoves[ply, 0])
         {
-            _killerMoves[ply, 1] = _killerMoves[ply, 0];
-            _killerMoves[ply, 0] = move;
+            killerMoves[ply, 1] = killerMoves[ply, 0];
+            killerMoves[ply, 0] = move;
         }
     }
 
     private bool IsKillerMove(int ply, Move move)
     {
         if (ply >= MaxSearchPly) return false;
-        return move == _killerMoves[ply, 0] || move == _killerMoves[ply, 1];
+        return move == killerMoves[ply, 0] || move == killerMoves[ply, 1];
     }
 
     // --- 輔助邏輯 ---
@@ -428,8 +428,8 @@ internal sealed class SearchWorker
         int attackers = 0;
         for (int i = 0; i < 90; i++)
         {
-            var p = _board.GetPiece(i);
-            if (p.IsNone || p.Color != _board.Turn) continue;
+            var p = board.GetPiece(i);
+            if (p.IsNone || p.Color != board.Turn) continue;
             if (p.Type == PieceType.Rook) return true;
             if (p.Type == PieceType.Cannon || p.Type == PieceType.Horse)
             {
@@ -442,10 +442,10 @@ internal sealed class SearchWorker
 
     private void CheckPauseOrCancellation()
     {
-        // 使用 _hardStopCt（僅使用者明確停止）等待，避免時間限制到期時破壞暫停狀態
-        // 時間限制（_ct）到期不應中斷暫停；只有明確 Stop 才能跳出
-        _pauseSignal.Wait(_hardStopCt);
-        if (_ct.IsCancellationRequested || _hardStopCt.IsCancellationRequested)
+        // 使用 hardStopCt（僅使用者明確停止）等待，避免時間限制到期時破壞暫停狀態
+        // 時間限制（ct）到期不應中斷暫停；只有明確 Stop 才能跳出
+        pauseSignal.Wait(hardStopCt);
+        if (ct.IsCancellationRequested || hardStopCt.IsCancellationRequested)
             throw new OperationCanceledException();
     }
 }

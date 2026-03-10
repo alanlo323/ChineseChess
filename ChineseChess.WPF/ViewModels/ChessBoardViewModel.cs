@@ -17,19 +17,19 @@ public class SquareViewModel : ObservableObject
     private const double HitBoxHalfWidth = 30.0;
     private const double HitBoxHalfHeight = 28.0;
 
-    private Piece _piece;
-    private bool _isSelected;
-    private bool _isValidMove;
-    private bool _isHintFrom;
-    private bool _isHintTo;
-    private bool _isLastMoveFrom;
-    private bool _isLastMoveTo;
-    private bool _hasSmartHint;
-    private int _smartHintScore;
-    private bool _hasGhostPiece;
-    private Piece _ghostPiece;
-    private bool _hasHintGhostPiece;
-    private Piece _hintGhostPiece;
+    private Piece piece;
+    private bool isSelected;
+    private bool isValidMove;
+    private bool isHintFrom;
+    private bool isHintTo;
+    private bool isLastMoveFrom;
+    private bool isLastMoveTo;
+    private bool hasSmartHint;
+    private int smartHintScore;
+    private bool hasGhostPiece;
+    private Piece ghostPiece;
+    private bool hasHintGhostPiece;
+    private Piece hintGhostPiece;
 
     public int Index { get; }
     public int Row { get; }
@@ -41,98 +41,98 @@ public class SquareViewModel : ObservableObject
 
     public Piece Piece
     {
-        get => _piece;
-        set => SetProperty(ref _piece, value);
+        get => piece;
+        set => SetProperty(ref piece, value);
     }
 
     public bool IsSelected
     {
-        get => _isSelected;
-        set => SetProperty(ref _isSelected, value);
+        get => isSelected;
+        set => SetProperty(ref isSelected, value);
     }
 
     public bool IsValidMove // 用於高亮可走點
     {
-        get => _isValidMove;
-        set => SetProperty(ref _isValidMove, value);
+        get => isValidMove;
+        set => SetProperty(ref isValidMove, value);
     }
 
     public bool IsHintFrom
     {
-        get => _isHintFrom;
-        set => SetProperty(ref _isHintFrom, value);
+        get => isHintFrom;
+        set => SetProperty(ref isHintFrom, value);
     }
 
     public bool IsHintTo
     {
-        get => _isHintTo;
-        set => SetProperty(ref _isHintTo, value);
+        get => isHintTo;
+        set => SetProperty(ref isHintTo, value);
     }
 
     public bool IsLastMoveFrom
     {
-        get => _isLastMoveFrom;
-        set => SetProperty(ref _isLastMoveFrom, value);
+        get => isLastMoveFrom;
+        set => SetProperty(ref isLastMoveFrom, value);
     }
 
     public bool IsLastMoveTo
     {
-        get => _isLastMoveTo;
-        set => SetProperty(ref _isLastMoveTo, value);
+        get => isLastMoveTo;
+        set => SetProperty(ref isLastMoveTo, value);
     }
 
     /// <summary>是否顯示智能提示評分 Badge</summary>
     public bool HasSmartHint
     {
-        get => _hasSmartHint;
-        set => SetProperty(ref _hasSmartHint, value);
+        get => hasSmartHint;
+        set => SetProperty(ref hasSmartHint, value);
     }
 
     /// <summary>走法評分（從「做出走法的玩家」視角，正分=有利）</summary>
     public int SmartHintScore
     {
-        get => _smartHintScore;
+        get => smartHintScore;
         set
         {
-            if (SetProperty(ref _smartHintScore, value))
+            if (SetProperty(ref smartHintScore, value))
                 OnPropertyChanged(nameof(SmartHintScoreText));
         }
     }
 
     /// <summary>格式化評分文字，供 UI 顯示</summary>
-    public string SmartHintScoreText => _smartHintScore switch
+    public string SmartHintScoreText => smartHintScore switch
     {
-        > 0 => $"+{_smartHintScore}",
-        < 0 => _smartHintScore.ToString(),
+        > 0 => $"+{smartHintScore}",
+        < 0 => smartHintScore.ToString(),
         _ => "0"
     };
 
     /// <summary>是否顯示虛影棋子（最佳走法落點）</summary>
     public bool HasGhostPiece
     {
-        get => _hasGhostPiece;
-        set => SetProperty(ref _hasGhostPiece, value);
+        get => hasGhostPiece;
+        set => SetProperty(ref hasGhostPiece, value);
     }
 
     /// <summary>虛影棋子（顯示哪顆棋子的虛影）</summary>
     public Piece GhostPiece
     {
-        get => _ghostPiece;
-        set => SetProperty(ref _ghostPiece, value);
+        get => ghostPiece;
+        set => SetProperty(ref ghostPiece, value);
     }
 
     /// <summary>是否顯示普通提示虛影棋子（提示走法的落點）</summary>
     public bool HasHintGhostPiece
     {
-        get => _hasHintGhostPiece;
-        set => SetProperty(ref _hasHintGhostPiece, value);
+        get => hasHintGhostPiece;
+        set => SetProperty(ref hasHintGhostPiece, value);
     }
 
     /// <summary>普通提示虛影棋子</summary>
     public Piece HintGhostPiece
     {
-        get => _hintGhostPiece;
-        set => SetProperty(ref _hintGhostPiece, value);
+        get => hintGhostPiece;
+        set => SetProperty(ref hintGhostPiece, value);
     }
 
     public SquareViewModel(int index, int row, int col)
@@ -144,21 +144,21 @@ public class SquareViewModel : ObservableObject
         BoardY = row * RowSpacing + (row >= 5 ? RiverGap : 0.0);
         HitBoxLeft = BoardX - HitBoxHalfWidth;
         HitBoxTop = BoardY - HitBoxHalfHeight;
-        _piece = Piece.None;
-        _ghostPiece = Piece.None;
-        _hintGhostPiece = Piece.None;
+        piece = Piece.None;
+        ghostPiece = Piece.None;
+        hintGhostPiece = Piece.None;
     }
 }
 
 public class ChessBoardViewModel : ObservableObject
 {
-    private readonly IGameService _gameService;
-    private SquareViewModel? _selectedSquare;
-    private int? _hintFrom;
-    private int? _hintTo;
-    private string? _hintBoardFen;
-    private int? _lastMoveFrom;
-    private int? _lastMoveTo;
+    private readonly IGameService gameService;
+    private SquareViewModel? selectedSquare;
+    private int? hintFrom;
+    private int? hintTo;
+    private string? hintBoardFen;
+    private int? lastMoveFrom;
+    private int? lastMoveTo;
 
     public ObservableCollection<SquareViewModel> Squares { get; } = new ObservableCollection<SquareViewModel>();
 
@@ -166,10 +166,10 @@ public class ChessBoardViewModel : ObservableObject
 
     public ChessBoardViewModel(IGameService gameService)
     {
-        _gameService = gameService;
-        _gameService.BoardUpdated += OnBoardUpdated;
-        _gameService.HintReady += OnHintReady;
-        _gameService.SmartHintReady += OnSmartHintReady;
+        this.gameService = gameService;
+        this.gameService.BoardUpdated += OnBoardUpdated;
+        this.gameService.HintReady += OnHintReady;
+        this.gameService.SmartHintReady += OnSmartHintReady;
         SquareClickCommand = new RelayCommand(OnSquareClick);
 
         InitializeBoard();
@@ -196,28 +196,28 @@ public class ChessBoardViewModel : ObservableObject
     {
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
-            _hintFrom = null;
-            _hintTo = null;
-            _hintBoardFen = null;
+            hintFrom = null;
+            hintTo = null;
+            hintBoardFen = null;
             ClearHintHighlights();
 
             if (hint.BestMove.IsNull) return;
             var from = hint.BestMove.From;
             var to = hint.BestMove.To;
 
-            if (from < 90) _hintFrom = from;
-            if (to < 90) _hintTo = to;
-            _hintBoardFen = _gameService.CurrentBoard.ToFen();
+            if (from < 90) hintFrom = from;
+            if (to < 90) hintTo = to;
+            hintBoardFen = gameService.CurrentBoard.ToFen();
             ApplyHintHighlights();
 
             // 在落點顯示虛影棋子（讓玩家清楚看到是哪顆棋子移動到哪裡）
-            if (_hintFrom.HasValue && _hintTo.HasValue)
+            if (hintFrom.HasValue && hintTo.HasValue)
             {
-                var movingPiece = _gameService.CurrentBoard.GetPiece(_hintFrom.Value);
+                var movingPiece = gameService.CurrentBoard.GetPiece(hintFrom.Value);
                 if (!movingPiece.IsNone)
                 {
-                    Squares[_hintTo.Value].HintGhostPiece = movingPiece;
-                    Squares[_hintTo.Value].HasHintGhostPiece = true;
+                    Squares[hintTo.Value].HintGhostPiece = movingPiece;
+                    Squares[hintTo.Value].HasHintGhostPiece = true;
                 }
             }
         });
@@ -225,7 +225,7 @@ public class ChessBoardViewModel : ObservableObject
 
     private void RefreshBoard()
     {
-        var board = _gameService.CurrentBoard;
+        var board = gameService.CurrentBoard;
         var currentFen = board.ToFen();
 
         ClearAllHighlights();
@@ -236,85 +236,85 @@ public class ChessBoardViewModel : ObservableObject
             Squares[i].IsSelected = false;
         }
 
-        _lastMoveFrom = null;
-        _lastMoveTo = null;
-        if (_gameService.LastMove is { } lastMove)
+        lastMoveFrom = null;
+        lastMoveTo = null;
+        if (gameService.LastMove is { } lastMove)
         {
-            _lastMoveFrom = lastMove.From;
-            _lastMoveTo = lastMove.To;
+            lastMoveFrom = lastMove.From;
+            lastMoveTo = lastMove.To;
         }
 
         ApplyLastMoveHighlights();
 
-        if (_hintBoardFen != null && _hintBoardFen == currentFen)
+        if (hintBoardFen != null && hintBoardFen == currentFen)
         {
             ApplyHintHighlights();
         }
         else
         {
-            _hintFrom = null;
-            _hintTo = null;
-            _hintBoardFen = null;
+            hintFrom = null;
+            hintTo = null;
+            hintBoardFen = null;
         }
 
-        _selectedSquare = null;
+        selectedSquare = null;
     }
 
     private async void OnSquareClick(object? param)
     {
         if (param is not SquareViewModel square) return;
-        if (_gameService.IsThinking) return;
+        if (gameService.IsThinking) return;
 
-        if (_selectedSquare == null)
+        if (selectedSquare == null)
         {
             // 選取目前行棋方的棋子
-            if (!square.Piece.IsNone && square.Piece.Color == _gameService.CurrentBoard.Turn)
+            if (!square.Piece.IsNone && square.Piece.Color == gameService.CurrentBoard.Turn)
             {
                 ClearMoveHighlights();
                 ClearSmartHintHighlights();
-                _selectedSquare = square;
+                selectedSquare = square;
                 square.IsSelected = true;
                 HighlightLegalMoves(square.Index);
-                await _gameService.RequestSmartHintAsync(square.Index);
+                await gameService.RequestSmartHintAsync(square.Index);
             }
         }
         else
         {
             // 移動或取消選取
-            if (square == _selectedSquare)
+            if (square == selectedSquare)
             {
-                _selectedSquare.IsSelected = false;
-                _selectedSquare = null;
+                selectedSquare.IsSelected = false;
+                selectedSquare = null;
                 ClearMoveHighlights();
                 ClearSmartHintHighlights();
                 return;
             }
 
             // 嘗試移動
-            if (square.Piece.Color == _gameService.CurrentBoard.Turn)
+            if (square.Piece.Color == gameService.CurrentBoard.Turn)
             {
                 // 切換選取
-                _selectedSquare.IsSelected = false;
+                selectedSquare.IsSelected = false;
                 ClearMoveHighlights();
                 ClearSmartHintHighlights();
 
-                _selectedSquare = square;
+                selectedSquare = square;
                 square.IsSelected = true;
                 HighlightLegalMoves(square.Index);
-                await _gameService.RequestSmartHintAsync(square.Index);
+                await gameService.RequestSmartHintAsync(square.Index);
             }
             else
             {
                 // 移動到空位或吃子
-                var from = _selectedSquare.Index;
+                var from = selectedSquare.Index;
                 var move = new Move(from, square.Index);
 
                 ClearMoveHighlights();
                 ClearSmartHintHighlights();
-                _selectedSquare.IsSelected = false;
-                _selectedSquare = null;
+                selectedSquare.IsSelected = false;
+                selectedSquare = null;
 
-                await _gameService.HumanMoveAsync(move);
+                await gameService.HumanMoveAsync(move);
             }
         }
     }
@@ -325,8 +325,8 @@ public class ChessBoardViewModel : ObservableObject
         {
             ClearSmartHintHighlights();
 
-            if (_selectedSquare == null) return;
-            var selectedPiece = _selectedSquare.Piece;
+            if (selectedSquare == null) return;
+            var selectedPiece = selectedSquare.Piece;
 
             foreach (var eval in evaluations)
             {
@@ -395,34 +395,34 @@ public class ChessBoardViewModel : ObservableObject
 
     private void ApplyLastMoveHighlights()
     {
-        if (_lastMoveFrom.HasValue && _lastMoveFrom.Value >= 0 && _lastMoveFrom.Value < 90)
+        if (lastMoveFrom.HasValue && lastMoveFrom.Value >= 0 && lastMoveFrom.Value < 90)
         {
-            Squares[_lastMoveFrom.Value].IsLastMoveFrom = true;
+            Squares[lastMoveFrom.Value].IsLastMoveFrom = true;
         }
 
-        if (_lastMoveTo.HasValue && _lastMoveTo.Value >= 0 && _lastMoveTo.Value < 90)
+        if (lastMoveTo.HasValue && lastMoveTo.Value >= 0 && lastMoveTo.Value < 90)
         {
-            Squares[_lastMoveTo.Value].IsLastMoveTo = true;
+            Squares[lastMoveTo.Value].IsLastMoveTo = true;
         }
     }
 
     private void ApplyHintHighlights()
     {
-        if (_hintFrom.HasValue && _hintFrom.Value < 90 && _hintFrom.Value >= 0)
+        if (hintFrom.HasValue && hintFrom.Value < 90 && hintFrom.Value >= 0)
         {
-            Squares[_hintFrom.Value].IsHintFrom = true;
+            Squares[hintFrom.Value].IsHintFrom = true;
         }
 
-        if (_hintTo.HasValue && _hintTo.Value < 90 && _hintTo.Value >= 0)
+        if (hintTo.HasValue && hintTo.Value < 90 && hintTo.Value >= 0)
         {
-            Squares[_hintTo.Value].IsHintTo = true;
+            Squares[hintTo.Value].IsHintTo = true;
         }
     }
 
     private void HighlightLegalMoves(int fromIndex)
     {
         ClearMoveHighlights();
-        var moves = _gameService.CurrentBoard.GenerateLegalMoves().Where(m => m.From == fromIndex);
+        var moves = gameService.CurrentBoard.GenerateLegalMoves().Where(m => m.From == fromIndex);
         foreach (var move in moves)
         {
             Squares[move.To].IsValidMove = true;

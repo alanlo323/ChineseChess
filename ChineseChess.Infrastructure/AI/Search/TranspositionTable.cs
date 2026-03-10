@@ -22,8 +22,8 @@ public sealed class TTStateSnapshot
 
 /// <summary>
 /// 使用 XOR 驗證技巧的 lock-free transposition table。
-/// 以兩個對齊的 ulong 陣列（_keys 與 _data）確保 x64 上 8 bytes 原子性讀寫。
-/// _keys[i] 存放 (zobristKey ^ packedData)，可偵測到被撕裂讀取的狀況。
+/// 以兩個對齊的 ulong 陣列（keys 與 data）確保 x64 上 8 bytes 原子性讀寫。
+/// keys[i] 存放 (zobristKey ^ packedData)，可偵測到被撕裂讀取的狀況。
 /// </summary>
 public class TranspositionTable
 {
@@ -32,13 +32,13 @@ public class TranspositionTable
     private const uint GzipBinaryVersion  = 2u;  // v2：GZip 壓縮（向後相容讀取）
     private const uint LegacyBinaryVersion = 1u; // v1：無壓縮（向後相容讀取）
 
-    private readonly ulong[] _keys;
-    private readonly ulong[] _data;
-    private readonly ulong _size;
-    private byte _generation;
-    private long _totalProbes;
-    private long _probeHits;
-    private long _occupiedCount;
+    private readonly ulong[] keys;
+    private readonly ulong[] data;
+    private readonly ulong size;
+    private byte generation;
+    private long totalProbes;
+    private long probeHits;
+    private long occupiedCount;
 
     // Pack 版面（共 64 位元）：
     //   bits  0-15 : score      （16 位元，透過 cast 轉為有號）
@@ -52,28 +52,28 @@ public class TranspositionTable
     {
         long bytes = (long)sizeMb * 1024 * 1024;
         long entrySize = 2 * sizeof(ulong); // key 與 data 兩欄位
-        _size = (ulong)(bytes / entrySize);
-        if (_size < 1024) _size = 1024;
+        size = (ulong)(bytes / entrySize);
+        if (size < 1024) size = 1024;
 
-        _keys = new ulong[_size];
-        _data = new ulong[_size];
-        _generation = 0;
+        keys = new ulong[size];
+        data = new ulong[size];
+        generation = 0;
     }
 
     // 私有建構子：直接以條目數建立空表（Clone 專用）
     private TranspositionTable(ulong size)
     {
-        _size = Math.Max(size, 1024);
-        _keys = new ulong[_size];
-        _data = new ulong[_size];
-        _generation = 0;
+        size = Math.Max(size, 1024);
+        keys = new ulong[size];
+        data = new ulong[size];
+        generation = 0;
     }
 
-    public byte Generation => _generation;
+    public byte Generation => generation;
 
     public void NewGeneration()
     {
-        _generation++;
+        generation++;
     }
 
     /// <summary>
@@ -82,11 +82,11 @@ public class TranspositionTable
     /// </summary>
     public TranspositionTable Clone()
     {
-        var clone = new TranspositionTable(_size);
-        System.Array.Copy(_keys, clone._keys, (int)_size);
-        System.Array.Copy(_data, clone._data, (int)_size);
-        clone._generation = _generation;
-        Interlocked.Exchange(ref clone._occupiedCount, Interlocked.Read(ref _occupiedCount));
+        var clone = new TranspositionTable(size);
+        System.Array.Copy(keys, clone.keys, (int)size);
+        System.Array.Copy(data, clone.data, (int)size);
+        clone.generation = generation;
+        Interlocked.Exchange(ref clone.occupiedCount, Interlocked.Read(ref occupiedCount));
         return clone;
     }
 
@@ -97,28 +97,28 @@ public class TranspositionTable
     /// </summary>
     public void MergeFrom(TranspositionTable other)
     {
-        for (ulong i = 0; i < other._size; i++)
+        for (ulong i = 0; i < other.size; i++)
         {
-            ulong otherKeyXorData = Volatile.Read(ref other._keys[i]);
-            ulong otherData       = Volatile.Read(ref other._data[i]);
+            ulong otherKeyXorData = Volatile.Read(ref other.keys[i]);
+            ulong otherData       = Volatile.Read(ref other.data[i]);
 
             if (otherKeyXorData == 0) continue; // 空槽，跳過
 
-            // _keys[i] = zobristKey ^ _data[i] → 還原 zobrist key
+            // keys[i] = zobristKey ^ data[i] → 還原 zobrist key
             ulong zobristKey = otherKeyXorData ^ otherData;
             byte  otherDepth = (byte)((otherData >> 16) & 0xFF);
 
             // 計算本表中該 key 的對應槽位
-            ulong ourIndex     = zobristKey % _size;
-            ulong myKeyXorData = Volatile.Read(ref _keys[ourIndex]);
-            ulong myData       = Volatile.Read(ref _data[ourIndex]);
+            ulong ourIndex     = zobristKey % size;
+            ulong myKeyXorData = Volatile.Read(ref keys[ourIndex]);
+            ulong myData       = Volatile.Read(ref data[ourIndex]);
 
             if (myKeyXorData == 0)
             {
                 // 本表槽位為空，直接填入
-                Interlocked.Increment(ref _occupiedCount);
-                Volatile.Write(ref _data[ourIndex], otherData);
-                Volatile.Write(ref _keys[ourIndex], zobristKey ^ otherData);
+                Interlocked.Increment(ref occupiedCount);
+                Volatile.Write(ref data[ourIndex], otherData);
+                Volatile.Write(ref keys[ourIndex], zobristKey ^ otherData);
             }
             else
             {
@@ -126,8 +126,8 @@ public class TranspositionTable
                 byte myDepth = (byte)((myData >> 16) & 0xFF);
                 if (otherDepth > myDepth)
                 {
-                    Volatile.Write(ref _data[ourIndex], otherData);
-                    Volatile.Write(ref _keys[ourIndex], zobristKey ^ otherData);
+                    Volatile.Write(ref data[ourIndex], otherData);
+                    Volatile.Write(ref keys[ourIndex], zobristKey ^ otherData);
                 }
             }
         }
@@ -136,15 +136,15 @@ public class TranspositionTable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Probe(ulong key, out TTEntry entry)
     {
-        ulong index = key % _size;
-        ulong storedKey = Volatile.Read(ref _keys[index]);
-        ulong storedData = Volatile.Read(ref _data[index]);
+        ulong index = key % size;
+        ulong storedKey = Volatile.Read(ref keys[index]);
+        ulong storedData = Volatile.Read(ref data[index]);
 
-        Interlocked.Increment(ref _totalProbes);
+        Interlocked.Increment(ref totalProbes);
 
         if ((storedKey ^ storedData) == key)
         {
-            Interlocked.Increment(ref _probeHits);
+            Interlocked.Increment(ref probeHits);
             entry = Unpack(storedData, key);
             return true;
         }
@@ -156,42 +156,42 @@ public class TranspositionTable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Store(ulong key, int score, int depth, TTFlag flag, Move bestMove)
     {
-        ulong index = key % _size;
-        ulong packed = Pack((short)ClampScore(score), (byte)depth, flag, bestMove.From, bestMove.To, _generation);
+        ulong index = key % size;
+        ulong packed = Pack((short)ClampScore(score), (byte)depth, flag, bestMove.From, bestMove.To, generation);
 
         // 若舊槽為空（首次寫入），記錄佔用數；多執行緒下允許些微高估
-        if (_keys[index] == 0)
-            Interlocked.Increment(ref _occupiedCount);
+        if (keys[index] == 0)
+            Interlocked.Increment(ref occupiedCount);
 
-        Volatile.Write(ref _data[index], packed);
-        Volatile.Write(ref _keys[index], key ^ packed);
+        Volatile.Write(ref data[index], packed);
+        Volatile.Write(ref keys[index], key ^ packed);
     }
 
     public void Clear()
     {
-        System.Array.Clear(_keys, 0, _keys.Length);
-        System.Array.Clear(_data, 0, _data.Length);
-        _generation = 0;
-        Interlocked.Exchange(ref _totalProbes, 0);
-        Interlocked.Exchange(ref _probeHits, 0);
-        Interlocked.Exchange(ref _occupiedCount, 0);
+        System.Array.Clear(keys, 0, keys.Length);
+        System.Array.Clear(data, 0, data.Length);
+        generation = 0;
+        Interlocked.Exchange(ref totalProbes, 0);
+        Interlocked.Exchange(ref probeHits, 0);
+        Interlocked.Exchange(ref occupiedCount, 0);
     }
 
     public TTStatistics GetStatistics()
     {
-        long probes = Interlocked.Read(ref _totalProbes);
-        long hits = Interlocked.Read(ref _probeHits);
-        long occupied = Interlocked.Read(ref _occupiedCount);
+        long probes = Interlocked.Read(ref totalProbes);
+        long hits = Interlocked.Read(ref probeHits);
+        long occupied = Interlocked.Read(ref occupiedCount);
         return new TTStatistics
         {
-            Capacity = _size,
-            MemoryMb = _size * 16.0 / (1024 * 1024),
-            Generation = _generation,
+            Capacity = size,
+            MemoryMb = size * 16.0 / (1024 * 1024),
+            Generation = generation,
             TotalProbes = probes,
             Hits = hits,
             HitRate = probes > 0 ? (double)hits / probes : 0.0,
             OccupiedEntries = occupied,
-            FillRate = _size > 0 ? (double)occupied / _size : 0.0
+            FillRate = size > 0 ? (double)occupied / size : 0.0
         };
     }
 
@@ -199,7 +199,7 @@ public class TranspositionTable
     /// 以 v3 格式（Columnar + Quotient key + Brotli）匯出 TT 快照。
     ///
     /// 欄位佈局（單一 BrotliStream，Columnar 順序）：
-    ///   Col 0: Key quotient（VarUInt64，0=空槽，k+1=有效，k = (key-i) / _size）
+    ///   Col 0: Key quotient（VarUInt64，0=空槽，k+1=有效，k = (key-i) / size）
     ///   Col 1: Score  (int16)
     ///   Col 2: Depth  (byte)
     ///   Col 3: Flag   (byte, 0-3)
@@ -207,8 +207,8 @@ public class TranspositionTable
     ///   Col 5: To     (byte, 0-89)
     ///   Col 6: Gen    (byte)
     ///
-    /// Quotient 編碼利用 TT 不變量：Store() 保證 key % _size == index，
-    /// 因此 key = index + k × _size，只需儲存商 k 即可還原完整 key，
+    /// Quotient 編碼利用 TT 不變量：Store() 保證 key % size == index，
+    /// 因此 key = index + k × size，只需儲存商 k 即可還原完整 key，
     /// 省去 key 的低位元（約 22 bits），降低 key 欄的資料量。
     /// </summary>
     public void ExportToBinary(Stream output)
@@ -223,56 +223,56 @@ public class TranspositionTable
         {
             hw.Write(BinaryHeader);
             hw.Write(BinaryVersion); // v3
-            hw.Write(_size);
-            hw.Write(_generation);
+            hw.Write(size);
+            hw.Write(generation);
         }
 
         // Payload：Columnar 欄位順序寫入單一 BrotliStream（quality 4，速度/壓縮平衡）
         using var brotli = new BrotliStream(output, CompressionLevel.Optimal, leaveOpen: true);
         using var bw = new BinaryWriter(brotli, System.Text.Encoding.UTF8, leaveOpen: true);
 
-        int size = (int)_size;
+        int tableSize = (int)size;
 
         // Col 0：Key quotient（VarUInt64）——隨機資料，欄位分離可減少干擾
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < tableSize; i++)
         {
-            ulong kxd = Volatile.Read(ref _keys[i]);
+            ulong kxd = Volatile.Read(ref keys[i]);
             if (kxd == 0) { WriteVarUInt64(bw, 0); continue; }
-            ulong d = Volatile.Read(ref _data[i]);
+            ulong d = Volatile.Read(ref data[i]);
             ulong key = kxd ^ d;
-            WriteVarUInt64(bw, (key - (ulong)i) / _size + 1); // +1 使 0 成為空槽哨兵
+            WriteVarUInt64(bw, (key - (ulong)i) / size + 1); // +1 使 0 成為空槽哨兵
         }
 
         // Col 1-6：低熵欄位，獨立欄位後 Brotli 可發揮最大壓縮效果
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < tableSize; i++)
         {
-            ulong kxd = Volatile.Read(ref _keys[i]);
-            bw.Write(kxd == 0 ? (short)0 : (short)(ushort)(Volatile.Read(ref _data[i]) & 0xFFFF));
+            ulong kxd = Volatile.Read(ref keys[i]);
+            bw.Write(kxd == 0 ? (short)0 : (short)(ushort)(Volatile.Read(ref data[i]) & 0xFFFF));
         }
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < tableSize; i++)
         {
-            ulong kxd = Volatile.Read(ref _keys[i]);
-            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 16) & 0xFF));
+            ulong kxd = Volatile.Read(ref keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref data[i]) >> 16) & 0xFF));
         }
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < tableSize; i++)
         {
-            ulong kxd = Volatile.Read(ref _keys[i]);
-            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 24) & 0x3));
+            ulong kxd = Volatile.Read(ref keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref data[i]) >> 24) & 0x3));
         }
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < tableSize; i++)
         {
-            ulong kxd = Volatile.Read(ref _keys[i]);
-            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 26) & 0x7F));
+            ulong kxd = Volatile.Read(ref keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref data[i]) >> 26) & 0x7F));
         }
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < tableSize; i++)
         {
-            ulong kxd = Volatile.Read(ref _keys[i]);
-            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 33) & 0x7F));
+            ulong kxd = Volatile.Read(ref keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref data[i]) >> 33) & 0x7F));
         }
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < tableSize; i++)
         {
-            ulong kxd = Volatile.Read(ref _keys[i]);
-            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref _data[i]) >> 40) & 0xFF));
+            ulong kxd = Volatile.Read(ref keys[i]);
+            bw.Write(kxd == 0 ? (byte)0 : (byte)((Volatile.Read(ref data[i]) >> 40) & 0xFF));
         }
         // bw Dispose → brotli Flush → brotli Dispose → 壓縮結尾寫入 output
     }
@@ -298,43 +298,43 @@ public class TranspositionTable
             throw new InvalidDataException($"Unsupported TT binary version: {version}");
         }
 
-        ulong size = headerReader.ReadUInt64();
-        if (size == 0 || size > (ulong)_keys.Length)
+        ulong snapshotSize = headerReader.ReadUInt64();
+        if (snapshotSize == 0 || snapshotSize > (ulong)keys.Length)
         {
-            throw new InvalidDataException($"Invalid TT table size in binary snapshot: {size}");
+            throw new InvalidDataException($"Invalid TT table size in binary snapshot: {snapshotSize}");
         }
 
-        if (size != _size)
+        if (snapshotSize != size)
         {
-            throw new InvalidDataException($"TT size mismatch. Snapshot={size}, current={_size}");
+            throw new InvalidDataException($"TT size mismatch. Snapshot={snapshotSize}, current={size}");
         }
 
-        byte generation = headerReader.ReadByte();
-        int n = (int)size;
+        byte snapshotGeneration = headerReader.ReadByte();
+        int n = (int)snapshotSize;
 
-        _generation = generation;
+        generation = snapshotGeneration;
 
         if (version == LegacyBinaryVersion)
         {
             // v1：舊版無壓縮格式（向後相容）
-            var keys = new ulong[n];
-            var data = new ulong[n];
-            for (int i = 0; i < n; i++) keys[i] = headerReader.ReadUInt64();
-            for (int i = 0; i < n; i++) data[i] = headerReader.ReadUInt64();
-            System.Array.Copy(keys, _keys, n);
-            System.Array.Copy(data, _data, n);
+            var importedKeys = new ulong[n];
+            var importedData = new ulong[n];
+            for (int i = 0; i < n; i++) importedKeys[i] = headerReader.ReadUInt64();
+            for (int i = 0; i < n; i++) importedData[i] = headerReader.ReadUInt64();
+            System.Array.Copy(importedKeys, keys, n);
+            System.Array.Copy(importedData, data, n);
         }
         else if (version == GzipBinaryVersion)
         {
             // v2：GZip 壓縮格式（向後相容）
             using var gzip = new GZipStream(input, CompressionMode.Decompress, leaveOpen: true);
             using var dr = new BinaryReader(gzip, System.Text.Encoding.UTF8, leaveOpen: true);
-            var keys = new ulong[n];
-            var data = new ulong[n];
-            for (int i = 0; i < n; i++) keys[i] = dr.ReadUInt64();
-            for (int i = 0; i < n; i++) data[i] = dr.ReadUInt64();
-            System.Array.Copy(keys, _keys, n);
-            System.Array.Copy(data, _data, n);
+            var importedKeys = new ulong[n];
+            var importedData = new ulong[n];
+            for (int i = 0; i < n; i++) importedKeys[i] = dr.ReadUInt64();
+            for (int i = 0; i < n; i++) importedData[i] = dr.ReadUInt64();
+            System.Array.Copy(importedKeys, keys, n);
+            System.Array.Copy(importedData, data, n);
         }
         else
         {
@@ -342,13 +342,13 @@ public class TranspositionTable
             ImportV3Columnar(input, n);
         }
 
-        Interlocked.Exchange(ref _occupiedCount, CountOccupied());
+        Interlocked.Exchange(ref occupiedCount, CountOccupied());
     }
 
     /// <summary>
     /// 讀取 v3 Columnar 格式並重建 TT 陣列。
     /// 欄位順序與 ExportToBinary v3 一致（quotient → score → depth → flag → from → to → gen）。
-    /// key 重建公式：key = index + (quotient - 1) × _size
+    /// key 重建公式：key = index + (quotient - 1) × size
     /// </summary>
     private void ImportV3Columnar(Stream input, int n)
     {
@@ -371,19 +371,19 @@ public class TranspositionTable
         for (int i = 0; i < n; i++) tos[i]       = dr.ReadByte();
         for (int i = 0; i < n; i++) gens[i]      = dr.ReadByte();
 
-        System.Array.Clear(_keys, 0, n);
-        System.Array.Clear(_data, 0, n);
+        System.Array.Clear(keys, 0, n);
+        System.Array.Clear(data, 0, n);
 
         for (int i = 0; i < n; i++)
         {
             if (quotients[i] == 0) continue; // 空槽
 
             ulong k          = quotients[i] - 1;
-            ulong zobristKey = (ulong)i + k * _size;
+            ulong zobristKey = (ulong)i + k * size;
             ulong packed     = Pack(scores[i], depths[i], (TTFlag)flags[i], froms[i], tos[i], gens[i]);
 
-            _data[i] = packed;
-            _keys[i] = zobristKey ^ packed;
+            data[i] = packed;
+            keys[i] = zobristKey ^ packed;
         }
     }
 
@@ -396,10 +396,10 @@ public class TranspositionTable
 
         var snapshot = new TTStateSnapshot
         {
-            Size = _size,
-            Generation = _generation,
-            Keys = _keys,
-            Data = _data
+            Size = size,
+            Generation = generation,
+            Keys = keys,
+            Data = data
         };
 
         JsonSerializer.Serialize(output, snapshot, new JsonSerializerOptions
@@ -430,9 +430,9 @@ public class TranspositionTable
             throw new InvalidDataException("TT json snapshot is null.");
         }
 
-        if (snapshot.Size != _size)
+        if (snapshot.Size != size)
         {
-            throw new InvalidDataException($"TT size mismatch. Snapshot={snapshot.Size}, current={_size}");
+            throw new InvalidDataException($"TT size mismatch. Snapshot={snapshot.Size}, current={size}");
         }
 
         if (snapshot.Keys == null || snapshot.Data == null)
@@ -440,23 +440,23 @@ public class TranspositionTable
             throw new InvalidDataException("TT snapshot is missing key/data arrays.");
         }
 
-        if (snapshot.Keys.Length != (int)_size || snapshot.Data.Length != (int)_size)
+        if (snapshot.Keys.Length != (int)size || snapshot.Data.Length != (int)size)
         {
             throw new InvalidDataException("TT snapshot key/data length does not match table size.");
         }
 
-        _generation = snapshot.Generation;
-        System.Array.Copy(snapshot.Keys, _keys, (int)_size);
-        System.Array.Copy(snapshot.Data, _data, (int)_size);
-        Interlocked.Exchange(ref _occupiedCount, CountOccupied());
+        generation = snapshot.Generation;
+        System.Array.Copy(snapshot.Keys, keys, (int)size);
+        System.Array.Copy(snapshot.Data, data, (int)size);
+        Interlocked.Exchange(ref occupiedCount, CountOccupied());
     }
 
     private long CountOccupied()
     {
         long count = 0;
-        for (int i = 0; i < _keys.Length; i++)
+        for (int i = 0; i < keys.Length; i++)
         {
-            if (_keys[i] != 0) count++;
+            if (keys[i] != 0) count++;
         }
         return count;
     }
@@ -526,22 +526,22 @@ public class TranspositionTable
 
     /// <summary>
     /// 枚舉 TT 中所有有效條目（惰性求值）。
-    /// 有效條目的判斷依據：_keys[i] 不為零（XOR 驗證格式）。
+    /// 有效條目的判斷依據：keys[i] 不為零（XOR 驗證格式）。
     /// </summary>
     public IEnumerable<TTEntry> EnumerateEntries()
     {
-        for (ulong i = 0; i < _size; i++)
+        for (ulong i = 0; i < size; i++)
         {
-            ulong keyXorData = Volatile.Read(ref _keys[i]);
+            ulong keyXorData = Volatile.Read(ref keys[i]);
             if (keyXorData == 0) continue;
 
-            ulong data = Volatile.Read(ref _data[i]);
-            ulong zobristKey = keyXorData ^ data;
+            ulong entryData = Volatile.Read(ref data[i]);
+            ulong zobristKey = keyXorData ^ entryData;
 
-            // 二次確認：重新計算 XOR 應與 _keys[i] 吻合（防止撕裂讀取）
-            if ((zobristKey ^ data) != keyXorData) continue;
+            // 二次確認：重新計算 XOR 應與 keys[i] 吻合（防止撕裂讀取）
+            if ((zobristKey ^ entryData) != keyXorData) continue;
 
-            yield return Unpack(data, zobristKey);
+            yield return Unpack(entryData, zobristKey);
         }
     }
 
@@ -564,18 +564,18 @@ public class TranspositionTable
         // 防止同一局面被重複訪問（循環偵測）
         if (!visited.Add(key)) return null;
 
-        ulong index = key % _size;
-        ulong keyXorData = Volatile.Read(ref _keys[index]);
-        ulong data = Volatile.Read(ref _data[index]);
+        ulong index = key % size;
+        ulong keyXorData = Volatile.Read(ref keys[index]);
+        ulong entryData = Volatile.Read(ref data[index]);
 
         // 驗證 TT 命中
-        if ((keyXorData ^ data) != key)
+        if ((keyXorData ^ entryData) != key)
         {
             visited.Remove(key);
             return null;
         }
 
-        var entry = Unpack(data, key);
+        var entry = Unpack(entryData, key);
         var node = new TTTreeNode
         {
             Entry = entry,

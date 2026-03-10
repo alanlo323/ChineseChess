@@ -13,18 +13,18 @@ public class Board : IBoard
     public const int Width = 9;
     public const int Height = 10;
 
-    private readonly Piece[] _pieces = new Piece[BoardSize];
-    private PieceColor _turn;
-    private ulong _zobristKey;
+    private readonly Piece[] pieces = new Piece[BoardSize];
+    private PieceColor turn;
+    private ulong zobristKey;
 
     // Undo 用的歷史紀錄
-    private readonly Stack<GameState> _history = new Stack<GameState>();
+    private readonly Stack<GameState> history = new Stack<GameState>();
 
     // 和棋判定用：Zobrist Key 歷史（每次 MakeMove 後紀錄）
-    private readonly List<ulong> _zobristHistory = new List<ulong>();
+    private readonly List<ulong> zobristHistory = new List<ulong>();
 
     // 無吃子半回合計數器（達 60 觸發和棋）
-    private int _halfMoveClock;
+    private int halfMoveClock;
 
     private struct GameState
     {
@@ -34,23 +34,23 @@ public class Board : IBoard
         public int PreviousHalfMoveClock;
     }
 
-    public PieceColor Turn => _turn;
-    public ulong ZobristKey => _zobristKey;
+    public PieceColor Turn => turn;
+    public ulong ZobristKey => zobristKey;
 
     /// <summary>無吃子半回合計數。每走一步無吃子 +1，吃子後歸零。</summary>
-    public int HalfMoveClock => _halfMoveClock;
+    public int HalfMoveClock => halfMoveClock;
 
     public Board()
     {
         // 初始化空棋盤
-        for (int i = 0; i < BoardSize; i++) _pieces[i] = Piece.None;
-        _turn = PieceColor.Red;
-        _zobristKey = 0;
+        for (int i = 0; i < BoardSize; i++) pieces[i] = Piece.None;
+        turn = PieceColor.Red;
+        zobristKey = 0;
         // 記錄初始局面（空棋盤）的 Key，供和棋判定使用
-        _zobristHistory.Add(_zobristKey);
+        zobristHistory.Add(zobristKey);
 
         // Turn 的初始 Zobrist（若要納入 Turn）
-        // _zobristKey ^= ZobristHash.SideToMoveKey; // 若紅方先手且要對黑方 XOR，反之亦然。
+        // zobristKey ^= ZobristHash.SideToMoveKey; // 若紅方先手且要對黑方 XOR，反之亦然。
         // 假設 Turn 在黑方時將 SideToMoveKey 包進 Key？
         // 通常在換手時會做：Key ^= SideToMoveKey。
         // 開局若為紅方，通常不 XOR；若為黑方，才 XOR。
@@ -64,7 +64,7 @@ public class Board : IBoard
     public Piece GetPiece(int index)
     {
         if (index < 0 || index >= BoardSize) return Piece.None;
-        return _pieces[index];
+        return pieces[index];
     }
     
     // --- 狀態變更 ---
@@ -81,8 +81,8 @@ public class Board : IBoard
             throw new InvalidOperationException("Move source and destination must be different.");
         }
 
-        var piece = _pieces[move.From];
-        var target = _pieces[move.To];
+        var piece = pieces[move.From];
+        var target = pieces[move.To];
         if (piece.IsNone)
         {
             throw new InvalidOperationException("Cannot move an empty square.");
@@ -94,32 +94,32 @@ public class Board : IBoard
         }
 
         // 更新 Zobrist：移除 From 的棋子
-        _zobristKey ^= ZobristHash.GetPieceKey(move.From, piece.Color, piece.Type);
+        zobristKey ^= ZobristHash.GetPieceKey(move.From, piece.Color, piece.Type);
         
         // 更新 Zobrist：移除 To 位置的目標棋子（吃子）
         if (!target.IsNone)
         {
-            _zobristKey ^= ZobristHash.GetPieceKey(move.To, target.Color, target.Type);
+            zobristKey ^= ZobristHash.GetPieceKey(move.To, target.Color, target.Type);
         }
 
         // 更新棋盤
-        _pieces[move.To] = piece;
-        _pieces[move.From] = Piece.None;
+        pieces[move.To] = piece;
+        pieces[move.From] = Piece.None;
 
         // 更新 Zobrist：新增 Piece 到 To
-        _zobristKey ^= ZobristHash.GetPieceKey(move.To, piece.Color, piece.Type);
+        zobristKey ^= ZobristHash.GetPieceKey(move.To, piece.Color, piece.Type);
 
         // 交換行棋方
-        _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
-        _zobristKey ^= ZobristHash.SideToMoveKey;
+        turn = turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
+        zobristKey ^= ZobristHash.SideToMoveKey;
 
         // 維護無吃子計數
         bool isCapture = !target.IsNone;
-        int previousHalfMoveClock = _halfMoveClock;
-        _halfMoveClock = isCapture ? 0 : _halfMoveClock + 1;
+        int previousHalfMoveClock = halfMoveClock;
+        halfMoveClock = isCapture ? 0 : halfMoveClock + 1;
 
         // 推入歷史紀錄
-        _history.Push(new GameState
+        history.Push(new GameState
         {
             Move = move,
             CapturedPiece = target,
@@ -127,63 +127,63 @@ public class Board : IBoard
         });
 
         // 記錄走完後的 Zobrist Key 到歷史列表（和棋判定用）
-        _zobristHistory.Add(_zobristKey);
+        zobristHistory.Add(zobristKey);
     }
 
     public void UnmakeMove(Move move)
     {
-        if (_history.Count == 0) throw new InvalidOperationException("No history to undo.");
+        if (history.Count == 0) throw new InvalidOperationException("No history to undo.");
 
-        var state = _history.Pop();
+        var state = history.Pop();
         if (state.Move != move)
         {
-            _history.Push(state);
+            history.Push(state);
             throw new InvalidOperationException("Unmake move does not match history.");
         }
 
         // 移除最後一筆 Zobrist 歷史（和棋判定用）
-        if (!state.IsNullMove && _zobristHistory.Count > 0)
+        if (!state.IsNullMove && zobristHistory.Count > 0)
         {
-            _zobristHistory.RemoveAt(_zobristHistory.Count - 1);
+            zobristHistory.RemoveAt(zobristHistory.Count - 1);
         }
 
         // 還原無吃子計數
-        _halfMoveClock = state.PreviousHalfMoveClock;
+        halfMoveClock = state.PreviousHalfMoveClock;
 
         // 回復行棋方
-        _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
-        _zobristKey ^= ZobristHash.SideToMoveKey;
+        turn = turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
+        zobristKey ^= ZobristHash.SideToMoveKey;
 
         // 空著不涉及棋子移動，僅還原行棋方與 Zobrist 即可
         if (state.IsNullMove) return;
 
         // 還原棋子
-        var movedPiece = _pieces[state.Move.To];
+        var movedPiece = pieces[state.Move.To];
         var capturedPiece = state.CapturedPiece;
 
-        _pieces[state.Move.From] = movedPiece;
-        _pieces[state.Move.To] = capturedPiece;
+        pieces[state.Move.From] = movedPiece;
+        pieces[state.Move.To] = capturedPiece;
 
         // 還原 Zobrist（Re-XOR 可逆）
-        _zobristKey ^= ZobristHash.GetPieceKey(state.Move.To, movedPiece.Color, movedPiece.Type);
-        _zobristKey ^= ZobristHash.GetPieceKey(state.Move.From, movedPiece.Color, movedPiece.Type);
+        zobristKey ^= ZobristHash.GetPieceKey(state.Move.To, movedPiece.Color, movedPiece.Type);
+        zobristKey ^= ZobristHash.GetPieceKey(state.Move.From, movedPiece.Color, movedPiece.Type);
         if (!capturedPiece.IsNone)
         {
-            _zobristKey ^= ZobristHash.GetPieceKey(state.Move.To, capturedPiece.Color, capturedPiece.Type);
+            zobristKey ^= ZobristHash.GetPieceKey(state.Move.To, capturedPiece.Color, capturedPiece.Type);
         }
     }
 
     public void UndoMove()
     {
-        if (_history.Count > 0)
+        if (history.Count > 0)
         {
-            UnmakeMove(_history.Peek().Move);
+            UnmakeMove(history.Peek().Move);
         }
     }
 
     public bool TryGetLastMove(out Move move)
     {
-        foreach (var state in _history)
+        foreach (var state in history)
         {
             if (!state.Move.IsNull)
             {
@@ -198,10 +198,10 @@ public class Board : IBoard
 
     public void MakeNullMove()
     {
-        _zobristKey ^= ZobristHash.SideToMoveKey;
-        _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
+        zobristKey ^= ZobristHash.SideToMoveKey;
+        turn = turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
 
-        _history.Push(new GameState
+        history.Push(new GameState
         {
             Move = Move.Null,
             CapturedPiece = Piece.None,
@@ -211,11 +211,11 @@ public class Board : IBoard
 
     public void UnmakeNullMove()
     {
-        if (_history.Count == 0) throw new InvalidOperationException("No history to undo.");
-        _history.Pop();
+        if (history.Count == 0) throw new InvalidOperationException("No history to undo.");
+        history.Pop();
 
-        _zobristKey ^= ZobristHash.SideToMoveKey;
-        _turn = _turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
+        zobristKey ^= ZobristHash.SideToMoveKey;
+        turn = turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
     }
 
         // --- FEN ---
@@ -243,11 +243,11 @@ public class Board : IBoard
         }
 
         // 清空棋盤
-        for (int i = 0; i < BoardSize; i++) _pieces[i] = Piece.None;
-        _zobristKey = 0;
-        _history.Clear();
-        _zobristHistory.Clear();
-        _halfMoveClock = 0;
+        for (int i = 0; i < BoardSize; i++) pieces[i] = Piece.None;
+        zobristKey = 0;
+        history.Clear();
+        zobristHistory.Clear();
+        halfMoveClock = 0;
 
         for (int r = 0; r < 10; r++)
         {
@@ -272,8 +272,8 @@ public class Board : IBoard
 
                     int index = r * 9 + c;
                     Piece p = CharToPiece(ch);
-                    _pieces[index] = p;
-                    _zobristKey ^= ZobristHash.GetPieceKey(index, p.Color, p.Type);
+                    pieces[index] = p;
+                    zobristKey ^= ZobristHash.GetPieceKey(index, p.Color, p.Type);
                     c++;
                 }
             }
@@ -284,16 +284,16 @@ public class Board : IBoard
             }
         }
 
-        _turn = parts[1] switch
+        turn = parts[1] switch
         {
             "w" or "r" => PieceColor.Red,
             "b" or "k" => PieceColor.Black,
             _ => throw new ArgumentException("Invalid FEN side to move.")
         }; // 'w' 為標準表示，'r' 可能也會被使用
-        if (_turn == PieceColor.Black) _zobristKey ^= ZobristHash.SideToMoveKey;
+        if (turn == PieceColor.Black) zobristKey ^= ZobristHash.SideToMoveKey;
 
         // 記錄解析後局面的 Key 為起始點（和棋判定用）
-        _zobristHistory.Add(_zobristKey);
+        zobristHistory.Add(zobristKey);
 
         // TODO：解析著法時計數（move clocks / counters）
     }
@@ -306,7 +306,7 @@ public class Board : IBoard
             int empty = 0;
             for (int c = 0; c < 9; c++)
             {
-                var p = _pieces[r * 9 + c];
+                var p = pieces[r * 9 + c];
                 if (p.IsNone)
                 {
                     empty++;
@@ -325,7 +325,7 @@ public class Board : IBoard
             if (r < 9) sb.Append('/');
         }
         
-        sb.Append(_turn == PieceColor.Red ? " w" : " b");
+        sb.Append(turn == PieceColor.Red ? " w" : " b");
         sb.Append(" - - 0 1"); // 暫存計數器（原本以便用於後續欄位）
         return sb.ToString();
     }
@@ -359,7 +359,7 @@ public class Board : IBoard
 
         foreach (var move in pseudoMoves)
         {
-            var movingColor = _turn;
+            var movingColor = turn;
             MakeMove(move);
             if (!IsCheck(movingColor))
             {
@@ -376,7 +376,7 @@ public class Board : IBoard
         var moves = new List<Move>();
 
         bool IsInsideBoard(int row, int col) => row >= 0 && row < Height && col >= 0 && col < Width;
-        bool IsOwnPiece(int index) => _pieces[index].Color == _turn;
+        bool IsOwnPiece(int index) => pieces[index].Color == turn;
 
         void TryAddMove(int from, int to)
         {
@@ -398,8 +398,8 @@ public class Board : IBoard
 
         for (int from = 0; from < BoardSize; from++)
         {
-            var piece = _pieces[from];
-            if (piece.Color != _turn) continue;
+            var piece = pieces[from];
+            if (piece.Color != turn) continue;
             if (piece.IsNone) continue;
 
             int fromRow = from / Width;
@@ -447,7 +447,7 @@ public class Board : IBoard
                             int blockRow = fromRow + elephantDirs[i, 0] / 2;
                             int blockCol = fromCol + elephantDirs[i, 1] / 2;
                             int blockIndex = blockRow * Width + blockCol;
-                            if (_pieces[blockIndex].IsNone)
+                            if (pieces[blockIndex].IsNone)
                             {
                                 TryAddMove(from, toRow * Width + toCol);
                             }
@@ -473,7 +473,7 @@ public class Board : IBoard
                             int blockCol = fromCol + horseDirs[i][3];
                             int blockIndex = blockRow * Width + blockCol;
 
-                            if (_pieces[blockIndex].IsNone)
+                            if (pieces[blockIndex].IsNone)
                             {
                                 TryAddMove(from, toRow * Width + toCol);
                             }
@@ -498,7 +498,7 @@ public class Board : IBoard
                             while (IsInsideBoard(toRow, toCol))
                             {
                                 int to = toRow * Width + toCol;
-                                var target = _pieces[to];
+                                var target = pieces[to];
 
                                 if (target.IsNone)
                                 {
@@ -590,7 +590,7 @@ public class Board : IBoard
     {
         for (int i = 0; i < BoardSize; i++)
         {
-            if (_pieces[i].Color == color && _pieces[i].Type == PieceType.King)
+            if (pieces[i].Color == color && pieces[i].Type == PieceType.King)
             {
                 return i;
             }
@@ -601,14 +601,14 @@ public class Board : IBoard
     private bool IsSquareAttacked(int targetIndex, PieceColor byColor)
     {
         if (targetIndex < 0 || targetIndex >= BoardSize) return false;
-        if (_pieces[targetIndex].Type == PieceType.None) return false;
+        if (pieces[targetIndex].Type == PieceType.None) return false;
 
         int targetRow = targetIndex / Width;
         int targetCol = targetIndex % Width;
 
         // 將軍面對面規則：同一個列上若無阻擋，雙方將互相將對方視為被將。
         int kingIndex = GetKingIndex(byColor);
-        if (kingIndex >= 0 && _pieces[targetIndex].Type == PieceType.King)
+        if (kingIndex >= 0 && pieces[targetIndex].Type == PieceType.King)
         {
             int kingRow = kingIndex / Width;
             int kingCol = kingIndex % Width;
@@ -618,7 +618,7 @@ public class Board : IBoard
                 bool blocked = false;
                 for (int row = kingRow + rowStep; row != targetRow; row += rowStep)
                 {
-                    if (!_pieces[row * Width + kingCol].IsNone)
+                    if (!pieces[row * Width + kingCol].IsNone)
                     {
                         blocked = true;
                         break;
@@ -630,7 +630,7 @@ public class Board : IBoard
 
         for (int from = 0; from < BoardSize; from++)
         {
-            var piece = _pieces[from];
+            var piece = pieces[from];
             if (piece.Color != byColor) continue;
 
             if (AttacksSquare(from, piece, targetIndex, targetRow, targetCol))
@@ -679,7 +679,7 @@ public class Board : IBoard
                 int elephantBlockRow = attackerRow + dr / 2;
                 int elephantBlockCol = attackerCol + dc / 2;
                 int elephantBlockIndex = elephantBlockRow * Width + elephantBlockCol;
-                return _pieces[elephantBlockIndex].IsNone;
+                return pieces[elephantBlockIndex].IsNone;
 
             case PieceType.Horse:
                 int[][] horseDirs =
@@ -697,7 +697,7 @@ public class Board : IBoard
                     int blockRow = attackerRow + horseDirs[i][2];
                     int blockCol = attackerCol + horseDirs[i][3];
                     int blockIndex = blockRow * Width + blockCol;
-                    return IsInsideBoard(blockRow, blockCol) && _pieces[blockIndex].IsNone;
+                    return IsInsideBoard(blockRow, blockCol) && pieces[blockIndex].IsNone;
                 }
                 return false;
 
@@ -730,7 +730,7 @@ public class Board : IBoard
                         return false;
                     }
 
-                    if (!_pieces[current].IsNone)
+                    if (!pieces[current].IsNone)
                     {
                         blockers++;
 
@@ -759,12 +759,12 @@ public class Board : IBoard
     public IBoard Clone()
     {
         var b = new Board();
-        Array.Copy(_pieces, b._pieces, BoardSize);
-        b._turn = _turn;
-        b._zobristKey = _zobristKey;
-        b._halfMoveClock = _halfMoveClock;
+        Array.Copy(pieces, b.pieces, BoardSize);
+        b.turn = turn;
+        b.zobristKey = zobristKey;
+        b.halfMoveClock = halfMoveClock;
         // 複製 Zobrist 歷史以便 Clone 後繼續做和棋判定
-        b._zobristHistory.AddRange(_zobristHistory);
+        b.zobristHistory.AddRange(zobristHistory);
         // 搜尋時不複製 Undo 堆疊（僅 Clone 棋盤狀態）
         return b;
     }
@@ -774,21 +774,21 @@ public class Board : IBoard
     /// <summary>
     /// 判定是否達到重覆局面和棋條件。
     /// 預設閾值為 3（同一局面出現三次，含當前局面）。
-    /// _zobristHistory 的最後一筆就是當前局面 Key（由 MakeMove 和 ParseFen 維護）。
+    /// zobristHistory 的最後一筆就是當前局面 Key（由 MakeMove 和 ParseFen 維護）。
     /// </summary>
     public bool IsDrawByRepetition(int threshold = 3)
     {
-        int count = _zobristHistory.Count;
+        int count = zobristHistory.Count;
         if (count == 0) return false;
 
-        // _zobristHistory 最後一筆是當前局面
-        ulong currentKey = _zobristHistory[count - 1];
+        // zobristHistory 最後一筆是當前局面
+        ulong currentKey = zobristHistory[count - 1];
         int occurrences = 1; // 當前局面本身算一次
 
         // 每隔 2 步才是同一行棋方的局面，從倒數第 3 筆（隔 2）開始往前找
         for (int i = count - 3; i >= 0; i -= 2)
         {
-            if (_zobristHistory[i] == currentKey)
+            if (zobristHistory[i] == currentKey)
             {
                 occurrences++;
                 if (occurrences >= threshold) return true;
@@ -803,7 +803,7 @@ public class Board : IBoard
     /// </summary>
     public bool IsDrawByNoCapture(int limit = 60)
     {
-        return _halfMoveClock >= limit;
+        return halfMoveClock >= limit;
     }
 
     /// <summary>

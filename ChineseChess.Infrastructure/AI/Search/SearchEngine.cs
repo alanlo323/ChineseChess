@@ -16,8 +16,8 @@ namespace ChineseChess.Infrastructure.AI.Search;
 
 public class SearchEngine : IAiEngine
 {
-    private readonly IEvaluator _evaluator;
-    private readonly TranspositionTable _tt;
+    private readonly IEvaluator evaluator;
+    private readonly TranspositionTable tt;
 
     private const int HeartbeatIntervalMs = 100;
 
@@ -30,8 +30,8 @@ public class SearchEngine : IAiEngine
 
     public SearchEngine(GameSettings settings)
     {
-        _evaluator = new HandcraftedEvaluator();
-        _tt = new TranspositionTable(settings.TranspositionTableSizeMb);
+        evaluator = new HandcraftedEvaluator();
+        tt = new TranspositionTable(settings.TranspositionTableSizeMb);
     }
 
     // 測試用：使用預設設定
@@ -40,8 +40,8 @@ public class SearchEngine : IAiEngine
     // 以既有 TT 建立引擎（CloneWithCopiedTT 專用）
     private SearchEngine(TranspositionTable tt)
     {
-        _evaluator = new HandcraftedEvaluator();
-        _tt = tt;
+        evaluator = new HandcraftedEvaluator();
+        this.tt = tt;
     }
 
     public Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
@@ -49,7 +49,7 @@ public class SearchEngine : IAiEngine
         return Task.Run(() =>
         {
             int threadCount = Math.Clamp(settings.ThreadCount, 1, 128);
-            _tt.NewGeneration();
+            tt.NewGeneration();
             var pauseSignal = settings.PauseSignal ?? new ManualResetEventSlim(true);
 
             // 用獨立的 timeLimitCts 管理思考時間，讓監控任務依「實際搜尋時間」取消
@@ -60,7 +60,7 @@ public class SearchEngine : IAiEngine
 
             // --- 建立主 worker ---
             // ct = 使用者明確停止 token（hardStopCt），token = 時間限制 + 使用者停止（合併）
-            var mainWorker = new SearchWorker(board.Clone(), _evaluator, _tt, token, ct, pauseSignal);
+            var mainWorker = new SearchWorker(board.Clone(), evaluator, tt, token, ct, pauseSignal);
 
             // --- 啟動輔助 worker（各自獨立執行迭代加深） ---
             var helperWorkers = new SearchWorker[threadCount - 1];
@@ -68,7 +68,7 @@ public class SearchEngine : IAiEngine
 
             for (int i = 0; i < threadCount - 1; i++)
             {
-                var helper = new SearchWorker(board.Clone(), _evaluator, _tt, token, ct, pauseSignal);
+                var helper = new SearchWorker(board.Clone(), evaluator, tt, token, ct, pauseSignal);
                 helperWorkers[i] = helper;
 
                 int helperDepth = settings.Depth + 1 + (i % 2);
@@ -313,7 +313,7 @@ public class SearchEngine : IAiEngine
         return Task.Run(() =>
         {
             var noopPause = new ManualResetEventSlim(true);
-            var worker = new SearchWorker(board.Clone(), _evaluator, _tt, ct, ct, noopPause);
+            var worker = new SearchWorker(board.Clone(), evaluator, tt, ct, ct, noopPause);
             return worker.EvaluateRootMoves(moves, depth, progress, threadLabel: "單執行緒");
         }, ct);
     }
@@ -340,7 +340,7 @@ public class SearchEngine : IAiEngine
                 clonedBoard.MakeMove(move);
 
                 var noopPause = new ManualResetEventSlim(true);
-                var worker = new SearchWorker(clonedBoard, _evaluator, _tt, ct, ct, noopPause);
+                var worker = new SearchWorker(clonedBoard, evaluator, tt, ct, ct, noopPause);
                 int score = -worker.SearchSingleDepth(depth - 1);
 
                 results.Add((move, score));
@@ -378,11 +378,11 @@ public class SearchEngine : IAiEngine
         ct.ThrowIfCancellationRequested();
         if (asJson)
         {
-            _tt.ExportToJson(output);
+            tt.ExportToJson(output);
         }
         else
         {
-            _tt.ExportToBinary(output);
+            tt.ExportToBinary(output);
         }
 
         return Task.CompletedTask;
@@ -393,34 +393,34 @@ public class SearchEngine : IAiEngine
         ct.ThrowIfCancellationRequested();
         if (asJson)
         {
-            _tt.ImportFromJson(input);
+            tt.ImportFromJson(input);
         }
         else
         {
-            _tt.ImportFromBinary(input);
+            tt.ImportFromBinary(input);
         }
 
         return Task.CompletedTask;
     }
 
-    public TTStatistics GetTTStatistics() => _tt.GetStatistics();
+    public TTStatistics GetTTStatistics() => tt.GetStatistics();
 
     /// <inheritdoc/>
-    public IAiEngine CloneWithCopiedTT() => new SearchEngine(_tt.Clone());
+    public IAiEngine CloneWithCopiedTT() => new SearchEngine(tt.Clone());
 
     /// <inheritdoc/>
     public void MergeTranspositionTableFrom(IAiEngine other)
     {
         if (other is SearchEngine otherEngine)
         {
-            _tt.MergeFrom(otherEngine._tt);
+            tt.MergeFrom(otherEngine.tt);
         }
     }
 
     /// <inheritdoc/>
-    public IEnumerable<TTEntry> EnumerateTTEntries() => _tt.EnumerateEntries();
+    public IEnumerable<TTEntry> EnumerateTTEntries() => tt.EnumerateEntries();
 
     /// <inheritdoc/>
     public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6) =>
-        _tt.ExploreTTTree(board, maxDepth);
+        tt.ExploreTTTree(board, maxDepth);
 }
