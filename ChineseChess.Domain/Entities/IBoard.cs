@@ -10,6 +10,9 @@ public interface IBoard
     ulong ZobristKey { get; }
     int HalfMoveClock { get; }
 
+    /// <summary>本局已走的總步數（含紅黑雙方）。</summary>
+    int MoveCount { get; }
+
     // 走法產生
     IEnumerable<Move> GenerateLegalMoves();
 

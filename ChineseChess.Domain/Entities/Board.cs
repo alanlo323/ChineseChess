@@ -40,6 +40,9 @@ public class Board : IBoard
     /// <summary>無吃子半回合計數。每走一步無吃子 +1，吃子後歸零。</summary>
     public int HalfMoveClock => halfMoveClock;
 
+    /// <summary>本局已走的總步數（含紅黑雙方）。</summary>
+    public int MoveCount => history.Count;
+
     public Board()
     {
         // 初始化空棋盤

@@ -1,6 +1,7 @@
 using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
+using ChineseChess.Application.Models;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Helpers;
@@ -13,6 +14,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Timers;
+using System.Windows;
 using System.Windows.Input;
 
 namespace ChineseChess.WPF.ViewModels;
@@ -226,6 +228,7 @@ public class ControlPanelViewModel : ObservableObject
     public ICommand StopThinkingCommand { get; }
     public ICommand PauseThinkingCommand { get; }
     public ICommand ResumeThinkingCommand { get; }
+    public ICommand RequestDrawCommand { get; }
     public ICommand ExportTranspositionTableCommand { get; }
     public ICommand ImportTranspositionTableCommand { get; }
     public ICommand ExportBlackTranspositionTableCommand { get; }
@@ -254,6 +257,19 @@ public class ControlPanelViewModel : ObservableObject
         RefreshTTStatsCommand = new RelayCommand(_ => RefreshTTStats());
         StartGameCommand = new RelayCommand(async _ => await gameService.StartGameAsync(SelectedMode));
         UndoCommand = new RelayCommand(_ => gameService.Undo());
+
+        RequestDrawCommand = new RelayCommand(async _ =>
+        {
+            try
+            {
+                StatusMessage = "提和請求中...";
+                await gameService.RequestDrawAsync();
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"提和失敗：{ex.Message}";
+            }
+        });
 
         StopThinkingCommand = new RelayCommand(async _ =>
         {
@@ -443,6 +459,33 @@ public class ControlPanelViewModel : ObservableObject
             var app = global::System.Windows.Application.Current;
             if (app == null) return;
             app.Dispatcher.Invoke(RefreshTTStats);
+        };
+
+        // AI 主動提和：顯示 MessageBox 詢問玩家
+        gameService.DrawOffered += offerResult =>
+        {
+            var app = global::System.Windows.Application.Current;
+            if (app == null) return;
+            app.Dispatcher.Invoke(() =>
+            {
+                var answer = MessageBox.Show(
+                    $"AI 提議和棋。\n{offerResult.Reason}\n\n是否接受？",
+                    "AI 提和",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                gameService.RespondToDrawOffer(answer == MessageBoxResult.Yes);
+            });
+        };
+
+        // 提和結果通知
+        gameService.DrawOfferResolved += result =>
+        {
+            var app = global::System.Windows.Application.Current;
+            if (app == null) return;
+            string message = result.Accepted
+                ? $"和棋成立！{result.Reason}"
+                : $"提和遭拒。{result.Reason}";
+            app.Dispatcher.Invoke(() => StatusMessage = message);
         };
 
         RefreshTTStats();

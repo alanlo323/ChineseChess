@@ -24,4 +24,10 @@ public class GameSettings
     // ─── 智能提示 ─────────────────────────────────────────────────────────
     public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
+
+    // ─── 提和設定 ─────────────────────────────────────────────────────────
+    public int DrawOfferThreshold { get; set; } = 50;
+    public int DrawRefuseThreshold { get; set; } = 100;
+    public int MinMoveCountForAiDrawOffer { get; set; } = 30;
+    public int DrawOfferCooldownMoves { get; set; } = 10;
 }

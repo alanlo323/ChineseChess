@@ -1,4 +1,5 @@
 using ChineseChess.Application.Enums;
+using ChineseChess.Application.Models;
 using ChineseChess.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -18,11 +19,20 @@ public interface IGameService
     long LastSearchNodes { get; }
     long LastSearchNps { get; }
 
+    /// <summary>提和流程是否已完成（接受或拒絕）。</summary>
+    bool IsDrawOfferProcessed { get; }
+
     event Action BoardUpdated;
     event Action<string> GameMessage; // Check、Win 等訊息
     event Action<SearchResult>? HintReady; // AI 提示/分析結果
     event Action<string>? ThinkingProgress;
     event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady; // 智能提示結果
+
+    /// <summary>AI 主動提和時觸發，傳入提和資訊供玩家決策。</summary>
+    event Action<DrawOfferResult>? DrawOffered;
+
+    /// <summary>提和流程結束時觸發（接受或拒絕）。</summary>
+    event Action<DrawOfferResult>? DrawOfferResolved;
 
     // 控制
     Task StartGameAsync(GameMode mode);
@@ -39,11 +49,25 @@ public interface IGameService
     void Undo();
     void Redo(); // 非必要（Optional，可選功能）
 
+    // 提和流程
+    /// <summary>玩家主動向 AI 提和。僅在 PlayerVsAi 模式且未結束時有效。</summary>
+    Task RequestDrawAsync();
+
+    /// <summary>回應 AI 的提和請求。</summary>
+    /// <param name="accept">true = 接受和棋；false = 拒絕。</param>
+    void RespondToDrawOffer(bool accept);
+
+    /// <summary>（測試用）模擬 AI 已提和，設定待回應狀態。</summary>
+    void SimulateAiDrawOffer();
+
     // 書籤
     void AddBookmark(string name);
     void LoadBookmark(string name);
     void DeleteBookmark(string name);
     IEnumerable<string> GetBookmarks();
+
+    // 提和設定
+    void SetDrawOfferSettings(DrawOfferSettings settings);
 
     // AI 難度設定
     void SetDifficulty(int depth, int timeMs, int threadCount = 0);

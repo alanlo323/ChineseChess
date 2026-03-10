@@ -1,5 +1,6 @@
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
+using ChineseChess.Application.Models;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Helpers;
@@ -39,11 +40,22 @@ public class GameService : IGameService
     private long lastSearchNps;
     private long completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
 
+    // ─── 提和相關欄位 ──────────────────────────────────────────────────────
+    private DrawOfferSettings drawOfferSettings = new DrawOfferSettings();
+    private bool pendingAiDrawOffer;       // AI 已提和，等待玩家回應
+    private bool isDrawOfferProcessed;     // 本局中提和流程已完成（接受或拒絕）
+    private int lastAiDrawOfferMoveCount;  // AI 上次提和時的步數（冷卻用）
+    private bool inCooldown;               // 是否在提和冷卻期中
+
+    public bool IsDrawOfferProcessed => isDrawOfferProcessed;
+
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
     public event Action<SearchResult>? HintReady;
     public event Action<string>? ThinkingProgress;
     public event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady;
+    public event Action<DrawOfferResult>? DrawOffered;
+    public event Action<DrawOfferResult>? DrawOfferResolved;
 
     public GameService(IAiEngine aiEngine)
     {
@@ -59,6 +71,10 @@ public class GameService : IGameService
         aiPauseSignal.Set();
         board = new Board(); // 重置為標準初始局
         isGameOver = false;
+        pendingAiDrawOffer = false;
+        isDrawOfferProcessed = false;
+        lastAiDrawOfferMoveCount = 0;
+        inCooldown = false;
         Interlocked.Exchange(ref completedGameNodes, 0);
         Interlocked.Exchange(ref lastSearchNodes, 0);
         Interlocked.Exchange(ref lastSearchNps, 0);
@@ -347,10 +363,20 @@ public class GameService : IGameService
                     ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, moveNotation));
                 }
 
-                if (applyBestMove && !CheckGameOver() && currentMode == GameMode.AiVsAi)
+                if (applyBestMove && !CheckGameOver())
                 {
-                    // 繼續執行下一輪
-                    continueAiLoop = true;
+                    // PlayerVsAi：AI 走完後檢查是否主動提和
+                    if (currentMode == GameMode.PlayerVsAi && !isGameOver && !pendingAiDrawOffer)
+                    {
+                        TryAiDrawOffer(result.Score);
+                        // 若 AI 提和，等待玩家回應，暫不繼續
+                    }
+
+                    if (currentMode == GameMode.AiVsAi)
+                    {
+                        // 繼續執行下一輪
+                        continueAiLoop = true;
+                    }
                 }
             }
         }
@@ -401,6 +427,139 @@ public class GameService : IGameService
     }
 
     private bool isGameOver;
+
+    // ─── 提和邏輯 ──────────────────────────────────────────────────────────
+
+    /// <summary>玩家主動提和。僅在 PlayerVsAi 且遊戲進行中時有效。</summary>
+    public async Task RequestDrawAsync()
+    {
+        if (currentMode != GameMode.PlayerVsAi) return;
+        if (isGameOver) return;
+        if (isThinking) return;
+
+        // 開局階段拒絕提和（步數未達門檻）
+        if (board.MoveCount < drawOfferSettings.MinMoveCountForAiDrawOffer)
+        {
+            string earlyReason = $"開局階段（走步：{board.MoveCount}），AI 拒絕提和";
+            var earlyResult = new DrawOfferResult(DrawOfferSource.Player, false, earlyReason);
+            isDrawOfferProcessed = true;
+            GameMessage?.Invoke($"AI 拒絕提和（{earlyReason}）");
+            DrawOfferResolved?.Invoke(earlyResult);
+            return;
+        }
+
+        // 執行快速 AI 搜尋評估局面
+        var boardSnapshot = board.Clone();
+        var evalSettings = new SearchSettings
+        {
+            Depth = 2,
+            TimeLimitMs = 1000,
+            ThreadCount = 1,
+            PauseSignal = aiPauseSignal
+        };
+
+        int score;
+        try
+        {
+            var evalResult = await aiEngine.SearchAsync(boardSnapshot, evalSettings, CancellationToken.None);
+            // 從黑方（AI）視角評估：正分表示黑方佔優
+            // SearchAsync 回傳的分數是從搜尋方角度，黑方回合則取負值轉換為黑方優勢
+            score = board.Turn == Domain.Enums.PieceColor.Black ? evalResult.Score : -evalResult.Score;
+        }
+        catch
+        {
+            score = 0;
+        }
+
+        // AI 分數 > DrawRefuseThreshold 時（AI 佔優），拒絕提和
+        bool aiAccepts = Math.Abs(score) <= drawOfferSettings.DrawRefuseThreshold;
+        string reason = aiAccepts
+            ? $"AI 接受提和（分數：{score}，接近均勢）"
+            : $"AI 拒絕提和（分數：{score}，AI 佔優）";
+
+        var result = new DrawOfferResult(DrawOfferSource.Player, aiAccepts, reason);
+        isDrawOfferProcessed = true;
+
+        if (aiAccepts)
+        {
+            isGameOver = true;
+            GameMessage?.Invoke($"和棋！玩家提和，AI 接受（{reason}）");
+        }
+        else
+        {
+            GameMessage?.Invoke($"AI 拒絕提和（{reason}）");
+        }
+
+        DrawOfferResolved?.Invoke(result);
+    }
+
+    /// <summary>回應 AI 的提和請求。</summary>
+    public void RespondToDrawOffer(bool accept)
+    {
+        if (!pendingAiDrawOffer) return;
+
+        pendingAiDrawOffer = false;
+        isDrawOfferProcessed = true;
+
+        var result = new DrawOfferResult(DrawOfferSource.Ai, accept,
+            accept ? "玩家接受 AI 提和" : "玩家拒絕 AI 提和");
+
+        if (accept)
+        {
+            isGameOver = true;
+            GameMessage?.Invoke("和棋！AI 提和，玩家接受");
+        }
+        else
+        {
+            // 拒絕後啟動冷卻
+            inCooldown = true;
+            lastAiDrawOfferMoveCount = board.MoveCount;
+            GameMessage?.Invoke("玩家拒絕 AI 提和，繼續對弈");
+        }
+
+        DrawOfferResolved?.Invoke(result);
+    }
+
+    /// <summary>（測試用）模擬 AI 已提和，設定待回應狀態。</summary>
+    public void SimulateAiDrawOffer()
+    {
+        if (currentMode != GameMode.PlayerVsAi) return;
+        if (isGameOver) return;
+        if (inCooldown) return;
+
+        pendingAiDrawOffer = true;
+        var offerResult = new DrawOfferResult(DrawOfferSource.Ai, Accepted: false, "AI 提和（等待玩家回應）");
+        DrawOffered?.Invoke(offerResult);
+    }
+
+    /// <summary>AI 搜尋完成後評估是否主動提和。</summary>
+    private void TryAiDrawOffer(int searchScore)
+    {
+        if (currentMode != GameMode.PlayerVsAi) return;
+        if (isGameOver) return;
+        if (pendingAiDrawOffer) return;
+
+        // 冷卻期檢查
+        if (inCooldown && (board.MoveCount - lastAiDrawOfferMoveCount) < drawOfferSettings.CooldownMoves)
+            return;
+
+        inCooldown = false;
+
+        // 步數門檻
+        if (board.MoveCount < drawOfferSettings.MinMoveCountForAiDrawOffer) return;
+
+        // 均勢門檻：分數絕對值在閾值內
+        if (Math.Abs(searchScore) > drawOfferSettings.DrawOfferThreshold) return;
+
+        // 觸發 AI 主動提和
+        pendingAiDrawOffer = true;
+        var offerResult = new DrawOfferResult(
+            DrawOfferSource.Ai,
+            Accepted: false,
+            $"AI 提和：局面均勢（分數：{searchScore}）");
+        GameMessage?.Invoke($"AI 主動提和（分數：{searchScore}，走步：{board.MoveCount}）");
+        DrawOffered?.Invoke(offerResult);
+    }
 
     private bool CheckGameOver()
     {
@@ -495,6 +654,8 @@ public class GameService : IGameService
     }
     public void DeleteBookmark(string name) => bookmarkManager.DeleteBookmark(name);
     public IEnumerable<string> GetBookmarks() => bookmarkManager.GetBookmarkNames();
+
+    public void SetDrawOfferSettings(DrawOfferSettings settings) => drawOfferSettings = settings;
 
     public void SetDifficulty(int depth, int timeMs, int threadCount = 0)
     {
