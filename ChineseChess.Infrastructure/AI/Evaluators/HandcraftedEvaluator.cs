@@ -12,6 +12,14 @@ public class HandcraftedEvaluator : IEvaluator
     // 馬腳封堵懲罰：每個被封堵的腳位扣除的分數
     private const int HorseLegBlockedPenalty = 10;
 
+    // 炮威脅加分：炮透過炮台瞄準對方棋子的加分
+    private const int CannonKingThreatBonus  = 40; // 直接打將/帥
+    private const int CannonPieceThreatBonus = 10; // 打其他棋子
+
+    // 敵車壓制懲罰：敵方車在帥/將列上直接瞄準
+    private const int EnemyRookOpenColumnPenalty     = 60; // 無阻隔（直接壓制）
+    private const int EnemyRookSemiOpenColumnPenalty = 20; // 一子阻隔（半開放）
+
     private static readonly int[] PieceValues =
     {
         0,      // None
@@ -66,6 +74,10 @@ public class HandcraftedEvaluator : IEvaluator
                     // 馬腳封堵懲罰：每個被佔據的腳位扣除固定分數
                     score -= sign * CountHorseLegsBlocked(board, i) * HorseLegBlockedPenalty;
                     break;
+                case PieceType.Cannon:
+                    // 炮威脅加分：炮透過炮台瞄準對方棋子
+                    score += sign * EvaluateCannonThreats(board, i, p.Color);
+                    break;
                 case PieceType.Rook:
                     if (p.Color == PieceColor.Red)
                     {
@@ -84,6 +96,10 @@ public class HandcraftedEvaluator : IEvaluator
         // --- 王將安全性 ---
         score += EvaluateKingSafety(board, PieceColor.Red, redKingIndex, redAdvisors, redElephants);
         score -= EvaluateKingSafety(board, PieceColor.Black, blackKingIndex, blackAdvisors, blackElephants);
+
+        // --- 敵車對帥/將的縱列壓制 ---
+        score += EvaluateEnemyRookPressure(board, PieceColor.Red, redKingIndex);
+        score -= EvaluateEnemyRookPressure(board, PieceColor.Black, blackKingIndex);
 
         // --- 棋子結構 ---
         score += EvaluateRookStructure(board, PieceColor.Red, redRook1, redRook2, redRookCount);
@@ -116,6 +132,57 @@ public class HandcraftedEvaluator : IEvaluator
         return blocked;
     }
 
+    /// <summary>
+    /// 計算炮在 <paramref name="cannonIndex"/> 位置的威脅加分。
+    /// 掃描四個方向：找到第一個棋子（炮台）後，若其後方有敵子（目標），則給予加分。
+    /// 打將/帥的加分高於打普通棋子。
+    /// </summary>
+    private static int EvaluateCannonThreats(IBoard board, int cannonIndex, PieceColor cannonColor)
+    {
+        int bonus = 0;
+        int r = cannonIndex / BoardWidth;
+        int c = cannonIndex % BoardWidth;
+
+        int[] dr = { -1, +1, 0, 0 };
+        int[] dc = { 0, 0, -1, +1 };
+
+        for (int dir = 0; dir < 4; dir++)
+        {
+            bool foundScreen = false;
+            int nr = r + dr[dir], nc = c + dc[dir];
+
+            while (nr >= 0 && nr < BoardHeight && nc >= 0 && nc < BoardWidth)
+            {
+                var piece = board.GetPiece(nr * BoardWidth + nc);
+
+                if (!piece.IsNone)
+                {
+                    if (!foundScreen)
+                    {
+                        foundScreen = true; // 找到炮台，繼續掃描找目標
+                    }
+                    else
+                    {
+                        // 找到炮台後的第一個棋子
+                        if (piece.Color != cannonColor)
+                        {
+                            // 敵方棋子：按類型給予威脅加分
+                            bonus += piece.Type == PieceType.King
+                                ? CannonKingThreatBonus
+                                : CannonPieceThreatBonus;
+                        }
+                        break; // 每條射線只算一個目標
+                    }
+                }
+
+                nr += dr[dir];
+                nc += dc[dir];
+            }
+        }
+
+        return bonus;
+    }
+
     private static int EstimatePotentialMobility(IBoard board)
     {
         int redPotential = 0;
@@ -145,6 +212,40 @@ public class HandcraftedEvaluator : IEvaluator
         }
 
         return redPotential - blackPotential;
+    }
+
+    /// <summary>
+    /// 評估敵方車在帥/將縱列上的直接壓制威脅。
+    /// 掃描帥/將朝敵方方向的同列，遇到敵車時依中間子數給予懲罰：
+    ///   0 子阻隔 = 直接壓制（-<see cref="EnemyRookOpenColumnPenalty"/>）；
+    ///   1 子阻隔 = 半開放（-<see cref="EnemyRookSemiOpenColumnPenalty"/>）。
+    /// </summary>
+    private static int EvaluateEnemyRookPressure(IBoard board, PieceColor kingColor, int kingIndex)
+    {
+        if (kingIndex < 0) return 0;
+
+        int kingRow = kingIndex / BoardWidth;
+        int kingCol = kingIndex % BoardWidth;
+        int direction = kingColor == PieceColor.Red ? -1 : 1;
+        int screenCount = 0;
+
+        for (int r = kingRow + direction; r >= 0 && r < BoardHeight; r += direction)
+        {
+            var p = board.GetPiece(r * BoardWidth + kingCol);
+            if (p.IsNone) continue;
+
+            if (p.Color != kingColor && p.Type == PieceType.Rook)
+            {
+                return screenCount == 0
+                    ? -EnemyRookOpenColumnPenalty
+                    : -EnemyRookSemiOpenColumnPenalty;
+            }
+
+            screenCount++;
+            if (screenCount >= 2) break; // 兩子後即便有車也威脅不大
+        }
+
+        return 0;
     }
 
     private static int EvaluateKingSafety(IBoard board, PieceColor color, int kingIndex,
