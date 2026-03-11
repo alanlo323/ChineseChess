@@ -11,5 +11,6 @@ public sealed record HintExplanationRequest
     public int SearchDepth { get; init; }
     public long Nodes { get; init; }
     public string? PrincipalVariation { get; init; }
+    public string? ThinkingTree { get; init; }
 }
 

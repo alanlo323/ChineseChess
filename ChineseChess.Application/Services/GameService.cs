@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,6 +16,7 @@ namespace ChineseChess.Application.Services;
 
 public class GameService : IGameService
 {
+    private const int HintExplanationThinkingTreeDepth = 6;
     private readonly IAiEngine aiEngine;          // 紅方（或共用）引擎
     private IAiEngine? aiEngineBlack;             // 黑方引擎（獨立TT模式才有值）
     private readonly BookmarkManager bookmarkManager;
@@ -444,7 +446,8 @@ public class GameService : IGameService
             Score = latestHint.Score,
             SearchDepth = latestHint.Depth,
             Nodes = latestHint.Nodes,
-            PrincipalVariation = latestHint.PvLine
+            PrincipalVariation = latestHint.PvLine,
+            ThinkingTree = BuildThinkingTreeForPrompt(board.Clone())
         };
 
         try
@@ -458,6 +461,94 @@ public class GameService : IGameService
         catch (Exception ex)
         {
             return $"解釋失敗：{ex.Message}";
+        }
+    }
+
+    private string BuildThinkingTreeForPrompt(IBoard sourceBoard)
+    {
+        try
+        {
+            var engineForTree = GetCurrentEngine();
+            var root = engineForTree.ExploreTTTree(sourceBoard, HintExplanationThinkingTreeDepth);
+            if (root is null)
+            {
+                return "（當前局面未命中 TT，暫無可用思路樹）";
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("【思路樹】");
+            AppendThinkingTreeNode(sb, root, string.Empty, true, sourceBoard, HintExplanationThinkingTreeDepth);
+            return sb.ToString().Trim();
+        }
+        catch (Exception ex)
+        {
+            return $"（取得思路樹失敗：{ex.Message}）";
+        }
+    }
+
+    private static void AppendThinkingTreeNode(
+        StringBuilder sb,
+        TTTreeNode node,
+        string indent,
+        bool isRoot,
+        IBoard parentBoard,
+        int remainingDepth)
+    {
+        if (remainingDepth <= 0)
+        {
+            return;
+        }
+
+        var entry = node.Entry;
+        string scoreText = entry.Score > 0 ? $"+{entry.Score}" : entry.Score.ToString();
+        string flagText = entry.Flag switch
+        {
+            TTFlag.Exact => "=",
+            TTFlag.LowerBound => "≥",
+            TTFlag.UpperBound => "≤",
+            _ => "?"
+        };
+
+        string moveText;
+        IBoard boardAtNode;
+        if (isRoot)
+        {
+            moveText = "（當前局面）";
+            boardAtNode = parentBoard;
+        }
+        else
+        {
+            try
+            {
+                moveText = MoveNotation.ToNotation(node.MoveToHere, parentBoard);
+            }
+            catch
+            {
+                moveText = "（無法轉換該著法）";
+            }
+
+            boardAtNode = parentBoard.Clone();
+            try
+            {
+                boardAtNode.MakeMove(node.MoveToHere);
+            }
+            catch
+            {
+                // ignore move application failure and keep boardAtNode unchanged
+            }
+        }
+
+        sb.AppendLine($"{indent}{moveText} [{flagText} {scoreText}, depth:{entry.Depth}]");
+
+        if (remainingDepth <= 1)
+        {
+            return;
+        }
+
+        foreach (var child in node.Children)
+        {
+            var childBoard = boardAtNode.Clone();
+            AppendThinkingTreeNode(sb, child, indent + "  ", isRoot: false, childBoard, remainingDepth - 1);
         }
     }
 

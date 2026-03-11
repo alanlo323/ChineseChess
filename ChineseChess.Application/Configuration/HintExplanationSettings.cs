@@ -8,6 +8,7 @@ public class HintExplanationSettings
     public string SystemPrompt { get; set; } = "你是熟悉中國象棋的專家，請使用繁體中文，僅根據提供的棋局資料解釋建議走法。";
     public double Temperature { get; set; } = 0.25;
     public int MaxTokens { get; set; } = 1200;
+    public bool EnableReasoning { get; set; } = true;
     public int TimeoutSeconds { get; set; } = 20;
 }
 

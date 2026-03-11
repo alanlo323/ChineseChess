@@ -33,6 +33,7 @@ public class GameServiceHintExplanationTests
         Assert.NotNull(explanationService.LatestRequest);
         Assert.Equal(InitialFen, explanationService.LatestRequest.Fen);
         Assert.Equal(PieceColor.Red, explanationService.LatestRequest.SideToMove);
+        Assert.False(string.IsNullOrWhiteSpace(explanationService.LatestRequest.ThinkingTree));
     }
 
     [Fact]

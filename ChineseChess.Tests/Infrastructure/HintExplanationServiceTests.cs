@@ -40,6 +40,8 @@ public class HintExplanationServiceTests
             Assert.Equal(0.6, doc.RootElement.GetProperty("temperature").GetDouble());
             Assert.Equal(512, doc.RootElement.GetProperty("max_tokens").GetInt32());
             Assert.Contains(req.Headers.Accept, media => media.MediaType == "application/json");
+            Assert.Contains("思路樹", doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
+            Assert.Contains("【推理模式】", doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
             Assert.NotNull(req.Headers.Authorization);
             Assert.Equal("Bearer", req.Headers.Authorization!.Scheme);
             Assert.Equal("test-key", req.Headers.Authorization!.Parameter);
@@ -67,7 +69,8 @@ public class HintExplanationServiceTests
             Score = 12,
             SearchDepth = 3,
             Nodes = 1234,
-            PrincipalVariation = "車一進一 馬八進七"
+            PrincipalVariation = "車一進一 馬八進七",
+            ThinkingTree = "【思路樹】\n1. 先手\n  ...\n"
         };
 
         var explanation = await service.ExplainAsync(request);
@@ -75,6 +78,44 @@ public class HintExplanationServiceTests
         Assert.Single(captured);
         Assert.Equal("https://test.local/v1/chat/completions", captured[0].RequestUri!.ToString());
         Assert.Equal("這步保證主動出擊空間，限制對方還擊。", explanation);
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldSkipReasoningPrompt_WhenDisabled()
+    {
+        var captured = new List<HttpRequestMessage>();
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            EnableReasoning = false
+        };
+
+        using var httpClient = new HttpClient(new CapturingHandler(async req =>
+        {
+            captured.Add(req);
+
+            return await Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        choices = new[] { new { message = new { content = "回應" } } }
+                    }),
+                    Encoding.UTF8,
+                    "application/json")
+            });
+        }));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest { Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1", BestMoveNotation = "車一進一" };
+
+        await service.ExplainAsync(request);
+
+        Assert.Single(captured);
+        var content = await captured[0].Content!.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(content);
+        Assert.DoesNotContain("【推理模式】", doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
     }
 
     [Fact]

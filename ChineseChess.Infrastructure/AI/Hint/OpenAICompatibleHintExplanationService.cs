@@ -115,9 +115,9 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
     private static TimeSpan GetTimeout(int seconds) =>
         TimeSpan.FromSeconds(Math.Max(1, seconds));
 
-    private static string BuildPrompt(HintExplanationRequest request)
+    private string BuildPrompt(HintExplanationRequest request)
     {
-        return string.Format(
+        var prompt = string.Format(
             CultureInfo.InvariantCulture,
             "請根據下列中國象棋局面資料，回答建議走法解釋：\n" +
             "FEN: {0}\n" +
@@ -126,14 +126,26 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             "AI 評分: {3}\n" +
             "搜尋深度: {4}\n" +
             "節點數: {5}\n" +
-            "PV: {6}",
+            "PV: {6}\n" +
+            "思路樹: {7}",
             request.Fen,
             request.SideToMove,
             request.BestMoveNotation,
             request.Score,
             request.SearchDepth,
             request.Nodes,
-            string.IsNullOrWhiteSpace(request.PrincipalVariation) ? "(未提供)" : request.PrincipalVariation);
+            string.IsNullOrWhiteSpace(request.PrincipalVariation) ? "(未提供)" : request.PrincipalVariation,
+            string.IsNullOrWhiteSpace(request.ThinkingTree) ? "(未提供)" : request.ThinkingTree);
+
+        return prompt + BuildReasoningSuffix();
+    }
+
+    private string BuildReasoningSuffix()
+    {
+        return settings.EnableReasoning
+            ? "\n\n【推理模式】\n" +
+              "請在分析過程中進行完整、專業推理，並以「Step-by-step」條列方式回答，但不要輸出模型內部推理流程，只要輸出清楚的最終分析內容。\n"
+            : string.Empty;
     }
 
     private static string ParseResponse(string raw)
