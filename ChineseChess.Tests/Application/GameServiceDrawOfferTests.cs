@@ -182,27 +182,27 @@ public class GameServiceDrawOfferTests
         var engine = new SearchEngine();
         var gameService = new GameService(engine);
         gameService.SetDifficulty(1, 500, 1);
+        // 停用步數門檻，讓提和評估專注於均勢分數
+        gameService.SetDrawOfferSettings(new DrawOfferSettings { MinMoveCountForAiDrawOffer = 0 });
 
         DrawOfferResult? drawOffered = null;
         gameService.DrawOffered += args => drawOffered = args;
 
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
 
-        // 設定均勢局面並手動推進步數到 >= 30
-        ((Board)gameService.CurrentBoard).ParseFen("4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 30");
+        // 設定只有雙將的均勢殘局（AI 搜尋分數接近 0）
+        // 雙將同列（col=4），飛將狀態，紅帥可橫移至 (9,3)=84 解圍
+        ((Board)gameService.CurrentBoard).ParseFen("4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1");
 
-        // 讓 AI 走一步（觸發 AI 提和評估）
-        // 先走玩家步讓黑方（AI）行動
-        // 實際上此局面沒有合法走法（只有將），嘗試手動觸發 AI 搜尋
-        // 改用 GetHintAsync 模擬搜尋流程，再手動測試提和邏輯
+        // 紅方（玩家）走帥橫移，觸發 AI（黑方）進行搜尋
+        await gameService.HumanMoveAsync(new Move(85, 84));
 
-        // 直接測試 ShouldAiOfferDraw 邏輯
-        // 此局面只有雙將，AI 分數應近 0（均勢）
-        var hint = await gameService.GetHintAsync();
+        // 等待 AI 完成搜尋並執行提和評估（最多 2 秒）
+        await Task.Delay(2000);
 
-        // 局面可能無可走法，我們只驗證提和檢查邏輯已被呼叫
-        // 此測試主要驗證事件機制存在
-        Assert.NotNull(gameService);
+        // AI 應偵測到均勢並主動提和
+        Assert.NotNull(drawOffered);
+        Assert.Equal(DrawOfferSource.Ai, drawOffered!.Source);
     }
 
     // ─── AI 提和後玩家接受 ────────────────────────────────────────────────

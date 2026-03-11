@@ -1,8 +1,10 @@
 using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Models;
+using Microsoft.ML.Tokenizers;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
@@ -19,6 +21,8 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
 {
     private readonly HintExplanationSettings settings;
     private readonly HttpClient httpClient;
+    private static readonly ConcurrentDictionary<string, TiktokenTokenizer> TokenizerCache = new(StringComparer.OrdinalIgnoreCase);
+    private const string DefaultEncoding = "cl100k_base";
 
     private const string ChatCompletionsPath = "/chat/completions";
 
@@ -94,6 +98,8 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
 
         var responseBuilder = new StringBuilder();
         var rawPayload = new StringBuilder();
+        long estimatedCompletionTokens = 0;
+        long estimatedReasoningTokens = 0;
         await using var responseStream = await response.Content.ReadAsStreamAsync(ct);
         using var streamReader = new StreamReader(responseStream);
         while (true)
@@ -109,12 +115,27 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             }
             rawPayload.AppendLine(line);
 
-            if (!line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            var trimmedLine = line.AsSpan().Trim().ToString();
+            if (string.IsNullOrWhiteSpace(trimmedLine))
             {
                 continue;
             }
 
-            var payloadText = line.AsSpan("data:".Length).ToString().Trim();
+            if (!trimmedLine.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                if (TryExtractMessageContent(trimmedLine, out var fallbackContent))
+                {
+                    responseBuilder.Append(fallbackContent);
+                    estimatedCompletionTokens += EstimateTokenCount(fallbackContent);
+                    progress.Report(FormatProgressText(
+                        responseBuilder.ToString(),
+                        new TokenUsage(estimatedCompletionTokens, estimatedCompletionTokens, null)));
+                }
+
+                continue;
+            }
+
+            var payloadText = trimmedLine.AsSpan("data:".Length).ToString().Trim();
             if (string.Equals(payloadText, "[DONE]", StringComparison.OrdinalIgnoreCase))
             {
                 break;
@@ -127,21 +148,43 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
 
             var hasUsage = TryExtractTokenUsage(payloadText, out var tokenUsage);
             var delta = ExtractDeltaContent(payloadText);
+            var reasoningContent = ExtractReasoningContent(payloadText);
             if (!string.IsNullOrEmpty(delta))
             {
                 responseBuilder.Append(delta);
             }
-
-            if (hasUsage || !string.IsNullOrEmpty(delta))
+            else if (!hasUsage && string.IsNullOrWhiteSpace(reasoningContent))
             {
-                progress.Report(FormatProgressText(responseBuilder.ToString(), hasUsage ? tokenUsage : null));
+                continue;
+            }
+
+            if (!hasUsage && !string.IsNullOrEmpty(delta))
+            {
+                estimatedCompletionTokens += EstimateTokenCount(delta);
+            }
+
+            if (!hasUsage && !string.IsNullOrWhiteSpace(reasoningContent))
+            {
+                estimatedReasoningTokens += EstimateTokenCount(reasoningContent);
+            }
+
+            if (hasUsage || !string.IsNullOrEmpty(delta) || !string.IsNullOrWhiteSpace(reasoningContent))
+            {
+                long? currentReasoningTokens = estimatedReasoningTokens > 0 ? estimatedReasoningTokens : null;
+                progress.Report(FormatProgressText(
+                    responseBuilder.ToString(),
+                    hasUsage ? tokenUsage : new TokenUsage(estimatedCompletionTokens + estimatedReasoningTokens, estimatedCompletionTokens, currentReasoningTokens)));
             }
         }
 
         response.EnsureSuccessStatusCode();
         if (responseBuilder.Length == 0)
         {
-            return ParseResponse(rawPayload.ToString());
+            var finalResponse = ParseResponse(rawPayload.ToString());
+            progress.Report(FormatProgressText(
+                finalResponse,
+                new TokenUsage(EstimateTokenCount(finalResponse), null, null)));
+            return finalResponse;
         }
 
         return responseBuilder.ToString().Trim();
@@ -170,6 +213,62 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
         }
 
         return contentElement.GetString();
+    }
+
+    private static bool TryExtractMessageContent(string streamChunk, out string? content)
+    {
+        content = null;
+        try
+        {
+            using var document = JsonDocument.Parse(streamChunk);
+            if (!document.RootElement.TryGetProperty("choices", out var choices) ||
+                choices.ValueKind != JsonValueKind.Array ||
+                choices.GetArrayLength() == 0)
+            {
+                return false;
+            }
+
+            var firstChoice = choices[0];
+            if (!firstChoice.TryGetProperty("message", out var message) ||
+                !message.TryGetProperty("content", out var contentElement))
+            {
+                return false;
+            }
+
+            content = contentElement.GetString();
+            return !string.IsNullOrWhiteSpace(content);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string? ExtractReasoningContent(string streamChunk)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(streamChunk);
+            if (!document.RootElement.TryGetProperty("choices", out var choices) ||
+                choices.ValueKind != JsonValueKind.Array ||
+                choices.GetArrayLength() == 0)
+            {
+                return null;
+            }
+
+            var firstChoice = choices[0];
+            if (!firstChoice.TryGetProperty("delta", out var deltaElement) ||
+                !deltaElement.TryGetProperty("reasoning_content", out var reasoningElement))
+            {
+                return null;
+            }
+
+            return reasoningElement.GetString();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static bool TryExtractTokenUsage(string streamChunk, out TokenUsage usage)
@@ -236,6 +335,73 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
         }
 
         return element.TryGetInt64(out value);
+    }
+
+    private long EstimateTokenCount(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return 0;
+        }
+
+        var encoding = ResolveEncodingForModel();
+        TiktokenTokenizer tokenizer;
+        try
+        {
+            tokenizer = TokenizerCache.GetOrAdd(encoding, CreateTokenizerForEncoding);
+        }
+        catch
+        {
+            return EstimateTokenCountFallback(text);
+        }
+
+        try
+        {
+            return tokenizer.CountTokens(text);
+        }
+        catch
+        {
+            var bytes = Encoding.UTF8.GetByteCount(text);
+            return (long)Math.Ceiling(bytes / 4.0);
+        }
+    }
+
+    private static TiktokenTokenizer CreateTokenizerForEncoding(string encoding)
+    {
+        return TiktokenTokenizer.CreateForEncoding(encoding);
+    }
+
+    private string ResolveEncodingForModel()
+    {
+        var model = settings.Model;
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return DefaultEncoding;
+        }
+
+        if (ModelEncodingMap.TryGetValue(model, out var mappedEncoding))
+        {
+            return mappedEncoding;
+        }
+
+        return DefaultEncoding;
+    }
+
+    private static readonly Dictionary<string, string> ModelEncodingMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["gpt-4"] = "cl100k_base",
+        ["gpt-4o"] = "cl100k_base",
+        ["gpt-4-turbo"] = "cl100k_base",
+        ["gpt-4o-mini"] = "cl100k_base",
+        ["gpt-4-0125-preview"] = "cl100k_base",
+        ["gpt-3.5-turbo"] = "cl100k_base",
+        ["gpt-3.5-turbo-16k"] = "cl100k_base"
+    };
+
+    private static long EstimateTokenCountFallback(string text)
+    {
+        var bytes = Encoding.UTF8.GetByteCount(text);
+        return (long)Math.Ceiling(bytes / 4.0);
     }
 
     private static string FormatProgressText(string text, TokenUsage? usage)

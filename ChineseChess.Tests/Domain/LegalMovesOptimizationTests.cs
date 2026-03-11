@@ -62,34 +62,32 @@ public class LegalMovesOptimizationTests
     // ─── 被炮釘住（炮需要炮台，移走炮台後炮失去攻擊能力，但我方棋子仍是炮台時才形成釘住）
 
     [Fact]
-    public void RookPinnedByCannonScreen_OnKingColumn_CannotMoveOffColumn()
+    public void RookActingAsCannonScreen_WhenInCheck_CanCaptureOrMoveHorizontally()
     {
-        // 局面：黑炮(0,4)=4  紅車(3,4)=31（炮台）  紅車2(6,4)=58  紅帥(9,4)=85  黑將(0,0)=0
-        // 黑炮在 col=4，紅車(3,4) 是炮台，炮台後有紅帥 → 黑炮透過紅車(3,4) 攻擊紅帥 → 在將軍中
-        // 而 (6,4) 不相關（只是測試多個棋子在列）
-        //
-        // 更清晰的釘住案例：敵車釘住我方棋子（純行/列釘住）已在第一個測試涵蓋
-        //
-        // 這裡測試：炮屏移走後炮無炮台不能射擊的行為
-        // 初始局面：黑炮(0,4)=4，炮台=紅車(5,4)=49，目標=紅帥(9,4)=85
-        // 這局面下，炮透過炮台攻擊帥 → 帥在將軍中！
-        // 紅車移走炮台 → 炮無炮台，不能再攻擊帥 → 是合法移動（解將）
-        //
-        // 驗證：解將走法存在且使帥安全
+        // 局面：黑將(0,0)=0  黑炮(0,4)=4  紅車(5,4)=49（炮台）  紅帥(9,4)=85
+        // 黑炮透過紅車（炮台）攻擊紅帥 → 紅方在將軍中
         var board = new Board("k3c4/9/9/9/9/4R4/9/9/9/4K4 w - - 0 1");
-        // k=黑將(0,0), c=黑炮(0,4)=4, R=紅車(5,4)=49, K=紅帥(9,4)=85
 
-        // 紅車作為炮台，帥在將軍中。紅車移走（任意解將走法）
         var rookMoves = board.GenerateLegalMoves()
             .Where(m => m.From == 49)
             .ToList();
 
-        // 紅車必須解將：只能沿 col=4 移動（離開 col=4 也會暴露帥給炮打）
-        // 或移到黑炮和帥之間（但炮是攻擊方，移到中間不能幫忙）
-        // 解將方式：吃炮(0,4)=4、或沿 col=4 移到(6,4),(7,4),(8,4)（但帥仍在 col=4 且炮仍在 col=4）
-        // 實際上：移到(1,4),(2,4),(3,4),(4,4)=站在炮台後方（炮→空→我方→更多空→帥）→ 炮仍有炮台攻帥！
-        // 只有吃炮(0,4) 才能解將
-        Assert.Contains(new Move(49, 4), rookMoves);  // 吃掉黑炮（解將）
+        // 解將方式 1：吃掉黑炮（炮消失，無法將軍）
+        Assert.Contains(new Move(49, 4), rookMoves);
+
+        // 解將方式 2：紅車橫移離開 col=4
+        // 炮需要「恰好一個」炮台才能射擊；紅車離列後炮無炮台，無法攻帥
+        Assert.Contains(new Move(49, 45), rookMoves); // 橫移至 (5,0)
+        Assert.Contains(new Move(49, 46), rookMoves); // 橫移至 (5,1)
+        Assert.Contains(new Move(49, 50), rookMoves); // 橫移至 (5,5)
+        Assert.Contains(new Move(49, 53), rookMoves); // 橫移至 (5,8)
+
+        // 縱移但不吃炮：紅車仍在 col=4，仍是炮台，帥仍在將軍中 → 不合法
+        Assert.DoesNotContain(new Move(49, 40), rookMoves); // 上移至 (4,4)
+        Assert.DoesNotContain(new Move(49, 58), rookMoves); // 下移至 (6,4)
+
+        // 合計：吃炮 1 步 + 橫移 8 步 = 9 步
+        Assert.Equal(9, rookMoves.Count);
     }
 
     // ─── 不在將帥行/列上的棋子可自由移動 ─────────────────────────────────

@@ -247,7 +247,203 @@ public class HintExplanationServiceTests
 
         Assert.Equal("先步", explanation);
         Assert.NotEmpty(progressResults);
-        Assert.Contains("（已輸出總Token：68，推理：20）", progressResults.Last());
+        Assert.Contains(progressResults, text => text.Contains("（已輸出總Token：34，推理：12）"));
+        Assert.Contains(progressResults, text => text.Contains("（已輸出總Token：68，推理：20）"));
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldEstimateTokens_WhenUsageMissing()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        var progress = new RecordingProgress();
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    string.Join(
+                        "\n",
+                        new[]
+                        {
+                            "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ab\"}}]}",
+                            "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"cd\"}}]}",
+                            "data: [DONE]"
+                        }),
+                    Encoding.UTF8,
+                    "application/json")
+            })
+        ));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var explanation = await service.ExplainAsync(
+            request,
+            progress,
+            CancellationToken.None);
+
+        Assert.Equal("abcd", explanation);
+        Assert.NotEmpty(progress.Items);
+        Assert.Contains("（已輸出總Token：2）", progress.Items.Last());
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldPreferUsageTokens_WhenUsageAppearsLater()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        var progress = new RecordingProgress();
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    string.Join(
+                        "\n",
+                        new[]
+                        {
+                            "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ab\"}}]}",
+                            "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"cd\"}}]}",
+                            "data: {\"id\":\"chatcmpl-1\",\"usage\":{\"completion_tokens\":10,\"total_tokens\":12}}",
+                            "data: [DONE]"
+                        }),
+                    Encoding.UTF8,
+                    "application/json")
+            })
+        ));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var explanation = await service.ExplainAsync(
+            request,
+            progress,
+            CancellationToken.None);
+
+        Assert.Equal("abcd", explanation);
+        Assert.NotEmpty(progress.Items);
+        Assert.Contains("（已輸出總Token：", progress.Items[0]);
+        Assert.Contains(progress.Items, text => text.Contains("（已輸出總Token：12）"));
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldEstimateReasoningTokens_FromReasoningContent()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        var progress = new RecordingProgress();
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    string.Join(
+                        "\n",
+                        new[]
+                        {
+                            "data: {\"id\":\"chatcmpl-yholoqna3emla7k1qef3h\",\"object\":\"chat.completion.chunk\",\"created\":1773215248,\"model\":\"nvidia/nemotron-3-nano\",\"system_fingerprint\":\"nvidia/nemotron-3-nano\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"We\"}}]}",
+                            "data: {\"id\":\"chatcmpl-yholoqna3emla7k1qef3h\",\"object\":\"chat.completion.chunk\",\"created\":1773215248,\"model\":\"nvidia/nemotron-3-nano\",\"system_fingerprint\":\"nvidia/nemotron-3-nano\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"A\"}}]}",
+                            "data: [DONE]"
+                        }),
+                    Encoding.UTF8,
+                    "application/json")
+            })
+        ));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var explanation = await service.ExplainAsync(
+            request,
+            progress,
+            CancellationToken.None);
+
+        Assert.Equal("A", explanation);
+        Assert.NotEmpty(progress.Items);
+        Assert.Contains("（已輸出總Token：2，推理：1）", progress.Items.Last());
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldReportProgress_WhenResponseNotPrefixedAsSse()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        var progress = new RecordingProgress();
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        choices = new[]
+                        {
+                            new { message = new { content = "abcd" } }
+                        }
+                    }),
+                    Encoding.UTF8,
+                    "application/json")
+            })
+        ));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var explanation = await service.ExplainAsync(
+            request,
+            progress,
+            CancellationToken.None);
+
+        Assert.Equal("abcd", explanation);
+        Assert.NotEmpty(progress.Items);
+        Assert.Contains("（已輸出總Token：1）", progress.Items.Last());
+    }
+
+    private sealed class RecordingProgress : IProgress<string>
+    {
+        public List<string> Items { get; } = new();
+
+        public void Report(string value)
+        {
+            Items.Add(value);
+        }
     }
 
     [Fact]
@@ -294,6 +490,86 @@ public class HintExplanationServiceTests
         var explanation = await service.ExplainAsync(request);
 
         Assert.Equal("回應內容", explanation);
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldThrow_WhenHttpResponseIsError()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("{\"error\":\"Invalid API key\"}", Encoding.UTF8, "application/json")
+            })
+        ));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => service.ExplainAsync(request));
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldThrow_WhenModelIsMissing()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK))
+        ));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ExplainAsync(request));
+        Assert.Contains("model", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldThrow_WhenSystemPromptIsMissing()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "",
+            MaxTokens = 256
+        };
+
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK))
+        ));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ExplainAsync(request));
+        Assert.Contains("system prompt", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class CapturingHandler : HttpMessageHandler
