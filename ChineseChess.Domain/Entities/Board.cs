@@ -360,9 +360,36 @@ public class Board : IBoard
         var legalMoves = new List<Move>();
         var pseudoMoves = GeneratePseudoLegalMoves().ToList();
 
+        int kingIndex = GetKingIndex(turn);
+
         foreach (var move in pseudoMoves)
         {
             var movingColor = turn;
+            var movingPiece = pieces[move.From];
+
+            // 快速路徑：若走法的 from 與 to 都不在將帥的同行/列上，
+            // 則走法不可能透過車/炮/飛將或馬腳暴露將帥，直接加入合法著法。
+            // 將帥本身的移動必須完整驗證（王不能走入將軍）。
+            if (kingIndex >= 0 && movingPiece.Type != PieceType.King)
+            {
+                int kingRow = kingIndex / Width;
+                int kingCol = kingIndex % Width;
+                int fromRow = move.From / Width;
+                int fromCol = move.From % Width;
+                int toRow   = move.To / Width;
+                int toCol   = move.To % Width;
+
+                bool couldExposeKing = fromRow == kingRow || fromCol == kingCol
+                                    || toRow   == kingRow || toCol   == kingCol;
+
+                if (!couldExposeKing)
+                {
+                    legalMoves.Add(move);
+                    continue;
+                }
+            }
+
+            // 慢速路徑：完整驗證（將帥自身移動、或走法在將帥行/列上）
             MakeMove(move);
             if (!IsCheck(movingColor))
             {

@@ -9,6 +9,9 @@ public class HandcraftedEvaluator : IEvaluator
     private const int BoardWidth = 9;
     private const int BoardHeight = 10;
 
+    // 馬腳封堵懲罰：每個被封堵的腳位扣除的分數
+    private const int HorseLegBlockedPenalty = 10;
+
     private static readonly int[] PieceValues =
     {
         0,      // None
@@ -59,6 +62,10 @@ public class HandcraftedEvaluator : IEvaluator
                     if (p.Color == PieceColor.Red) redElephants++;
                     else blackElephants++;
                     break;
+                case PieceType.Horse:
+                    // 馬腳封堵懲罰：每個被佔據的腳位扣除固定分數
+                    score -= sign * CountHorseLegsBlocked(board, i) * HorseLegBlockedPenalty;
+                    break;
                 case PieceType.Rook:
                     if (p.Color == PieceColor.Red)
                     {
@@ -88,6 +95,25 @@ public class HandcraftedEvaluator : IEvaluator
 
         // 以輪到行動的一方為觀點回傳分數
         return board.Turn == PieceColor.Red ? score : -score;
+    }
+
+    /// <summary>
+    /// 計算馬在 <paramref name="horseIndex"/> 位置被封堵的腳位數量。
+    /// 馬的四個腳位為：上(r-1,c)、下(r+1,c)、左(r,c-1)、右(r,c+1)。
+    /// 任何棋子（友方或敵方）佔據腳位均視為封堵。
+    /// </summary>
+    private static int CountHorseLegsBlocked(IBoard board, int horseIndex)
+    {
+        int r = horseIndex / BoardWidth;
+        int c = horseIndex % BoardWidth;
+        int blocked = 0;
+
+        if (r > 0              && !board.GetPiece((r - 1) * BoardWidth + c).IsNone) blocked++;
+        if (r < BoardHeight - 1 && !board.GetPiece((r + 1) * BoardWidth + c).IsNone) blocked++;
+        if (c > 0              && !board.GetPiece(r * BoardWidth + (c - 1)).IsNone) blocked++;
+        if (c < BoardWidth - 1  && !board.GetPiece(r * BoardWidth + (c + 1)).IsNone) blocked++;
+
+        return blocked;
     }
 
     private static int EstimatePotentialMobility(IBoard board)
