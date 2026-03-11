@@ -33,12 +33,15 @@ public class ControlPanelViewModel : ObservableObject
     private bool useSharedTT;
     private bool isSmartHintEnabled;
     private int smartHintDepth;
+    private string hintExplanationText = "（尚未產生提示）";
     private TTStatistics ttStats = new TTStatistics();
     private TTStatistics? blackTtStats = null;
     private const int TTExploreMaxDepth = 20;   // 固定最大深度（TT 搜尋深度通常 ≤ 10，此值足以顯示全樹）
     private string ttExplorerText = "（初始化中...）";
     private readonly System.Timers.Timer ttExplorerTimer;
     private int ttExplorerBusy;   // Interlocked 防止重疊執行（0 = 閒置，1 = 執行中）
+    private int selectedTabIndex;
+    private const int HintExplanationTabIndex = 3;
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
@@ -61,6 +64,12 @@ public class ControlPanelViewModel : ObservableObject
     {
         get => statusMessage;
         set => SetProperty(ref statusMessage, value);
+    }
+
+    public int SelectedTabIndex
+    {
+        get => selectedTabIndex;
+        set => SetProperty(ref selectedTabIndex, value);
     }
 
     // ─── 全域設定（非 AiVsAi 模式使用）────────────────────────────────────
@@ -220,11 +229,26 @@ public class ControlPanelViewModel : ObservableObject
         private set => SetProperty(ref ttExplorerText, value);
     }
 
+    public string HintExplanationText
+    {
+        get => hintExplanationText;
+        private set
+        {
+            if (SetProperty(ref hintExplanationText, value))
+            {
+                OnPropertyChanged(nameof(CanExplainHint));
+            }
+        }
+    }
+
+    public bool CanExplainHint => !string.IsNullOrWhiteSpace(HintExplanationText) && !HintExplanationText.StartsWith("（尚未", StringComparison.Ordinal);
+
     // ─── 指令 ─────────────────────────────────────────────────────────────
 
     public ICommand StartGameCommand { get; }
     public ICommand UndoCommand { get; }
     public ICommand HintCommand { get; }
+    public ICommand ExplainHintCommand { get; }
     public ICommand StopThinkingCommand { get; }
     public ICommand PauseThinkingCommand { get; }
     public ICommand ResumeThinkingCommand { get; }
@@ -439,6 +463,25 @@ public class ControlPanelViewModel : ObservableObject
             }
         });
 
+        ExplainHintCommand = new RelayCommand(async _ =>
+        {
+            try
+            {
+                StatusMessage = "提示解釋中...";
+                SelectedTabIndex = HintExplanationTabIndex;
+                HintExplanationText = "（AI 正在解釋）";
+                var explanation = await gameService.ExplainLatestHintAsync();
+                HintExplanationText = explanation;
+                StatusMessage = "提示解釋完成";
+            }
+            catch (Exception ex)
+            {
+                HintExplanationText = $"解釋失敗：{ex.Message}";
+                StatusMessage = "提示解釋失敗";
+                SelectedTabIndex = HintExplanationTabIndex;
+            }
+        });
+
         // TT 探索計時器：每秒在背景執行緒更新，透過 Dispatcher 推送至 UI
         ttExplorerTimer = new System.Timers.Timer(100);
         ttExplorerTimer.AutoReset = true;
@@ -459,6 +502,30 @@ public class ControlPanelViewModel : ObservableObject
             var app = global::System.Windows.Application.Current;
             if (app == null) return;
             app.Dispatcher.Invoke(RefreshTTStats);
+        };
+
+        gameService.HintReady += _ =>
+        {
+            var app = global::System.Windows.Application.Current;
+            if (app == null)
+            {
+                HintExplanationText = "（已取得提示，可按解釋）";
+                return;
+            }
+
+            app.Dispatcher.Invoke(() => HintExplanationText = "（已取得提示，可按解釋）");
+        };
+
+        gameService.BoardUpdated += () =>
+        {
+            var app = global::System.Windows.Application.Current;
+            if (app == null)
+            {
+                HintExplanationText = "（尚未產生提示）";
+                return;
+            }
+
+            app.Dispatcher.Invoke(() => HintExplanationText = "（尚未產生提示）");
         };
 
         // AI 主動提和：顯示 MessageBox 詢問玩家

@@ -1,0 +1,178 @@
+using ChineseChess.Application.Configuration;
+using ChineseChess.Application.Interfaces;
+using ChineseChess.Application.Models;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace ChineseChess.Infrastructure.AI.Hint;
+
+public sealed class OpenAICompatibleHintExplanationService : IHintExplanationService
+{
+    private readonly HintExplanationSettings settings;
+    private readonly HttpClient httpClient;
+
+    private const string ChatCompletionsPath = "/chat/completions";
+
+    public OpenAICompatibleHintExplanationService(HintExplanationSettings settings)
+        : this(settings, new HttpClient { Timeout = GetTimeout(settings.TimeoutSeconds) })
+    {
+    }
+
+    public OpenAICompatibleHintExplanationService(HintExplanationSettings settings, HttpClient httpClient)
+    {
+        this.settings = settings;
+        this.httpClient = httpClient;
+    }
+
+    public async Task<string> ExplainAsync(HintExplanationRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(settings.Model))
+        {
+            throw new InvalidOperationException("Hint explanation model is missing.");
+        }
+        if (string.IsNullOrWhiteSpace(settings.SystemPrompt))
+        {
+            throw new InvalidOperationException("Hint explanation system prompt is missing.");
+        }
+        if (settings.Temperature is < 0 or > 2)
+        {
+            throw new InvalidOperationException("Hint explanation temperature must be between 0 and 2.");
+        }
+        if (settings.MaxTokens <= 0)
+        {
+            throw new InvalidOperationException("Hint explanation max tokens must be greater than 0.");
+        }
+
+        var endpoint = ResolveEndpoint();
+        var prompt = BuildPrompt(request);
+
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        if (!string.IsNullOrWhiteSpace(settings.ApiKey))
+        {
+            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
+        }
+
+        var payload = new ChatCompletionRequest(
+            settings.Model,
+            [
+                new ChatMessage("system", settings.SystemPrompt),
+                new ChatMessage("user", prompt)
+            ],
+            Temperature: settings.Temperature,
+            MaxTokens: settings.MaxTokens);
+
+        requestMessage.Content = new StringContent(
+            JsonSerializer.Serialize(payload, JsonOptions),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await httpClient.SendAsync(requestMessage, ct);
+        var raw = await response.Content.ReadAsStringAsync(ct);
+
+        response.EnsureSuccessStatusCode();
+
+        return ParseResponse(raw);
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
+
+    private string ResolveEndpoint()
+    {
+        if (string.IsNullOrWhiteSpace(settings.Endpoint))
+        {
+            throw new InvalidOperationException("Hint explanation endpoint is missing.");
+        }
+
+        if (!Uri.TryCreate(settings.Endpoint, UriKind.Absolute, out var uri))
+        {
+            throw new InvalidOperationException("Hint explanation endpoint is invalid.");
+        }
+
+        var path = uri.AbsolutePath.TrimEnd('/');
+        var alreadyCompletion = path.EndsWith(ChatCompletionsPath, StringComparison.OrdinalIgnoreCase);
+        if (alreadyCompletion)
+        {
+            return uri.ToString();
+        }
+
+        return $"{uri}{ChatCompletionsPath}";
+    }
+
+    private static TimeSpan GetTimeout(int seconds) =>
+        TimeSpan.FromSeconds(Math.Max(1, seconds));
+
+    private static string BuildPrompt(HintExplanationRequest request)
+    {
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "請根據下列中國象棋局面資料，回答建議走法解釋：\n" +
+            "FEN: {0}\n" +
+            "走棋方: {1}\n" +
+            "建議走法: {2}\n" +
+            "AI 評分: {3}\n" +
+            "搜尋深度: {4}\n" +
+            "節點數: {5}\n" +
+            "PV: {6}",
+            request.Fen,
+            request.SideToMove,
+            request.BestMoveNotation,
+            request.Score,
+            request.SearchDepth,
+            request.Nodes,
+            string.IsNullOrWhiteSpace(request.PrincipalVariation) ? "(未提供)" : request.PrincipalVariation);
+    }
+
+    private static string ParseResponse(string raw)
+    {
+        using var document = JsonDocument.Parse(raw);
+        if (document.RootElement.ValueKind == JsonValueKind.Undefined)
+        {
+            throw new InvalidOperationException("Empty response from hint explanation service.");
+        }
+
+        if (!document.RootElement.TryGetProperty("choices", out var choices) ||
+            choices.ValueKind != JsonValueKind.Array ||
+            choices.GetArrayLength() == 0)
+        {
+            throw new InvalidOperationException("No answer choices returned.");
+        }
+
+        var firstChoice = choices[0];
+        if (!firstChoice.TryGetProperty("message", out var message) ||
+            !message.TryGetProperty("content", out var content))
+        {
+            throw new InvalidOperationException("Invalid answer format from hint explanation service.");
+        }
+
+        var result = content.GetString();
+        if (string.IsNullOrWhiteSpace(result))
+        {
+            throw new InvalidOperationException("Hint explanation response was empty.");
+        }
+
+        return result.Trim();
+    }
+
+    private sealed record ChatMessage(string Role, string Content);
+
+    private sealed record ChatCompletionRequest(
+        string Model,
+        IReadOnlyList<ChatMessage> Messages,
+        double Temperature = 0.2,
+        [property: JsonPropertyName("max_tokens")] int MaxTokens = 1200);
+}
+

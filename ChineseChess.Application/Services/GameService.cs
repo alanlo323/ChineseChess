@@ -26,6 +26,10 @@ public class GameService : IGameService
     private CancellationTokenSource? aiCts;
     private CancellationTokenSource? smartHintCts;
     private readonly ManualResetEventSlim aiPauseSignal = new ManualResetEventSlim(true);
+    private readonly IHintExplanationService? hintExplanationService;
+    private SearchResult? latestHint;
+    private string? latestHintFen;
+    private int latestHintMoveCount = -1;
 
     public IBoard CurrentBoard => board;
     public GameMode CurrentMode => currentMode;
@@ -57,9 +61,10 @@ public class GameService : IGameService
     public event Action<DrawOfferResult>? DrawOffered;
     public event Action<DrawOfferResult>? DrawOfferResolved;
 
-    public GameService(IAiEngine aiEngine)
+    public GameService(IAiEngine aiEngine, IHintExplanationService? hintExplanationService = null)
     {
         this.aiEngine = aiEngine;
+        this.hintExplanationService = hintExplanationService;
         bookmarkManager = new BookmarkManager();
         board = new Board(); // 初始局面
     }
@@ -70,6 +75,7 @@ public class GameService : IGameService
         aiCts?.Cancel();
         aiPauseSignal.Set();
         board = new Board(); // 重置為標準初始局
+        ClearLatestHint();
         isGameOver = false;
         pendingAiDrawOffer = false;
         isDrawOfferProcessed = false;
@@ -287,6 +293,7 @@ public class GameService : IGameService
         }
 
         board.MakeMove(move);
+        ClearLatestHint();
         NotifyUpdate();
 
         if (CheckGameOver()) return;
@@ -352,6 +359,7 @@ public class GameService : IGameService
                     var searchTurn   = board.Turn;
                     var moveNotation = MoveNotation.ToNotation(result.BestMove, board);
                     board.MakeMove(result.BestMove);
+                    ClearLatestHint();
                     NotifyUpdate();
                     GameMessage?.Invoke($"AI 走了 {moveNotation}（分數：{FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方")}）");
                     ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, moveNotation));
@@ -359,6 +367,7 @@ public class GameService : IGameService
                 else
                 {
                     var moveNotation = MoveNotation.ToNotation(result.BestMove, board);
+                    StoreLatestHint(result, board);
                     HintReady?.Invoke(result);
                     ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, moveNotation));
                 }
@@ -408,6 +417,48 @@ public class GameService : IGameService
         }
 
         return result;
+    }
+
+    public async Task<string> ExplainLatestHintAsync(CancellationToken ct = default)
+    {
+        if (latestHint is null || latestHint.BestMove.IsNull)
+        {
+            return "目前沒有可用提示，請先按提示走法。";
+        }
+
+        if (latestHintFen is null || latestHintMoveCount != board.MoveCount || latestHintFen != board.ToFen())
+        {
+            return "目前局面已更新，請先重新取得提示，才能解釋這一步。";
+        }
+
+        if (hintExplanationService is null)
+        {
+            return "尚未設定提示解釋服務，請先補齊設定檔。";
+        }
+
+        var request = new HintExplanationRequest
+        {
+            Fen = latestHintFen,
+            SideToMove = board.Turn,
+            BestMoveNotation = MoveNotation.ToNotation(latestHint.BestMove, board),
+            Score = latestHint.Score,
+            SearchDepth = latestHint.Depth,
+            Nodes = latestHint.Nodes,
+            PrincipalVariation = latestHint.PvLine
+        };
+
+        try
+        {
+            return await hintExplanationService.ExplainAsync(request, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return "解釋請求已取消。";
+        }
+        catch (Exception ex)
+        {
+            return $"解釋失敗：{ex.Message}";
+        }
     }
 
     // 根據目前輪次選擇引擎（AiVsAi 獨立TT 時，黑方用 aiEngineBlack）
@@ -687,7 +738,41 @@ public class GameService : IGameService
     public async Task<SearchResult> GetHintAsync()
     {
         var result = await RunAiSearchAsync(applyBestMove: false);
+        if (result == null || result.BestMove.IsNull)
+        {
+            ClearLatestHint();
+            return new SearchResult { BestMove = Move.Null };
+        }
+
+        StoreLatestHint(result, board);
         return result ?? new SearchResult { BestMove = Move.Null };
+    }
+
+    private void StoreLatestHint(SearchResult hint, IBoard sourceBoard)
+    {
+        if (hint.BestMove.IsNull)
+        {
+            ClearLatestHint();
+            return;
+        }
+
+        latestHint = new SearchResult
+        {
+            BestMove = hint.BestMove,
+            Score = hint.Score,
+            Depth = hint.Depth,
+            Nodes = hint.Nodes,
+            PvLine = hint.PvLine
+        };
+        latestHintFen = sourceBoard.ToFen();
+        latestHintMoveCount = sourceBoard.MoveCount;
+    }
+
+    private void ClearLatestHint()
+    {
+        latestHint = null;
+        latestHintFen = null;
+        latestHintMoveCount = -1;
     }
 
     public TTStatistics GetTTStatistics() => aiEngine.GetTTStatistics();

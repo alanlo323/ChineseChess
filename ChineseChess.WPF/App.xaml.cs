@@ -1,6 +1,7 @@
 using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Services;
+using ChineseChess.Infrastructure.AI.Hint;
 using ChineseChess.Infrastructure.AI.Search;
 using ChineseChess.WPF.ViewModels;
 using MainWindowView = ChineseChess.WPF.Views.MainWindow;
@@ -31,10 +32,14 @@ public partial class App : System.Windows.Application
 
         var gameSettings = new GameSettings();
         config.GetSection("GameSettings").Bind(gameSettings);
+        var hintExplanationSettings = new HintExplanationSettings();
+        config.GetSection("HintExplanation").Bind(hintExplanationSettings);
 
         var services = new ServiceCollection();
 
         services.AddSingleton(gameSettings);
+        services.AddSingleton(hintExplanationSettings);
+        services.AddSingleton<IHintExplanationService>(_ => new OpenAICompatibleHintExplanationService(hintExplanationSettings));
 
         // 基礎設施（Infrastructure）
         services.AddSingleton<IAiEngine, SearchEngine>();
