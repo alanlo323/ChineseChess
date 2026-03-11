@@ -201,7 +201,53 @@ public class HintExplanationServiceTests
         Assert.Equal("回應內容", explanation);
         Assert.NotEmpty(progressResults);
         Assert.Contains("回應內容", progressResults.Last());
-        Assert.Contains("（已輸出Token：112）", progressResults.Last());
+        Assert.Contains("（已輸出總Token：160）", progressResults.Last());
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldReportReasoningTokens_WhenStreamingEnabled()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        var progressResults = new List<string>();
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    string.Join(
+                        "\n",
+                        new[]
+                        {
+                            "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"先\"}}],\"usage\":{\"completion_tokens\":34,\"completion_tokens_details\":{\"reasoning_tokens\":12}}}",
+                            "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"步\"}}],\"usage\":{\"total_tokens\":68,\"total_tokens_details\":{\"reasoning_tokens\":20}}}",
+                            "data: [DONE]"
+                        }),
+                    Encoding.UTF8,
+                    "application/json")
+            })
+        ));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var explanation = await service.ExplainAsync(
+            request,
+            new Progress<string>(text => progressResults.Add(text)),
+            CancellationToken.None);
+
+        Assert.Equal("先步", explanation);
+        Assert.NotEmpty(progressResults);
+        Assert.Contains("（已輸出總Token：68，推理：20）", progressResults.Last());
     }
 
     [Fact]

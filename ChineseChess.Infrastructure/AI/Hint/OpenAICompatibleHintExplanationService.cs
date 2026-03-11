@@ -125,16 +125,16 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
                 continue;
             }
 
-            var completionTokens = ExtractCompletionTokens(payloadText);
+            var hasUsage = TryExtractTokenUsage(payloadText, out var tokenUsage);
             var delta = ExtractDeltaContent(payloadText);
             if (!string.IsNullOrEmpty(delta))
             {
                 responseBuilder.Append(delta);
-                progress.Report(FormatProgressText(responseBuilder.ToString(), completionTokens));
             }
-            else if (completionTokens.HasValue)
+
+            if (hasUsage || !string.IsNullOrEmpty(delta))
             {
-                progress.Report(FormatProgressText(responseBuilder.ToString(), completionTokens));
+                progress.Report(FormatProgressText(responseBuilder.ToString(), hasUsage ? tokenUsage : null));
             }
         }
 
@@ -172,40 +172,96 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
         return contentElement.GetString();
     }
 
-    private static long? ExtractCompletionTokens(string streamChunk)
+    private static bool TryExtractTokenUsage(string streamChunk, out TokenUsage usage)
     {
+        usage = default;
         using var document = JsonDocument.Parse(streamChunk);
-        if (!document.RootElement.TryGetProperty("usage", out var usage))
+        if (!document.RootElement.TryGetProperty("usage", out var usageElement))
         {
-            return null;
+            return false;
         }
 
-        if (usage.TryGetProperty("completion_tokens", out var completionTokensElement) &&
-            completionTokensElement.ValueKind == JsonValueKind.Number &&
-            completionTokensElement.TryGetInt64(out var completionTokens))
+        var hasValue = false;
+        long? totalTokens = null;
+        long? completionTokens = null;
+        long? reasoningTokens = null;
+
+        if (usageElement.TryGetProperty("total_tokens", out var totalTokensElement) &&
+            TryGetInt64(totalTokensElement, out var totalTokensValue))
         {
-            return completionTokens;
+            totalTokens = totalTokensValue;
+            hasValue = true;
         }
 
-        if (usage.TryGetProperty("total_tokens", out var totalTokensElement) &&
-            totalTokensElement.ValueKind == JsonValueKind.Number &&
-            totalTokensElement.TryGetInt64(out var totalTokens))
+        if (usageElement.TryGetProperty("completion_tokens", out var completionTokensElement) &&
+            TryGetInt64(completionTokensElement, out var completionTokensValue))
         {
-            return totalTokens;
+            completionTokens = completionTokensValue;
+            hasValue = true;
         }
 
-        return null;
+        if (usageElement.TryGetProperty("completion_tokens_details", out var completionDetails) &&
+            completionDetails.ValueKind == JsonValueKind.Object &&
+            completionDetails.TryGetProperty("reasoning_tokens", out var reasoningTokenElement) &&
+            TryGetInt64(reasoningTokenElement, out var reasoningTokensFromCompletion))
+        {
+            reasoningTokens = reasoningTokensFromCompletion;
+            hasValue = true;
+        }
+
+        if (usageElement.TryGetProperty("total_tokens_details", out var totalDetails) &&
+            totalDetails.ValueKind == JsonValueKind.Object &&
+            totalDetails.TryGetProperty("reasoning_tokens", out var totalReasoningTokenElement) &&
+            TryGetInt64(totalReasoningTokenElement, out var reasoningTokensFromTotal))
+        {
+            reasoningTokens = reasoningTokensFromTotal;
+            hasValue = true;
+        }
+
+        if (!hasValue)
+        {
+            return false;
+        }
+
+        usage = new TokenUsage(totalTokens, completionTokens, reasoningTokens);
+        return true;
     }
 
-    private static string FormatProgressText(string text, long? completionTokens)
+    private static bool TryGetInt64(JsonElement element, out long value)
     {
-        if (!completionTokens.HasValue)
+        value = 0;
+        if (element.ValueKind != JsonValueKind.Number)
+        {
+            return false;
+        }
+
+        return element.TryGetInt64(out value);
+    }
+
+    private static string FormatProgressText(string text, TokenUsage? usage)
+    {
+        if (!usage.HasValue)
         {
             return text;
         }
 
-        return $"{text}（已輸出Token：{completionTokens}）";
+        var currentUsage = usage.Value;
+        var totalTokens = currentUsage.TotalTokens ?? currentUsage.CompletionTokens;
+        if (!totalTokens.HasValue && !currentUsage.ReasoningTokens.HasValue)
+        {
+            return text;
+        }
+
+        var status = $"（已輸出總Token：{(totalTokens.HasValue ? totalTokens.Value.ToString() : "-")}";
+        if (currentUsage.ReasoningTokens.HasValue)
+        {
+            status += $"，推理：{currentUsage.ReasoningTokens.Value}";
+        }
+
+        return $"{text}{status}）";
     }
+
+    private readonly record struct TokenUsage(long? TotalTokens, long? CompletionTokens, long? ReasoningTokens);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
