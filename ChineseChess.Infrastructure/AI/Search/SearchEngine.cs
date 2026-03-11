@@ -168,6 +168,7 @@ public class SearchEngine : IAiEngine
                     NodesPerSecond = nodesPerSecond,
                     IsHeartbeat = isHeartbeat,
                     ThreadCount = threadCount,
+                    TtHitRate = tt.GetStatistics().HitRate,
                     Message = isHeartbeat
                         ? "Heartbeat report"
                         : $"Depth {depth}/{settings.Depth} computed ({threadCount} threads)"
@@ -369,37 +370,46 @@ public class SearchEngine : IAiEngine
 
         string threadLabel = $"{threadCount} 執行緒";
 
-        var tasks = moves.Select(move => Task.Run(() =>
+        // 將走法分成 threadCount 個批次，每個批次由一個 LongRunning Task 處理，
+        // 避免對每個走法各建一個短任務造成大量上下文切換
+        int batchSize = (total + threadCount - 1) / threadCount;
+        var batches = Enumerable.Range(0, threadCount)
+            .Select(i => moves.Skip(i * batchSize).Take(batchSize).ToList())
+            .Where(b => b.Count > 0)
+            .ToArray();
+
+        var tasks = batches.Select(batch => Task.Factory.StartNew(() =>
         {
-            if (ct.IsCancellationRequested) return;
-            try
+            using var noopPause = new ManualResetEventSlim(true);
+            foreach (var move in batch)
             {
-                // 每個走法各自 clone 棋盤並執行走法，再搜尋對手的應對
-                var clonedBoard = board.Clone();
-                clonedBoard.MakeMove(move);
-
-                var noopPause = new ManualResetEventSlim(true);
-                var worker = new SearchWorker(clonedBoard, evaluator, tt, ct, ct, noopPause);
-                int score = -worker.SearchSingleDepth(depth - 1);
-
-                results.Add((move, score));
-
-                int done = Interlocked.Increment(ref completed);
-                int currentBest;
-                lock (scoreLock)
+                if (ct.IsCancellationRequested) break;
+                try
                 {
-                    if (score > bestScore) bestScore = score;
-                    currentBest = bestScore;
-                }
+                    var clonedBoard = board.Clone();
+                    clonedBoard.MakeMove(move);
+                    var worker = new SearchWorker(clonedBoard, evaluator, tt, ct, ct, noopPause);
+                    int score = -worker.SearchSingleDepth(depth - 1);
 
-                string bestStr = currentBest > 0 ? $"+{currentBest}" : currentBest.ToString();
-                progress?.Report($"智能提示分析中（深度 {depth}，{threadLabel}）：{done}/{total} 走法，目前最佳 {bestStr}");
+                    results.Add((move, score));
+
+                    int done = Interlocked.Increment(ref completed);
+                    int currentBest;
+                    lock (scoreLock)
+                    {
+                        if (score > bestScore) bestScore = score;
+                        currentBest = bestScore;
+                    }
+
+                    string bestStr = currentBest > 0 ? $"+{currentBest}" : currentBest.ToString();
+                    progress?.Report($"智能提示分析中（深度 {depth}，{threadLabel}）：{done}/{total} 走法，目前最佳 {bestStr}");
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
-            catch (OperationCanceledException)
-            {
-                // 取消時靜默退出，不加入結果
-            }
-        })).ToArray();  // 不傳 ct 給 Task.Run，讓任務自行處理取消
+        }, ct, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
 
         await Task.WhenAll(tasks);
 

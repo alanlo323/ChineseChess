@@ -190,8 +190,8 @@ internal sealed class SearchWorker
             ttMove = entry.BestMove;
         }
 
-        // 2. 重覆局面偵測（搜尋中用 2 次閾值視為和棋，回傳 0）
-        if (ply > 0 && board.IsDrawByRepetition(threshold: 2))
+        // 2. 和局早返（重覆局面 OR 無吃子超限）
+        if (ply > 0 && (board.IsDrawByRepetition(threshold: 2) || board.IsDrawByNoCapture()))
         {
             return 0;
         }

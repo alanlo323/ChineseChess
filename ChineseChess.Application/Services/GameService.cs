@@ -960,7 +960,10 @@ public class GameService : IGameService
         var bestMove = string.IsNullOrWhiteSpace(progress.BestMove) ? "待更新" : progress.BestMove;
         var mode = progress.IsHeartbeat ? "（即時）" : "（階段）";
 
-        return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {scoreText}，建議 {bestMove}";
+        var ttHitRate = progress.TtHitRate > 0
+            ? $"，TT:{progress.TtHitRate:P0}"
+            : string.Empty;
+        return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {scoreText}，建議 {bestMove}{ttHitRate}";
     }
 
     private static string FormatHintProgress(SearchResult result, PieceColor searchTurn, string? notation = null)

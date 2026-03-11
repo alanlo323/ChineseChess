@@ -19,6 +19,7 @@ public class SearchProgress
     public bool IsHeartbeat { get; set; }
     public string? Message { get; set; }
     public int ThreadCount { get; set; }
+    public double TtHitRate { get; set; }
 }
 
 public class SearchResult

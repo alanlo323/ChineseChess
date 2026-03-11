@@ -803,6 +803,7 @@ public class Board : IBoard
 
     /// <summary>
     /// 判定是否達到無吃子步數和棋條件（六十步）。
+    /// halfMoveClock 計算半步（每方走一步 +1），閾值 60 = 30 全回合。
     /// </summary>
     public bool IsDrawByNoCapture(int limit = 60)
     {
