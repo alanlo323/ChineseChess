@@ -469,8 +469,29 @@ public class ControlPanelViewModel : ObservableObject
             {
                 StatusMessage = "提示解釋中...";
                 SelectedTabIndex = HintExplanationTabIndex;
-                HintExplanationText = "（AI 正在解釋）";
-                var explanation = await gameService.ExplainLatestHintAsync();
+                var statusPrefix = "（AI 正在解釋）";
+                HintExplanationText = statusPrefix;
+
+                var streamingText = new StringBuilder();
+                var progress = new Progress<string>(text =>
+                {
+                    streamingText.Clear();
+                    streamingText.Append(text);
+
+                    var app = global::System.Windows.Application.Current;
+                    if (app == null)
+                    {
+                        HintExplanationText = $"{statusPrefix}{Environment.NewLine}{streamingText}";
+                        return;
+                    }
+
+                    app.Dispatcher.Invoke(() =>
+                    {
+                        HintExplanationText = $"{statusPrefix}{Environment.NewLine}{streamingText}";
+                    });
+                });
+
+                var explanation = await gameService.ExplainLatestHintAsync(progress);
                 HintExplanationText = explanation;
                 StatusMessage = "提示解釋完成";
             }

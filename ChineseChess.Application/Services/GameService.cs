@@ -421,7 +421,7 @@ public class GameService : IGameService
         return result;
     }
 
-    public async Task<string> ExplainLatestHintAsync(CancellationToken ct = default)
+    public async Task<string> ExplainLatestHintAsync(IProgress<string>? progress = null, CancellationToken ct = default)
     {
         if (latestHint is null || latestHint.BestMove.IsNull)
         {
@@ -452,7 +452,7 @@ public class GameService : IGameService
 
         try
         {
-            return await hintExplanationService.ExplainAsync(request, ct);
+            return await hintExplanationService.ExplainAsync(request, progress, ct);
         }
         catch (OperationCanceledException)
         {

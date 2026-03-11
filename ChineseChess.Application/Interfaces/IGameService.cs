@@ -80,7 +80,7 @@ public interface IGameService
     bool UseSharedTranspositionTable { get; set; }
 
     Task<SearchResult> GetHintAsync(); // 取得目前局面的分析結果
-    Task<string> ExplainLatestHintAsync(CancellationToken ct = default); // 解釋最新提示
+    Task<string> ExplainLatestHintAsync(IProgress<string>? progress = null, CancellationToken ct = default); // 解釋最新提示
     Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default); // 取得指定棋子的所有走法評分
 
     // TT 統計

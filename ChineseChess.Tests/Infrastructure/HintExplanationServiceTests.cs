@@ -83,7 +83,7 @@ public class HintExplanationServiceTests
     [Fact]
     public async Task ExplainAsync_ShouldSkipReasoningPrompt_WhenDisabled()
     {
-        var captured = new List<HttpRequestMessage>();
+        var capturedBodies = new List<string>();
         var settings = new HintExplanationSettings
         {
             Endpoint = "https://test.local/v1",
@@ -93,7 +93,7 @@ public class HintExplanationServiceTests
 
         using var httpClient = new HttpClient(new CapturingHandler(async req =>
         {
-            captured.Add(req);
+            capturedBodies.Add(await req.Content!.ReadAsStringAsync());
 
             return await Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -112,9 +112,8 @@ public class HintExplanationServiceTests
 
         await service.ExplainAsync(request);
 
-        Assert.Single(captured);
-        var content = await captured[0].Content!.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(content);
+        Assert.Single(capturedBodies);
+        using var doc = JsonDocument.Parse(capturedBodies[0]);
         Assert.DoesNotContain("【推理模式】", doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
     }
 
@@ -150,6 +149,105 @@ public class HintExplanationServiceTests
         var explanation = await service.ExplainAsync(request);
 
         Assert.Equal("回應", explanation);
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldReportProgress_WhenStreamingEnabled()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        var progressResults = new List<string>();
+        var capturedRequestBodies = new List<string>();
+        using var httpClient = new HttpClient(new CapturingHandler(async req =>
+        {
+            capturedRequestBodies.Add(await req.Content!.ReadAsStringAsync());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    string.Join(
+                        "\n",
+                        new[]
+                        {
+                            "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"回應\"}}]}",
+                            "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"內容\"}}],\"usage\":{\"completion_tokens\":112,\"total_tokens\":160}}",
+                            "data: [DONE]"
+                        }),
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        }));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var explanation = await service.ExplainAsync(
+            request,
+            new Progress<string>(text => progressResults.Add(text)),
+            CancellationToken.None);
+
+        Assert.Single(capturedRequestBodies);
+        using var requestDocument = JsonDocument.Parse(capturedRequestBodies[0]);
+        Assert.True(requestDocument.RootElement.GetProperty("stream").GetBoolean());
+        Assert.Equal("回應內容", explanation);
+        Assert.NotEmpty(progressResults);
+        Assert.Contains("回應內容", progressResults.Last());
+        Assert.Contains("（已輸出Token：112）", progressResults.Last());
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ShouldIgnoreUsageToken_WhenParsingRegularResponse()
+    {
+        var settings = new HintExplanationSettings
+        {
+            Endpoint = "https://test.local/v1",
+            Model = "test-model",
+            SystemPrompt = "你是象棋老師",
+            MaxTokens = 256
+        };
+
+        using var httpClient = new HttpClient(new CapturingHandler(_ =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        choices = new[]
+                        {
+                            new { message = new { content = "回應內容" } }
+                        },
+                        usage = new
+                        {
+                            prompt_tokens = 48,
+                            completion_tokens = 112,
+                            total_tokens = 160
+                        }
+                    }),
+                    Encoding.UTF8,
+                    "application/json")
+            });
+        }));
+
+        var service = new OpenAICompatibleHintExplanationService(settings, httpClient);
+        var request = new HintExplanationRequest
+        {
+            Fen = "4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1",
+            BestMoveNotation = "車一進一"
+        };
+
+        var explanation = await service.ExplainAsync(request);
+
+        Assert.Equal("回應內容", explanation);
     }
 
     private sealed class CapturingHandler : HttpMessageHandler

@@ -4,6 +4,7 @@ using ChineseChess.Application.Models;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -32,7 +33,7 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
         this.httpClient = httpClient;
     }
 
-    public async Task<string> ExplainAsync(HintExplanationRequest request, CancellationToken ct = default)
+    public async Task<string> ExplainAsync(HintExplanationRequest request, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(settings.Model))
         {
@@ -69,19 +70,141 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
                 new ChatMessage("user", prompt)
             ],
             Temperature: settings.Temperature,
-            MaxTokens: settings.MaxTokens);
+            MaxTokens: settings.MaxTokens,
+            Stream: progress is not null);
 
         requestMessage.Content = new StringContent(
             JsonSerializer.Serialize(payload, JsonOptions),
             Encoding.UTF8,
             "application/json");
 
-        using var response = await httpClient.SendAsync(requestMessage, ct);
-        var raw = await response.Content.ReadAsStringAsync(ct);
+        using var response = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            response.EnsureSuccessStatusCode();
+            return raw;
+        }
+
+        if (progress is null)
+        {
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            return ParseResponse(raw);
+        }
+
+        var responseBuilder = new StringBuilder();
+        var rawPayload = new StringBuilder();
+        await using var responseStream = await response.Content.ReadAsStreamAsync(ct);
+        using var streamReader = new StreamReader(responseStream);
+        while (true)
+        {
+            var line = await streamReader.ReadLineAsync();
+            if (ct.IsCancellationRequested)
+            {
+                ct.ThrowIfCancellationRequested();
+            }
+            if (line is null)
+            {
+                break;
+            }
+            rawPayload.AppendLine(line);
+
+            if (!line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var payloadText = line.AsSpan("data:".Length).ToString().Trim();
+            if (string.Equals(payloadText, "[DONE]", StringComparison.OrdinalIgnoreCase))
+            {
+                break;
+            }
+
+            if (string.IsNullOrWhiteSpace(payloadText))
+            {
+                continue;
+            }
+
+            var completionTokens = ExtractCompletionTokens(payloadText);
+            var delta = ExtractDeltaContent(payloadText);
+            if (!string.IsNullOrEmpty(delta))
+            {
+                responseBuilder.Append(delta);
+                progress.Report(FormatProgressText(responseBuilder.ToString(), completionTokens));
+            }
+            else if (completionTokens.HasValue)
+            {
+                progress.Report(FormatProgressText(responseBuilder.ToString(), completionTokens));
+            }
+        }
 
         response.EnsureSuccessStatusCode();
+        if (responseBuilder.Length == 0)
+        {
+            return ParseResponse(rawPayload.ToString());
+        }
 
-        return ParseResponse(raw);
+        return responseBuilder.ToString().Trim();
+
+    }
+
+    private static string? ExtractDeltaContent(string streamChunk)
+    {
+        using var document = JsonDocument.Parse(streamChunk);
+        if (!document.RootElement.TryGetProperty("choices", out var choices) ||
+            choices.ValueKind != JsonValueKind.Array ||
+            choices.GetArrayLength() == 0)
+        {
+            return null;
+        }
+
+        var firstChoice = choices[0];
+        if (!firstChoice.TryGetProperty("delta", out var deltaElement))
+        {
+            return null;
+        }
+
+        if (!deltaElement.TryGetProperty("content", out var contentElement))
+        {
+            return null;
+        }
+
+        return contentElement.GetString();
+    }
+
+    private static long? ExtractCompletionTokens(string streamChunk)
+    {
+        using var document = JsonDocument.Parse(streamChunk);
+        if (!document.RootElement.TryGetProperty("usage", out var usage))
+        {
+            return null;
+        }
+
+        if (usage.TryGetProperty("completion_tokens", out var completionTokensElement) &&
+            completionTokensElement.ValueKind == JsonValueKind.Number &&
+            completionTokensElement.TryGetInt64(out var completionTokens))
+        {
+            return completionTokens;
+        }
+
+        if (usage.TryGetProperty("total_tokens", out var totalTokensElement) &&
+            totalTokensElement.ValueKind == JsonValueKind.Number &&
+            totalTokensElement.TryGetInt64(out var totalTokens))
+        {
+            return totalTokens;
+        }
+
+        return null;
+    }
+
+    private static string FormatProgressText(string text, long? completionTokens)
+    {
+        if (!completionTokens.HasValue)
+        {
+            return text;
+        }
+
+        return $"{text}（已輸出Token：{completionTokens}）";
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -185,6 +308,7 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
         string Model,
         IReadOnlyList<ChatMessage> Messages,
         double Temperature = 0.2,
-        [property: JsonPropertyName("max_tokens")] int MaxTokens = 1200);
+        [property: JsonPropertyName("max_tokens")] int MaxTokens = 1200,
+        [property: JsonPropertyName("stream")] bool Stream = false);
 }
 

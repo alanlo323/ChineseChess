@@ -96,7 +96,7 @@ public class GameServiceHintExplanationTests
         public HintExplanationRequest? LatestRequest { get; private set; }
         public Func<string> ResponseFactory { get; set; } = () => "這步看起來是目前最佳選擇。";
 
-        public Task<string> ExplainAsync(HintExplanationRequest request, CancellationToken ct = default)
+        public Task<string> ExplainAsync(HintExplanationRequest request, IProgress<string>? progress = null, CancellationToken ct = default)
         {
             CallCount++;
             LatestRequest = request;
