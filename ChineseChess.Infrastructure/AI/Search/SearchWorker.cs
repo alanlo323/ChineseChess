@@ -26,6 +26,11 @@ internal sealed class SearchWorker
     private long nodesVisited;
     private Move[,] killerMoves;
     private int[,] historyTable;
+    // H2b：反制著法表（countermoveTable[opponentFrom, opponentTo] = bestCounterMove）
+    private Move[,] countermoveTable;
+    // H1：Triangular PV Table（pvTable[ply, plyOffset] 存放 PV 著法，pvLength[ply] 存放長度）
+    private readonly Move[,] pvTable;
+    private readonly int[] pvLength;
     // 每次搜尋前可動態調整，避免 check extension 在淺層搜尋中無限延伸
     internal int effectiveMaxPly = MaxSearchPly;
 
@@ -53,6 +58,9 @@ internal sealed class SearchWorker
         this.pauseSignal = pauseSignal;
         killerMoves = new Move[MaxSearchPly, 2];
         historyTable = new int[90, 90];
+        countermoveTable = new Move[90, 90];
+        pvTable = new Move[MaxSearchPly, MaxSearchPly];
+        pvLength = new int[MaxSearchPly];
     }
 
     /// <summary>
@@ -64,6 +72,7 @@ internal sealed class SearchWorker
         nodesVisited = 0;
         Array.Clear(killerMoves, 0, killerMoves.Length);
         Array.Clear(historyTable, 0, historyTable.Length);
+        Array.Clear(pvLength, 0, pvLength.Length);
         CheckPauseOrCancellation();
 
         var result = new SearchResult();
@@ -74,6 +83,9 @@ internal sealed class SearchWorker
             {
                 CheckPauseOrCancellation();
                 if (ct.IsCancellationRequested) break;
+
+                // H2a：每輪迭代加深開始前衰減歷史表，讓舊資訊逐漸淡出
+                if (depth > 1) DecayHistory();
 
                 int score = Negamax(depth, 0, -Infinity, Infinity, false);
 
@@ -172,7 +184,8 @@ internal sealed class SearchWorker
 
     // --- 核心搜尋流程 ---
 
-    private int Negamax(int depth, int ply, int alpha, int beta, bool skipNullMove)
+    private int Negamax(int depth, int ply, int alpha, int beta, bool skipNullMove,
+        int opponentLastFrom = -1, int opponentLastTo = -1)
     {
         CheckPauseOrCancellation();
         Interlocked.Increment(ref nodesVisited);
@@ -250,7 +263,7 @@ internal sealed class SearchWorker
             return 0;
         }
 
-        OrderMoves(moves, ttMove, ply);
+        OrderMoves(moves, ttMove, ply, opponentLastFrom, opponentLastTo);
 
         int bestScore = -Infinity;
         Move bestMove = Move.Null;
@@ -263,11 +276,12 @@ internal sealed class SearchWorker
             var targetPiece = board.GetPiece(move.To);
             bool isCapture = !targetPiece.IsNone;
             bool isKiller = IsKillerMove(ply, move);
+            // M1b：威脅延伸放寬至 ply <= 2（原 ply == 0），depth >= 2，i < 8（原 i < 4）
             bool threatCandidate = !isCapture
-                && ply == 0
+                && ply <= 2
                 && depth >= 2
                 && depth <= 3
-                && i < 4;
+                && i < 8;
             bool hadImmediateThreat = threatCandidate && SideToMoveHasHighValueCapture();
 
             // 7. Futility 剪枝：若無望則略過靜態著法
@@ -281,37 +295,43 @@ internal sealed class SearchWorker
             // 8. 將軍延伸（Check Extension）
             bool givesCheck = board.IsCheck(board.Turn);
             bool recapturable = isCapture && IsCurrentSquareRecapturable(move.To);
+            // M1a：吃子延伸放寬至 ply <= 3（原 ply <= 1）
             bool extendCapture = isCapture
-                && ply <= 1
+                && ply <= 3
                 && ShouldExtendForCapture(movingPiece, targetPiece, recapturable);
             bool extendThreat = !isCapture
                 && !givesCheck
                 && threatCandidate
                 && !hadImmediateThreat
                 && CreatesImmediateThreatFromCurrentPosition();
+            // M1a：extensionBudget - 每條路徑最多延伸 6 次，防止指數爆炸
             int extension = (givesCheck || extendCapture || extendThreat) ? 1 : 0;
+            if (ply >= 6) extension = 0;
 
             int score;
 
-            // 9. 後序著法減枝（LMR）
+            // 9. 後序著法減枝（H2c：基於 history 的 LMR）
+            int histScore = historyTable[move.From, move.To];
             int reduction = 0;
-            if (i >= 4 && depth >= 3 && !isCapture && !givesCheck && !isKiller && !inCheck)
+            if (!isCapture && !givesCheck && !isKiller && !inCheck)
             {
-                reduction = 1;
-                if (i >= 8) reduction = 2;
+                reduction = ComputeLmrReduction(i, depth, histScore);
             }
 
             if (reduction > 0)
             {
-                score = -Negamax(depth - 1 - reduction + extension, ply + 1, -beta, -alpha, false);
+                score = -Negamax(depth - 1 - reduction + extension, ply + 1, -beta, -alpha, false,
+                    move.From, move.To);
                 if (score > alpha)
                 {
-                    score = -Negamax(depth - 1 + extension, ply + 1, -beta, -alpha, false);
+                    score = -Negamax(depth - 1 + extension, ply + 1, -beta, -alpha, false,
+                        move.From, move.To);
                 }
             }
             else
             {
-                score = -Negamax(depth - 1 + extension, ply + 1, -beta, -alpha, false);
+                score = -Negamax(depth - 1 + extension, ply + 1, -beta, -alpha, false,
+                    move.From, move.To);
             }
 
             board.UnmakeMove(move);
@@ -326,12 +346,20 @@ internal sealed class SearchWorker
                     alpha = score;
                     flag = TTFlag.Exact;
 
+                    // H1：alpha 更新時更新 Triangular PV Table
+                    UpdatePv(ply, move);
+
                     if (alpha >= beta)
                     {
                         if (!isCapture)
                         {
                             UpdateKillers(ply, move);
                             historyTable[move.From, move.To] += depth * depth;
+                            // H2b：記錄反制著法（對手上一步 → 此著法）
+                            if (opponentLastFrom >= 0 && opponentLastTo >= 0)
+                            {
+                                countermoveTable[opponentLastFrom, opponentLastTo] = move;
+                            }
                         }
 
                         tt.Store(board.ZobristKey, beta, depth, TTFlag.LowerBound, move);
@@ -379,14 +407,104 @@ internal sealed class SearchWorker
         return alpha;
     }
 
+    // --- H1：Triangular PV Table ---
+
+    /// <summary>
+    /// 取得根部 PV（主要變例）著法列表。
+    /// 搜尋完成後由外部呼叫，用於顯示或傳入下一輪優先排序。
+    /// </summary>
+    internal IReadOnlyList<Move> GetRootPv()
+    {
+        int len = pvLength[0];
+        if (len <= 0) return System.Array.Empty<Move>();
+        var result = new Move[len];
+        for (int i = 0; i < len; i++)
+            result[i] = pvTable[0, i];
+        return result;
+    }
+
+    /// <summary>
+    /// 在 alpha 更新時，更新 Triangular PV Table。
+    /// 將當前著法 move 放在 ply 層，再複製 ply+1 的子 PV。
+    /// </summary>
+    private void UpdatePv(int ply, Move move)
+    {
+        if (ply >= MaxSearchPly) return;
+        pvTable[ply, 0] = move;
+        int childLen = ply + 1 < MaxSearchPly ? pvLength[ply + 1] : 0;
+        for (int i = 0; i < childLen && (ply + 1 + i) < MaxSearchPly; i++)
+            pvTable[ply, i + 1] = pvTable[ply + 1, i];
+        pvLength[ply] = 1 + childLen;
+    }
+
+    // --- H2a：歷史表衰減 ---
+
+    /// <summary>
+    /// 迭代加深新深度開始時衰減歷史表（所有值 /2）。
+    /// 讓舊有歷史資訊逐漸淡出，優先參考最近一輪的搜尋結果。
+    /// </summary>
+    internal void DecayHistory()
+    {
+        for (int i = 0; i < 90; i++)
+            for (int j = 0; j < 90; j++)
+                historyTable[i, j] /= 2;
+    }
+
+    // H2b/測試輔助：反制著法表存取
+    internal Move GetCountermove(int opponentFrom, int opponentTo) => countermoveTable[opponentFrom, opponentTo];
+    internal void SetCountermove(int opponentFrom, int opponentTo, Move move) => countermoveTable[opponentFrom, opponentTo] = move;
+
+    // 測試輔助：歷史表存取
+    internal int GetHistoryScore(int from, int to) => historyTable[from, to];
+    internal void SetHistoryScore(int from, int to, int value) => historyTable[from, to] = value;
+
+    // 測試輔助：設定 killer 著法
+    internal void SetKiller(int ply, Move move)
+    {
+        if (ply >= MaxSearchPly) return;
+        killerMoves[ply, 1] = killerMoves[ply, 0];
+        killerMoves[ply, 0] = move;
+    }
+
+    /// <summary>
+    /// 測試輔助：帶對手上一步資訊的著法評分（公開版本）。
+    /// </summary>
+    internal int ScoreMovePublic(Move move, Move ttMove, int ply, int opponentLastFrom, int opponentLastTo)
+        => ScoreMove(move, ttMove, ply, opponentLastFrom, opponentLastTo);
+
+    // --- H2c：History-based LMR ---
+
+    /// <summary>
+    /// 根據著法索引、搜尋深度和歷史分數計算 LMR 減量。
+    /// 歷史分數高的著法表示在之前的搜尋中表現良好，給予較少的減量。
+    /// </summary>
+    internal int ComputeLmrReduction(int moveIndex, int depth, int historyScore)
+    {
+        // 前 4 個著法或深度 < 3 不進行 LMR
+        if (moveIndex < 4 || depth < 3) return 0;
+
+        // 基礎減量
+        int baseReduction = moveIndex >= 8 ? 2 : 1;
+
+        // H2c：根據歷史分數動態調整
+        // 歷史分數高（此著法表現良好）→ 減少減量
+        // 閾值：4000 以上為高分（depth*depth 最大約 depth=20 → 400，累積可達 4000+）
+        if (historyScore >= 4000) baseReduction = Math.Max(0, baseReduction - 1);
+
+        return baseReduction;
+    }
+
     // --- 著法排序 ---
 
     internal void OrderMoves(List<Move> moves, Move ttMove, int ply)
+        => OrderMoves(moves, ttMove, ply, opponentLastFrom: -1, opponentLastTo: -1);
+
+    internal void OrderMoves(List<Move> moves, Move ttMove, int ply, int opponentLastFrom, int opponentLastTo)
     {
         var scored = new int[moves.Count];
         for (int i = 0; i < moves.Count; i++)
         {
-            scored[i] = ScoreMove(moves[i], ttMove, ply);
+            scored[i] = ScoreMove(moves[i], ttMove, ply, opponentLastFrom, opponentLastTo);
         }
 
         for (int i = 1; i < moves.Count; i++)
@@ -406,6 +524,9 @@ internal sealed class SearchWorker
     }
 
     internal int ScoreMove(Move move, Move ttMove, int ply)
+        => ScoreMove(move, ttMove, ply, opponentLastFrom: -1, opponentLastTo: -1);
+
+    internal int ScoreMove(Move move, Move ttMove, int ply, int opponentLastFrom, int opponentLastTo)
     {
         if (move == ttMove) return 1_000_000;
 
@@ -435,6 +556,13 @@ internal sealed class SearchWorker
         {
             if (move == killerMoves[ply, 0]) return 90_000;
             if (move == killerMoves[ply, 1]) return 89_000;
+        }
+
+        // H2b：反制著法啟發式（優先級低於 killer，高於純 history）
+        if (opponentLastFrom >= 0 && opponentLastTo >= 0
+            && countermoveTable[opponentLastFrom, opponentLastTo] == move)
+        {
+            return 88_000 + historyTable[move.From, move.To];
         }
 
         return historyTable[move.From, move.To];

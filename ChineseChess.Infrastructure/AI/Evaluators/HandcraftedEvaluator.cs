@@ -34,6 +34,9 @@ public class HandcraftedEvaluator : IEvaluator
 
     public int Evaluate(IBoard board)
     {
+        // H3：計算棋局相位，用於對位置分進行插值
+        int phase = GamePhase.Calculate(board);
+
         int score = 0;
 
         int redKingIndex = -1, blackKingIndex = -1;
@@ -50,11 +53,15 @@ public class HandcraftedEvaluator : IEvaluator
 
             int sign = p.Color == PieceColor.Red ? 1 : -1;
 
-        // 材料分
+            // 材料分
             score += sign * PieceValues[(int)p.Type];
 
-        // PST（位置分）
-            score += sign * PieceSquareTables.GetScore(p.Type, p.Color, i);
+            // PST（位置分）：根據棋局相位插值
+            // 開局（phase=256）：完整 PST；殘局（phase=0）：PST 減半（材料更重要）
+            int pstFull = PieceSquareTables.GetScore(p.Type, p.Color, i);
+            int pstHalf = pstFull / 2;
+            int pstValue = GamePhase.Interpolate(pstFull, pstHalf, phase);
+            score += sign * pstValue;
 
             switch (p.Type)
             {
@@ -105,9 +112,21 @@ public class HandcraftedEvaluator : IEvaluator
         score += EvaluateRookStructure(board, PieceColor.Red, redRook1, redRook2, redRookCount);
         score -= EvaluateRookStructure(board, PieceColor.Black, blackRook1, blackRook2, blackRookCount);
 
-        // --- 機動力（輕量：以局面素材估算可行性） ---
-        int mobility = EstimatePotentialMobility(board);
+        // --- 機動力（M2：實算車/馬/炮步數，其他棋子沿用固定估算） ---
+        int mobility = MobilityEvaluator.CalculateTotalMobility(board);
         score += (board.Turn == PieceColor.Red ? 1 : -1) * mobility;
+
+        // --- 兵型結構（M3）---
+        score += PawnStructure.Evaluate(board, PieceColor.Red);
+        score -= PawnStructure.Evaluate(board, PieceColor.Black);
+
+        // --- 棋子協同（L2）---
+        score += PieceCoordination.Evaluate(board, PieceColor.Red);
+        score -= PieceCoordination.Evaluate(board, PieceColor.Black);
+
+        // --- 空間控制（L3）---
+        score += SpaceControl.Calculate(board, PieceColor.Red);
+        score -= SpaceControl.Calculate(board, PieceColor.Black);
 
         // 以輪到行動的一方為觀點回傳分數
         return board.Turn == PieceColor.Red ? score : -score;
@@ -181,37 +200,6 @@ public class HandcraftedEvaluator : IEvaluator
         }
 
         return bonus;
-    }
-
-    private static int EstimatePotentialMobility(IBoard board)
-    {
-        int redPotential = 0;
-        int blackPotential = 0;
-
-        for (int i = 0; i < BoardSize; i++)
-        {
-            var piece = board.GetPiece(i);
-            if (piece.IsNone) continue;
-
-            int value = piece.Type switch
-            {
-                PieceType.King => 4,
-                PieceType.Advisor => 4,
-                PieceType.Elephant => 4,
-                PieceType.Horse => 6,
-                PieceType.Rook => 12,
-                PieceType.Cannon => 10,
-                PieceType.Pawn => 3,
-                _ => 0
-            };
-
-            if (piece.Color == PieceColor.Red)
-                redPotential += value;
-            else
-                blackPotential += value;
-        }
-
-        return redPotential - blackPotential;
     }
 
     /// <summary>
