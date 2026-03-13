@@ -31,6 +31,7 @@ public class SquareViewModel : ObservableObject
     private Piece ghostPiece;
     private bool hasHintGhostPiece;
     private Piece hintGhostPiece;
+    private bool isHintPending;
 
     public int Index { get; }
     public int Row { get; }
@@ -136,6 +137,13 @@ public class SquareViewModel : ObservableObject
         set => SetProperty(ref hintGhostPiece, value);
     }
 
+    /// <summary>是否正在搜尋中（非最終提示，顯示為待定狀態）</summary>
+    public bool IsHintPending
+    {
+        get => isHintPending;
+        set => SetProperty(ref isHintPending, value);
+    }
+
     public SquareViewModel(int index, int row, int col)
     {
         Index = index;
@@ -170,6 +178,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         this.gameService = gameService;
         this.gameService.BoardUpdated += OnBoardUpdated;
         this.gameService.HintReady += OnHintReady;
+        this.gameService.HintUpdated += OnHintUpdated;
         this.gameService.SmartHintReady += OnSmartHintReady;
         SquareClickCommand = new RelayCommand(OnSquareClick);
 
@@ -221,6 +230,46 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
                     Squares[hintTo.Value].HasHintGhostPiece = true;
                 }
             }
+
+            // 最終結果：清除「搜尋中」待定標示
+            if (hintFrom.HasValue) Squares[hintFrom.Value].IsHintPending = false;
+            if (hintTo.HasValue) Squares[hintTo.Value].IsHintPending = false;
+        });
+    }
+
+    /// <summary>
+    /// 提示搜尋進行中，每個迭代深度完成時觸發，即時更新棋盤高亮（待定狀態）。
+    /// </summary>
+    private void OnHintUpdated(SearchResult intermediateHint)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            // 清除舊的提示高亮
+            ClearHintHighlights();
+
+            if (intermediateHint.BestMove.IsNull) return;
+            var from = intermediateHint.BestMove.From;
+            var to = intermediateHint.BestMove.To;
+
+            if (from < 90) hintFrom = from;
+            if (to < 90) hintTo = to;
+            hintBoardFen = gameService.CurrentBoard.ToFen();
+            ApplyHintHighlights();
+
+            // 在落點顯示虛影棋子
+            if (hintFrom.HasValue && hintTo.HasValue)
+            {
+                var movingPiece = gameService.CurrentBoard.GetPiece(hintFrom.Value);
+                if (!movingPiece.IsNone)
+                {
+                    Squares[hintTo.Value].HintGhostPiece = movingPiece;
+                    Squares[hintTo.Value].HasHintGhostPiece = true;
+                }
+            }
+
+            // 標記為「搜尋中」待定狀態（視覺上與最終結果有所區分）
+            if (hintFrom.HasValue) Squares[hintFrom.Value].IsHintPending = true;
+            if (hintTo.HasValue) Squares[hintTo.Value].IsHintPending = true;
         });
     }
 
@@ -384,6 +433,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
             s.IsHintTo = false;
             s.HasHintGhostPiece = false;
             s.HintGhostPiece = Piece.None;
+            s.IsHintPending = false;
         }
     }
 
@@ -445,6 +495,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         // 取消訂閱 GameService 事件，防止 ViewModel 因事件持有而無法被 GC
         gameService.BoardUpdated -= OnBoardUpdated;
         gameService.HintReady -= OnHintReady;
+        gameService.HintUpdated -= OnHintUpdated;
         gameService.SmartHintReady -= OnSmartHintReady;
     }
 }

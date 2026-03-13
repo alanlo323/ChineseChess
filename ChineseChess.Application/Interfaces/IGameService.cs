@@ -24,9 +24,13 @@ public interface IGameService
 
     event Action BoardUpdated;
     event Action<string> GameMessage; // Check、Win 等訊息
-    event Action<SearchResult>? HintReady; // AI 提示/分析結果
+    event Action<SearchResult>? HintReady; // AI 提示/分析結果（最終結果）
+    event Action<SearchResult>? HintUpdated; // 提示搜尋進行中的即時最佳著法更新
     event Action<string>? ThinkingProgress;
     event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady; // 智能提示結果
+
+    /// <summary>提示搜尋是否正在進行中。</summary>
+    bool IsHintSearching { get; }
 
     /// <summary>AI 主動提和時觸發，傳入提和資訊供玩家決策。</summary>
     event Action<DrawOfferResult>? DrawOffered;

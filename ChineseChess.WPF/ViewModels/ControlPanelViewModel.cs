@@ -530,6 +530,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.GameMessage += OnGameMessage;
         gameService.ThinkingProgress += OnThinkingProgress;
         gameService.HintReady += OnHintReady;
+        gameService.HintUpdated += OnHintUpdated;
         gameService.BoardUpdated += OnBoardUpdated;
         gameService.DrawOffered += OnDrawOffered;
         gameService.DrawOfferResolved += OnDrawOfferResolved;
@@ -562,6 +563,26 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             return;
         }
         app.Dispatcher.Invoke(() => HintExplanationText = "（已取得提示，可按解釋）");
+    }
+
+    /// <summary>
+    /// 提示搜尋進行中，每個迭代深度完成時觸發，即時更新狀態列顯示目前最佳著法（非最終結果）。
+    /// </summary>
+    private void OnHintUpdated(SearchResult hint)
+    {
+        var app = global::System.Windows.Application.Current;
+
+        if (hint.BestMove.IsNull) return;
+
+        var notation = MoveNotation.ToNotation(hint.BestMove, gameService.CurrentBoard);
+        var message = $"提示搜尋中 (非最終結果)：{notation} (深度 {hint.Depth})";
+
+        if (app == null)
+        {
+            StatusMessage = message;
+            return;
+        }
+        app.Dispatcher.Invoke(() => StatusMessage = message);
     }
 
     private void OnBoardUpdated()
@@ -801,6 +822,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.GameMessage -= OnGameMessage;
         gameService.ThinkingProgress -= OnThinkingProgress;
         gameService.HintReady -= OnHintReady;
+        gameService.HintUpdated -= OnHintUpdated;
         gameService.BoardUpdated -= OnBoardUpdated;
         gameService.DrawOffered -= OnDrawOffered;
         gameService.DrawOfferResolved -= OnDrawOfferResolved;

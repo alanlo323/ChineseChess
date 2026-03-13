@@ -25,6 +25,8 @@ public class GameService : IGameService, IDisposable
     // 使用 int（0/1）搭配 Interlocked 做原子 check-and-set，避免 volatile bool 的 check-then-act 競態條件
     private int isThinkingFlag;
     private bool isThinking => Volatile.Read(ref isThinkingFlag) != 0;
+    // 提示搜尋進行中旗標（volatile 確保跨執行緒可見性）
+    private volatile bool isHintSearchingFlag;
     private SearchSettings redAiSettings  = new SearchSettings();
     private SearchSettings blackAiSettings = new SearchSettings();
     private CancellationTokenSource? aiCts;
@@ -38,6 +40,7 @@ public class GameService : IGameService, IDisposable
     public IBoard CurrentBoard => board;
     public GameMode CurrentMode => currentMode;
     public bool IsThinking => isThinking; // 讀取 isThinkingFlag（透過私有 property）
+    public bool IsHintSearching => isHintSearchingFlag;
     public Move? LastMove => board.TryGetLastMove(out var lastMove) ? lastMove : null;
     public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
@@ -61,6 +64,7 @@ public class GameService : IGameService, IDisposable
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
     public event Action<SearchResult>? HintReady;
+    public event Action<SearchResult>? HintUpdated;
     public event Action<string>? ThinkingProgress;
     public event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady;
     public event Action<DrawOfferResult>? DrawOffered;
@@ -325,6 +329,12 @@ public class GameService : IGameService, IDisposable
         if (Interlocked.CompareExchange(ref isThinkingFlag, 1, 0) != 0) return null;
         ThinkingProgress?.Invoke("AI 思考中...");
 
+        // 提示搜尋開始時設旗標
+        if (!applyBestMove)
+        {
+            isHintSearchingFlag = true;
+        }
+
         var cts = new CancellationTokenSource();
         aiCts = cts;
         var boardSnapshot = board.Clone();
@@ -347,6 +357,19 @@ public class GameService : IGameService, IDisposable
             Interlocked.Exchange(ref lastSearchNodes, baseNodes + p.Nodes);
             Interlocked.Exchange(ref lastSearchNps, p.NodesPerSecond);
             ThinkingProgress?.Invoke(FormatThinkingProgress(p));
+
+            // 提示搜尋模式下，非心跳且有有效座標且深度 >= 2 時觸發 HintUpdated
+            if (!applyBestMove && !p.IsHeartbeat && p.BestMoveFrom >= 0 && p.CurrentDepth >= 2)
+            {
+                var hintResult = new SearchResult
+                {
+                    BestMove = new Domain.Entities.Move(p.BestMoveFrom, p.BestMoveTo),
+                    Score = p.Score,
+                    Depth = p.CurrentDepth,
+                    Nodes = p.Nodes
+                };
+                HintUpdated?.Invoke(hintResult);
+            }
         });
 
         try
@@ -383,6 +406,8 @@ public class GameService : IGameService, IDisposable
                 {
                     var moveNotation = MoveNotation.ToNotation(result.BestMove, board);
                     StoreLatestHint(result, board);
+                    // HintReady 觸發前先清除搜尋旗標
+                    isHintSearchingFlag = false;
                     HintReady?.Invoke(result);
                     ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, moveNotation));
                 }
@@ -415,6 +440,11 @@ public class GameService : IGameService, IDisposable
         finally
         {
             Interlocked.Exchange(ref isThinkingFlag, 0);
+            // 確保提示搜尋旗標在任何情況下都會清除（含異常路徑）
+            if (!applyBestMove)
+            {
+                isHintSearchingFlag = false;
+            }
             if (result != null)
             {
                 Interlocked.Add(ref completedGameNodes, result.Nodes);

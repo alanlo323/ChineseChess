@@ -335,10 +335,22 @@ M460,402 L470,402 M470,402 L470,412" />
                                             BorderBrush="{StaticResource HintToBrush}"
                                             BorderThickness="2"
                                             CornerRadius="23"
-                                            Opacity="0.85"
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center"
-                                            Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                            Visibility="{Binding IsHintTo, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <!-- 最終結果：高亮度 -->
+                                                <Setter Property="Opacity" Value="0.85" />
+                                                <Style.Triggers>
+                                                    <!-- 搜尋中待定：降低不透明度以示區分 -->
+                                                    <DataTrigger Binding="{Binding IsHintPending}" Value="True">
+                                                        <Setter Property="Opacity" Value="0.4" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
 
                                     <!-- 普通提示：虛影棋子（落點顯示移動棋子，半透明） -->
                                     <Grid Width="46" Height="46"
@@ -473,12 +485,23 @@ M460,402 L470,402 M470,402 L470,412" />
                                                 BorderBrush="{StaticResource HintFromBrush}"
                                                 BorderThickness="3"
                                                 CornerRadius="23"
-                                                Opacity="0.95"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
                                                 IsHitTestVisible="False"
                                                 Panel.ZIndex="20"
                                                 Visibility="{Binding IsHintFrom, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <!-- 最終結果：高亮度 -->
+                                                    <Setter Property="Opacity" Value="0.95" />
+                                                    <Style.Triggers>
+                                                        <!-- 搜尋中待定：降低不透明度以示區分 -->
+                                                        <DataTrigger Binding="{Binding IsHintPending}" Value="True">
+                                                            <Setter Property="Opacity" Value="0.45" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
                                             <Border.Effect>
                                                 <DropShadowEffect BlurRadius="10"
                                                                   ShadowDepth="0"

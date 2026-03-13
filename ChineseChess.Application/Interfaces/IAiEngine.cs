@@ -20,6 +20,10 @@ public class SearchProgress
     public string? Message { get; set; }
     public int ThreadCount { get; set; }
     public double TtHitRate { get; set; }
+    /// <summary>目前最佳著法的起始格（0–89），無最佳著法時為 -1。</summary>
+    public int BestMoveFrom { get; set; } = -1;
+    /// <summary>目前最佳著法的目標格（0–89），無最佳著法時為 -1。</summary>
+    public int BestMoveTo { get; set; } = -1;
 }
 
 public class SearchResult

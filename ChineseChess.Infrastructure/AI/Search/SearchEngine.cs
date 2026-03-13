@@ -26,6 +26,8 @@ public class SearchEngine : IAiEngine
         public int CurrentDepth;
         public int Score;
         public string? BestMove;
+        public int BestMoveFrom = -1;
+        public int BestMoveTo = -1;
     }
 
     public SearchEngine(GameSettings settings)
@@ -139,13 +141,15 @@ public class SearchEngine : IAiEngine
                 return total;
             }
 
-            void ReportProgress(bool isHeartbeat, int depth, int score, string? bestMove)
+            void ReportProgress(bool isHeartbeat, int depth, int score, string? bestMove, int bestMoveFrom = -1, int bestMoveTo = -1)
             {
                 if (progress == null) return;
 
                 int reportDepth = depth;
                 int reportScore = score;
                 string? reportBestMove = bestMove;
+                int reportBestMoveFrom = bestMoveFrom;
+                int reportBestMoveTo = bestMoveTo;
 
                 if (isHeartbeat)
                 {
@@ -154,6 +158,8 @@ public class SearchEngine : IAiEngine
                         reportDepth = progressState.CurrentDepth;
                         reportScore = progressState.Score;
                         reportBestMove = progressState.BestMove;
+                        reportBestMoveFrom = progressState.BestMoveFrom;
+                        reportBestMoveTo = progressState.BestMoveTo;
                     }
                 }
 
@@ -168,6 +174,8 @@ public class SearchEngine : IAiEngine
                     Nodes = nodes,
                     Score = reportScore,
                     BestMove = reportBestMove,
+                    BestMoveFrom = reportBestMoveFrom,
+                    BestMoveTo = reportBestMoveTo,
                     ElapsedMs = elapsedMs,
                     NodesPerSecond = nodesPerSecond,
                     IsHeartbeat = isHeartbeat,
@@ -256,14 +264,18 @@ public class SearchEngine : IAiEngine
                     result.PvLine = BuildPrincipalVariation(board, depth);
 
                     var bestMoveNotation = MoveNotation.ToNotation(bestMove, board);
+                    int bestMoveFromIdx = bestMove.IsNull ? -1 : bestMove.From;
+                    int bestMoveToIdx = bestMove.IsNull ? -1 : bestMove.To;
                     lock (progressStateLock)
                     {
                         progressState.CurrentDepth = depth;
                         progressState.Score = score;
                         progressState.BestMove = bestMoveNotation;
+                        progressState.BestMoveFrom = bestMoveFromIdx;
+                        progressState.BestMoveTo = bestMoveToIdx;
                     }
 
-                    ReportProgress(false, depth, score, bestMoveNotation);
+                    ReportProgress(false, depth, score, bestMoveNotation, bestMoveFromIdx, bestMoveToIdx);
                 }
             }
             catch (OperationCanceledException)
