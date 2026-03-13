@@ -33,6 +33,8 @@ public class SearchResult
     public int Depth { get; set; }
     public long Nodes { get; set; }
     public string PvLine { get; set; } = string.Empty;
+    /// <summary>此結果是否來自開局庫（非 AI 搜尋）。</summary>
+    public bool IsFromOpeningBook { get; set; }
 }
 
 public class SearchSettings

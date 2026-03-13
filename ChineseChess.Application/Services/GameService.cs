@@ -1,3 +1,4 @@
+using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Models;
@@ -19,6 +20,8 @@ public class GameService : IGameService, IDisposable
     private const int HintExplanationThinkingTreeDepth = 6;
     private readonly IAiEngine aiEngine;          // 紅方（或共用）引擎
     private IAiEngine? aiEngineBlack;             // 黑方引擎（獨立TT模式才有值）
+    private readonly IOpeningBook? openingBook;
+    private readonly OpeningBookSettings openingBookSettings;
     private readonly BookmarkManager bookmarkManager;
     private Board board;
     private GameMode currentMode;
@@ -60,6 +63,8 @@ public class GameService : IGameService, IDisposable
     private bool inCooldown;               // 是否在提和冷卻期中
 
     public bool IsDrawOfferProcessed => isDrawOfferProcessed;
+    public bool IsOpeningBookLoaded => openingBook?.IsLoaded ?? false;
+    public int OpeningBookEntryCount => openingBook?.EntryCount ?? 0;
 
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
@@ -69,11 +74,18 @@ public class GameService : IGameService, IDisposable
     public event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady;
     public event Action<DrawOfferResult>? DrawOffered;
     public event Action<DrawOfferResult>? DrawOfferResolved;
+    public event Action<MoveCompletedEventArgs>? MoveCompleted;
 
-    public GameService(IAiEngine aiEngine, IHintExplanationService? hintExplanationService = null)
+    public GameService(
+        IAiEngine aiEngine,
+        IHintExplanationService? hintExplanationService = null,
+        IOpeningBook? openingBook = null,
+        OpeningBookSettings? openingBookSettings = null)
     {
         this.aiEngine = aiEngine;
         this.hintExplanationService = hintExplanationService;
+        this.openingBook = openingBook;
+        this.openingBookSettings = openingBookSettings ?? new OpeningBookSettings();
         bookmarkManager = new BookmarkManager();
         board = new Board(); // 初始局面
     }
@@ -374,13 +386,25 @@ public class GameService : IGameService, IDisposable
 
         try
         {
-            result = await activeEngine.SearchAsync(
-                boardSnapshot,
-                settings,
-                cts.Token,
-                progress);
+            // 開局庫查詢（僅在 applyBestMove 時啟用，hint 模式跳過）
+            var bookResult = applyBestMove ? TryProbeOpeningBook() : null;
 
-            if (cts.Token.IsCancellationRequested) return null;
+            if (bookResult != null)
+            {
+                result = bookResult;
+                var bookNotation = MoveNotation.ToNotation(result.BestMove, board);
+                ThinkingProgress?.Invoke($"開局庫選手：{bookNotation}");
+            }
+            else
+            {
+                result = await activeEngine.SearchAsync(
+                    boardSnapshot,
+                    settings,
+                    cts.Token,
+                    progress);
+
+                if (cts.Token.IsCancellationRequested) return null;
+            }
 
             if (result.BestMove.IsNull)
             {
@@ -399,8 +423,21 @@ public class GameService : IGameService, IDisposable
                     board.MakeMove(result.BestMove);
                     ClearLatestHint();
                     NotifyUpdate();
-                    GameMessage?.Invoke($"AI 走了 {moveNotation}（分數：{FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方")}）");
+                    var moveSource = result.IsFromOpeningBook ? "開局庫" : "AI";
+                    var scoreStr = result.IsFromOpeningBook ? "定式" : FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方");
+                    GameMessage?.Invoke($"{moveSource} 走了 {moveNotation}（{scoreStr}）");
                     ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, moveNotation));
+                    MoveCompleted?.Invoke(new MoveCompletedEventArgs
+                    {
+                        Fen          = board.ToFen(),
+                        MoveNotation = moveNotation,
+                        Score        = result.Score,
+                        Depth        = result.Depth,
+                        Nodes        = result.Nodes,
+                        PvLine       = result.PvLine,
+                        MovedBy      = searchTurn,
+                        MoveNumber   = board.MoveCount
+                    });
                 }
                 else
                 {
@@ -897,6 +934,30 @@ public class GameService : IGameService, IDisposable
 
         // StoreLatestHint 已在 RunAiSearchAsync 的 else 分支呼叫，此處無需重複呼叫
         return result;
+    }
+
+    /// <summary>
+    /// 查詢開局庫。命中時回傳包含開局庫走法的 SearchResult；
+    /// 未命中或走法不合法（hash collision 防護）時回傳 null。
+    /// </summary>
+    private SearchResult? TryProbeOpeningBook()
+    {
+        if (openingBook == null || !openingBookSettings.IsEnabled) return null;
+        if (board.MoveCount >= openingBookSettings.MaxPly) return null;
+        if (!openingBook.TryProbe(board.ZobristKey, out var bookMove)) return null;
+
+        // 合法性驗證（防護 Zobrist hash collision 極罕見情形）
+        if (!board.GenerateLegalMoves().Any(m => m == bookMove)) return null;
+
+        return new SearchResult
+        {
+            BestMove = bookMove,
+            IsFromOpeningBook = true,
+            Score = 0,
+            Depth = 0,
+            Nodes = 0,
+            PvLine = string.Empty
+        };
     }
 
     private void StoreLatestHint(SearchResult hint, IBoard sourceBoard)

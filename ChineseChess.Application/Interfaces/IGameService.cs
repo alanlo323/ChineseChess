@@ -1,12 +1,26 @@
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Models;
 using ChineseChess.Domain.Entities;
+using ChineseChess.Domain.Enums;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace ChineseChess.Application.Interfaces;
+
+/// <summary>AI 走棋完成後觸發，傳遞局面與搜尋結果供分析使用。</summary>
+public sealed record MoveCompletedEventArgs
+{
+    public string Fen { get; init; } = string.Empty;
+    public string MoveNotation { get; init; } = string.Empty;
+    public int Score { get; init; }
+    public int Depth { get; init; }
+    public long Nodes { get; init; }
+    public string? PvLine { get; init; }
+    public PieceColor MovedBy { get; init; }
+    public int MoveNumber { get; init; }
+}
 
 public interface IGameService
 {
@@ -28,6 +42,8 @@ public interface IGameService
     event Action<SearchResult>? HintUpdated; // 提示搜尋進行中的即時最佳著法更新
     event Action<string>? ThinkingProgress;
     event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady; // 智能提示結果
+    /// <summary>AI 每步棋走完後觸發（applyBestMove=true 路徑），僅在 AiVsAi 模式下供局面分析使用。</summary>
+    event Action<MoveCompletedEventArgs>? MoveCompleted;
 
     /// <summary>提示搜尋是否正在進行中。</summary>
     bool IsHintSearching { get; }
@@ -95,6 +111,13 @@ public interface IGameService
 
     // TT 合併（獨立TT模式下，將兩方 TT 雙向合併）
     Task MergeTranspositionTablesAsync(CancellationToken ct = default);
+
+    // 開局庫狀態
+    /// <summary>開局庫是否已載入（至少含一個局面）。</summary>
+    bool IsOpeningBookLoaded { get; }
+
+    /// <summary>開局庫中的局面總數。</summary>
+    int OpeningBookEntryCount { get; }
 
     // TT 節點探索
     /// <summary>枚舉紅方（或共用）TT 中所有有效條目。</summary>

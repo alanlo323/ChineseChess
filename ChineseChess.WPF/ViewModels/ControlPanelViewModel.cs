@@ -13,6 +13,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Timers;
 using System.Windows;
 using System.Windows.Input;
@@ -44,6 +45,15 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private int selectedTabIndex;
     private const int HintExplanationTabIndex = 3;
     private const int TTExplorerTabIndex = 2;
+    private const int GameAnalysisTabIndex = 4;
+
+    // ─── 局面分析（AI vs AI 模式）─────────────────────────────────────────
+    private readonly IGameAnalysisService? gameAnalysisService;
+    private readonly string gameAnalysisDisclaimer;
+    private bool isGameAnalysisEnabled;
+    private bool isAnalyzing;
+    private string gameAnalysisText = "（等待 AI vs AI 對局開始...）";
+    private CancellationTokenSource? analysisCts;
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
@@ -257,6 +267,28 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     public bool CanExplainHint => !string.IsNullOrWhiteSpace(HintExplanationText) && !HintExplanationText.StartsWith("（尚未", StringComparison.Ordinal);
 
+    // ─── 局面分析屬性 ─────────────────────────────────────────────────────
+
+    public string GameAnalysisDisclaimer => gameAnalysisDisclaimer;
+
+    public bool IsGameAnalysisEnabled
+    {
+        get => isGameAnalysisEnabled;
+        set => SetProperty(ref isGameAnalysisEnabled, value);
+    }
+
+    public bool IsAnalyzing
+    {
+        get => isAnalyzing;
+        private set => SetProperty(ref isAnalyzing, value);
+    }
+
+    public string GameAnalysisText
+    {
+        get => gameAnalysisText;
+        private set => SetProperty(ref gameAnalysisText, value);
+    }
+
     // ─── 指令 ─────────────────────────────────────────────────────────────
 
     public ICommand StartGameCommand { get; }
@@ -274,9 +306,12 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     public ICommand RefreshTTStatsCommand { get; }
     public ICommand MergeTranspositionTablesCommand { get; }
 
-    public ControlPanelViewModel(IGameService gameService, GameSettings settings)
+    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null)
     {
         this.gameService = gameService;
+        this.gameAnalysisService = gameAnalysisService;
+        isGameAnalysisEnabled   = analysisSettings?.IsEnabled ?? true;
+        gameAnalysisDisclaimer  = analysisSettings?.Disclaimer ?? "以下分析由 AI 產生，僅供參考，不代表最終結論。";
 
         searchDepth            = settings.SearchDepth;
         searchThinkingTime     = settings.SearchThinkingTimeSeconds;
@@ -534,6 +569,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.BoardUpdated += OnBoardUpdated;
         gameService.DrawOffered += OnDrawOffered;
         gameService.DrawOfferResolved += OnDrawOfferResolved;
+        gameService.MoveCompleted += OnMoveCompleted;
 
         RefreshTTStats();
     }
@@ -594,6 +630,83 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             return;
         }
         app.Dispatcher.Invoke(() => HintExplanationText = "（尚未產生提示）");
+    }
+
+    private void OnMoveCompleted(MoveCompletedEventArgs args)
+    {
+        // 僅在 AI vs AI 模式且分析功能啟用時觸發
+        if (!isGameAnalysisEnabled || gameAnalysisService == null) return;
+        if (gameService.CurrentMode != GameMode.AiVsAi) return;
+
+        // 取消上一次尚未完成的分析
+        analysisCts?.Cancel();
+        analysisCts?.Dispose();
+        analysisCts = new CancellationTokenSource();
+        var currentCts = analysisCts;
+
+        var request = new GameAnalysisRequest
+        {
+            Fen             = args.Fen,
+            MovedBy         = args.MovedBy,
+            LastMoveNotation = args.MoveNotation,
+            Score           = args.Score,
+            SearchDepth     = args.Depth,
+            Nodes           = args.Nodes,
+            PrincipalVariation = args.PvLine,
+            MoveNumber      = args.MoveNumber
+        };
+
+        var app = global::System.Windows.Application.Current;
+
+        // 設定 loading 狀態（切換回 UI 執行緒）
+        void SetUiState(Action action)
+        {
+            if (app == null) action();
+            else app.Dispatcher.Invoke(action);
+        }
+
+        SetUiState(() =>
+        {
+            IsAnalyzing     = true;
+            GameAnalysisText = "AI 分析中...";
+        });
+
+        // fire-and-forget（觀察例外，不阻塞 AI 搜尋執行緒）
+        Task.Run(async () =>
+        {
+            try
+            {
+                var streamBuilder = new StringBuilder();
+                var progress = new Progress<string>(text =>
+                {
+                    streamBuilder.Clear();
+                    streamBuilder.Append(text);
+                    SetUiState(() => GameAnalysisText = streamBuilder.ToString());
+                });
+
+                var result = await gameAnalysisService.AnalyzeAsync(request, progress, currentCts.Token);
+
+                SetUiState(() =>
+                {
+                    GameAnalysisText = result;
+                    IsAnalyzing      = false;
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // 被新一步取消，不更新 UI
+            }
+            catch (Exception ex)
+            {
+                SetUiState(() =>
+                {
+                    GameAnalysisText = $"分析失敗：{ex.Message}";
+                    IsAnalyzing      = false;
+                });
+            }
+        }, currentCts.Token).ContinueWith(
+            t => SetUiState(() => { GameAnalysisText = $"分析失敗：{t.Exception?.InnerException?.Message}"; IsAnalyzing = false; }),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private void OnDrawOffered(DrawOfferResult offerResult)
@@ -826,6 +939,11 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.BoardUpdated -= OnBoardUpdated;
         gameService.DrawOffered -= OnDrawOffered;
         gameService.DrawOfferResolved -= OnDrawOfferResolved;
+        gameService.MoveCompleted -= OnMoveCompleted;
+
+        analysisCts?.Cancel();
+        analysisCts?.Dispose();
+        analysisCts = null;
 
         ttExplorerTimer.Stop();
         ttExplorerTimer.Dispose();

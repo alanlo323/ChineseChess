@@ -589,6 +589,40 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="局面分析">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="0,6">
+                        <!-- 免責聲明 -->
+                        <Border Background="#FFF3E0"
+                                CornerRadius="4"
+                                Padding="8"
+                                Margin="0,0,0,8">
+                            <TextBlock Text="{Binding GameAnalysisDisclaimer}"
+                                       Foreground="#E65100"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource FormLabelStyle}" />
+                        </Border>
+                        <!-- 啟用/停用 -->
+                        <CheckBox Content="啟用 AI 局面分析（AI vs AI 模式）"
+                                  IsChecked="{Binding IsGameAnalysisEnabled}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,0,0,8" />
+                        <!-- 分析中指示 -->
+                        <TextBlock Text="AI 分析中..."
+                                   Visibility="{Binding IsAnalyzing, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   FontStyle="Italic"
+                                   Margin="0,0,0,4" />
+                        <!-- 分析內容 -->
+                        <TextBlock Text="{Binding GameAnalysisText}"
+                                   Style="{StaticResource StatusTextStyle}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </UserControl>
