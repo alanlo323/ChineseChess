@@ -42,6 +42,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private int ttExplorerBusy;   // Interlocked 防止重疊執行（0 = 閒置，1 = 執行中）
     private int selectedTabIndex;
     private const int HintExplanationTabIndex = 3;
+    private const int TTExplorerTabIndex = 2;
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
@@ -618,6 +619,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// </summary>
     private void ScheduleTTExplorerRefresh()
     {
+        if (SelectedTabIndex != TTExplorerTabIndex)
+            return;
+
         // CAS：0→1 成功才進入，否則跳過此次
         if (Interlocked.CompareExchange(ref ttExplorerBusy, 1, 0) != 0) return;
 
@@ -644,28 +648,41 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         sb.AppendLine("══ TT 條目分布 ══════════════════════════════");
         try
         {
-            // 限制枚舉上限，避免 TT 條目過多（數百萬筆）時造成 CPU 與記憶體壓力
-            const int MaxDisplayEntries = 5000;
-            var entries = gameService.EnumerateTTEntries().Take(MaxDisplayEntries).ToList();
-            bool wasTruncated = entries.Count == MaxDisplayEntries;
-            int total = entries.Count;
-            sb.AppendLine(wasTruncated
-                ? $"有效條目：（僅顯示前 {MaxDisplayEntries:N0} 筆，實際更多）"
-                : $"有效條目：{total:N0}");
+            var depthCounts = new long[256];
+            var flagCounts = new long[4];
+            long total = 0;
+
+            foreach (var entry in gameService.EnumerateTTEntries())
+            {
+                total++;
+                depthCounts[entry.Depth]++;
+
+                int flagIdx = (int)entry.Flag;
+                if (flagIdx >= 0 && flagIdx < flagCounts.Length)
+                {
+                    flagCounts[flagIdx]++;
+                }
+            }
+
+            sb.AppendLine($"有效條目：{total:N0}");
             sb.AppendLine();
 
             if (total > 0)
             {
                 // 深度分布（附簡易長條圖）
                 sb.AppendLine("深度分布：");
-                var byDepth = entries.GroupBy(e => e.Depth)
-                                     .OrderBy(g => g.Key)
-                                     .Select(g => (Depth: g.Key, Count: g.Count()))
-                                     .ToList();
-                int maxCount = byDepth.Max(x => x.Count);
-                const int BarWidth = 20;
-                foreach (var (depth, count) in byDepth)
+                int maxCount = 0;
+                for (int i = 0; i < depthCounts.Length; i++)
                 {
+                    if (depthCounts[i] > maxCount) maxCount = (int)depthCounts[i];
+                }
+
+                const int BarWidth = 20;
+                for (int depth = 0; depth < depthCounts.Length; depth++)
+                {
+                    long count = depthCounts[depth];
+                    if (count == 0) continue;
+
                     int bars = maxCount > 0 ? (int)Math.Round((double)count / maxCount * BarWidth) : 0;
                     string bar = new string('█', bars).PadRight(BarWidth);
                     sb.AppendLine($"  深度 {depth,2}：{count,7:N0} {bar}");
@@ -673,8 +690,14 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
                 sb.AppendLine();
                 sb.AppendLine("旗標分布：");
-                foreach (var g in entries.GroupBy(e => e.Flag).OrderBy(g => g.Key))
-                    sb.AppendLine($"  {g.Key,-12}：{g.Count(),7:N0}");
+                foreach (TTFlag flag in Enum.GetValues<TTFlag>())
+                {
+                    int flagIdx = (int)flag;
+                    if (flagIdx < 0 || flagIdx >= flagCounts.Length) continue;
+                    long count = flagCounts[flagIdx];
+                    if (count == 0) continue;
+                    sb.AppendLine($"  {flag,-12}：{count,7:N0}");
+                }
             }
         }
         catch (Exception ex)
