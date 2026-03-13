@@ -395,6 +395,9 @@ public class SearchEngine : IAiEngine
                     var clonedBoard = board.Clone();
                     clonedBoard.MakeMove(move);
                     var worker = new SearchWorker(clonedBoard, evaluator, tt, ct, ct, noopPause);
+                    // 限制延伸深度：board 已走一步，SearchSingleDepth 從 ply=0 開始
+                    // 延伸預算 +4：避免 check extension 在深層局面造成指數爆炸
+                    worker.effectiveMaxPly = (depth - 1) + 4;
                     int score = -worker.SearchSingleDepth(depth - 1);
 
                     results.Add((move, score));

@@ -26,6 +26,8 @@ internal sealed class SearchWorker
     private long nodesVisited;
     private Move[,] killerMoves;
     private int[,] historyTable;
+    // 每次搜尋前可動態調整，避免 check extension 在淺層搜尋中無限延伸
+    internal int effectiveMaxPly = MaxSearchPly;
 
     private const int Infinity = 30000;
     private const int MateScore = 20000;
@@ -126,6 +128,9 @@ internal sealed class SearchWorker
         var moveList = moves.ToList();
         var results = new List<(Move Move, int Score)>();
         int searchDepth = Math.Max(0, depth - 1);
+        // 限制 check/capture extension 的總 ply，防止淺層搜尋無限延伸
+        // ply 從 1 開始，延伸預算 +4：足以偵測4步以內的戰術威脅，不會指數爆炸
+        effectiveMaxPly = searchDepth + 4;
         int total = moveList.Count;
         int bestScore = -Infinity;
 
@@ -196,8 +201,8 @@ internal sealed class SearchWorker
             return 0;
         }
 
-        // 3. 葉節點：進入 quiescence
-        if (depth <= 0)
+        // 3. 葉節點：進入 quiescence（或超過有效最大 ply，避免將軍延伸無限遞迴）
+        if (depth <= 0 || ply >= effectiveMaxPly)
         {
             return Quiescence(alpha, beta, 0);
         }
