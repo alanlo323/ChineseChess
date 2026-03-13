@@ -41,7 +41,8 @@ public class HintExplanationServiceTests
             Assert.Equal(512, doc.RootElement.GetProperty("max_tokens").GetInt32());
             Assert.Contains(req.Headers.Accept, media => media.MediaType == "application/json");
             Assert.Contains("思路樹", doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
-            Assert.Contains("【推理模式】", doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
+            // EnableReasoning 預設 true：應包含 reasoning.effort 欄位
+            Assert.Equal("high", doc.RootElement.GetProperty("reasoning").GetProperty("effort").GetString());
             Assert.NotNull(req.Headers.Authorization);
             Assert.Equal("Bearer", req.Headers.Authorization!.Scheme);
             Assert.Equal("test-key", req.Headers.Authorization!.Parameter);
@@ -81,7 +82,7 @@ public class HintExplanationServiceTests
     }
 
     [Fact]
-    public async Task ExplainAsync_ShouldSkipReasoningPrompt_WhenDisabled()
+    public async Task ExplainAsync_ShouldNotIncludeReasoningField_WhenDisabled()
     {
         var capturedBodies = new List<string>();
         var settings = new HintExplanationSettings
@@ -114,7 +115,8 @@ public class HintExplanationServiceTests
 
         Assert.Single(capturedBodies);
         using var doc = JsonDocument.Parse(capturedBodies[0]);
-        Assert.DoesNotContain("【推理模式】", doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
+        // EnableReasoning = false：reasoning 欄位不應出現在 request body 中
+        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
     }
 
     [Fact]

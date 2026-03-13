@@ -42,6 +42,10 @@ internal sealed class SearchWorker
     private const int SafeCaptureBonus = 1_500;
     private const int GuardedCapturePenaltyMultiplier = 12;
     private const int HighValueTacticalThreshold = 270;
+    // SE：奇異延伸相關常數
+    private const int SingularExtensionMinDepth = 6;   // 觸發 SE 的最小搜尋深度
+    private const int SingularMargin = 2;               // 排除搜尋的分數邊際（sBeta = ttScore - SingularMargin * depth）
+    private const int CheckmateThreshold = 15000;       // 將殺分數門檻：|ttScore| >= 此值時不觸發 SE
 
     private static readonly int[] PieceValues = { 0, 10000, 120, 120, 270, 600, 285, 30 };
     private static readonly int[] FutilityMargins = { 0, 200, 500 };
@@ -185,7 +189,7 @@ internal sealed class SearchWorker
     // --- 核心搜尋流程 ---
 
     private int Negamax(int depth, int ply, int alpha, int beta, bool skipNullMove,
-        int opponentLastFrom = -1, int opponentLastTo = -1)
+        int opponentLastFrom = -1, int opponentLastTo = -1, Move excludedMove = default)
     {
         CheckPauseOrCancellation();
         Interlocked.Increment(ref nodesVisited);
@@ -196,6 +200,9 @@ internal sealed class SearchWorker
 
         // 1. TT 探測
         Move ttMove = Move.Null;
+        int ttScore = 0;
+        int ttDepth = 0;
+        TTFlag ttFlag = TTFlag.UpperBound;
         if (tt.Probe(board.ZobristKey, out var entry))
         {
             if (entry.Depth >= depth && !isPvNode)
@@ -206,6 +213,9 @@ internal sealed class SearchWorker
                 if (alpha >= beta) return entry.Score;
             }
             ttMove = entry.BestMove;
+            ttScore = entry.Score;
+            ttDepth = entry.Depth;
+            ttFlag = entry.Flag;
         }
 
         // 2. 和局早返（重覆局面 OR 無吃子超限）
@@ -254,7 +264,31 @@ internal sealed class SearchWorker
             }
         }
 
-        // 6. 產生並排序著法
+        // 6. 奇異延伸判斷（Singular Extension）
+        // 條件：深度達到門檻、TT 有有效走法、TT 深度充足、TT 分數不在將殺範圍、
+        //       ply > 0（根節點不做 SE）、目前不是排除搜尋節點（excludedMove 為空）
+        bool singularExtension = false;
+        if (depth >= SingularExtensionMinDepth
+            && !ttMove.IsNull
+            && ttDepth >= depth - 3
+            && (ttFlag == TTFlag.LowerBound || ttFlag == TTFlag.Exact)
+            && Math.Abs(ttScore) < CheckmateThreshold
+            && ply > 0
+            && excludedMove.IsNull)
+        {
+            // 排除搜尋：以略低於 TT 分數的視窗，在跳過 ttMove 的情況下搜尋
+            int sBeta = ttScore - SingularMargin * depth;
+            int reducedDepth = (depth - 1) / 2;
+            int seScore = Negamax(reducedDepth, ply, sBeta - 1, sBeta, skipNullMove: true,
+                opponentLastFrom, opponentLastTo, excludedMove: ttMove);
+            // 若排除 TT 走法後分數低於 sBeta，代表 TT 走法明顯優於其他選擇 → 觸發奇異延伸
+            if (seScore < sBeta)
+            {
+                singularExtension = true;
+            }
+        }
+
+        // 7. 產生並排序著法
         var moves = board.GenerateLegalMoves().ToList();
 
         if (moves.Count == 0)
@@ -272,6 +306,10 @@ internal sealed class SearchWorker
         for (int i = 0; i < moves.Count; i++)
         {
             var move = moves[i];
+
+            // 排除搜尋：跳過指定的排除走法（避免重複計算 TT 走法）
+            if (!excludedMove.IsNull && move == excludedMove) continue;
+
             var movingPiece = board.GetPiece(move.From);
             var targetPiece = board.GetPiece(move.To);
             bool isCapture = !targetPiece.IsNone;
@@ -306,6 +344,8 @@ internal sealed class SearchWorker
                 && CreatesImmediateThreatFromCurrentPosition();
             // M1a：extensionBudget - 每條路徑最多延伸 6 次，防止指數爆炸
             int extension = (givesCheck || extendCapture || extendThreat) ? 1 : 0;
+            // SE：若奇異延伸已觸發，且當前走法為 TT 最佳走法，再加一層延伸
+            if (singularExtension && move == ttMove) extension += 1;
             if (ply >= 6) extension = 0;
 
             int score;
@@ -457,6 +497,16 @@ internal sealed class SearchWorker
     // 測試輔助：歷史表存取
     internal int GetHistoryScore(int from, int to) => historyTable[from, to];
     internal void SetHistoryScore(int from, int to, int value) => historyTable[from, to] = value;
+
+    /// <summary>
+    /// 測試輔助：以排除指定走法的方式執行 Negamax（用於驗證 SE 排除搜尋機制）。
+    /// </summary>
+    internal int SearchWithExcludedMove(int depth, Move excludedMove)
+    {
+        CheckPauseOrCancellation();
+        return Negamax(depth, 0, -Infinity, Infinity, skipNullMove: false,
+            opponentLastFrom: -1, opponentLastTo: -1, excludedMove: excludedMove);
+    }
 
     // 測試輔助：設定 killer 著法
     internal void SetKiller(int ply, Move move)

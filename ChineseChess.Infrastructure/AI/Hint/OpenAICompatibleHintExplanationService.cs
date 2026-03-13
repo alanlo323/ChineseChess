@@ -80,6 +80,10 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
         }
 
+        var reasoning = settings.EnableReasoning
+            ? new ReasoningConfig(settings.ReasoningEffort)
+            : null;
+
         var payload = new ChatCompletionRequest(
             settings.Model,
             [
@@ -88,7 +92,8 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             ],
             Temperature: settings.Temperature,
             MaxTokens: settings.MaxTokens,
-            Stream: progress is not null);
+            Stream: progress is not null,
+            Reasoning: reasoning);
 
         requestMessage.Content = new StringContent(
             JsonSerializer.Serialize(payload, JsonOptions),
@@ -495,15 +500,7 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             string.IsNullOrWhiteSpace(request.PrincipalVariation) ? "(未提供)" : request.PrincipalVariation,
             string.IsNullOrWhiteSpace(request.ThinkingTree) ? "(未提供)" : request.ThinkingTree);
 
-        return prompt + BuildReasoningSuffix();
-    }
-
-    private string BuildReasoningSuffix()
-    {
-        return settings.EnableReasoning
-            ? "\n\n【推理模式】\n" +
-              "請在分析過程中進行完整、專業推理，並以「Step-by-step」條列方式回答，但不要輸出模型內部推理流程，只要輸出清楚的最終分析內容。\n"
-            : string.Empty;
+        return prompt;
     }
 
     private static string ParseResponse(string raw)
@@ -539,11 +536,15 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
 
     private sealed record ChatMessage(string Role, string Content);
 
+    private sealed record ReasoningConfig(
+        [property: JsonPropertyName("effort")] string Effort = "high");
+
     private sealed record ChatCompletionRequest(
         string Model,
         IReadOnlyList<ChatMessage> Messages,
         double Temperature = 0.2,
         [property: JsonPropertyName("max_tokens")] int MaxTokens = 1200,
-        [property: JsonPropertyName("stream")] bool Stream = false);
+        [property: JsonPropertyName("stream")] bool Stream = false,
+        [property: JsonPropertyName("reasoning"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ReasoningConfig? Reasoning = null);
 }
 

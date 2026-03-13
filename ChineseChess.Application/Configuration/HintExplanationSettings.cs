@@ -9,6 +9,8 @@ public class HintExplanationSettings
     public double Temperature { get; set; } = 0.25;
     public int MaxTokens { get; set; } = 1200;
     public bool EnableReasoning { get; set; } = true;
+    /// <summary>當 EnableReasoning 為 true 時的推理強度：high / medium / low</summary>
+    public string ReasoningEffort { get; set; } = "high";
     public int TimeoutSeconds { get; set; } = 20;
 }
 
