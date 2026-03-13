@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace ChineseChess.Application.Services;
 
-public class GameService : IGameService
+public class GameService : IGameService, IDisposable
 {
     private const int HintExplanationThinkingTreeDepth = 6;
     private readonly IAiEngine aiEngine;          // 紅方（或共用）引擎
@@ -22,7 +22,9 @@ public class GameService : IGameService
     private readonly BookmarkManager bookmarkManager;
     private Board board;
     private GameMode currentMode;
-    private volatile bool isThinking;
+    // 使用 int（0/1）搭配 Interlocked 做原子 check-and-set，避免 volatile bool 的 check-then-act 競態條件
+    private int isThinkingFlag;
+    private bool isThinking => Volatile.Read(ref isThinkingFlag) != 0;
     private SearchSettings redAiSettings  = new SearchSettings();
     private SearchSettings blackAiSettings = new SearchSettings();
     private CancellationTokenSource? aiCts;
@@ -35,7 +37,7 @@ public class GameService : IGameService
 
     public IBoard CurrentBoard => board;
     public GameMode CurrentMode => currentMode;
-    public bool IsThinking => isThinking;
+    public bool IsThinking => isThinking; // 讀取 isThinkingFlag（透過私有 property）
     public Move? LastMove => board.TryGetLastMove(out var lastMove) ? lastMove : null;
     public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
@@ -77,9 +79,12 @@ public class GameService : IGameService
         aiCts?.Cancel();
         aiPauseSignal.Set();
         // 等待舊的 AI 搜尋任務完全結束後再重置棋盤，避免新舊任務並存的競爭條件
-        while (isThinking)
+        // 最多等待 5 秒（500 × 10ms），防止異常情況下的無限等待
+        var waitCount = 0;
+        while (isThinking && waitCount < 500)
         {
             await Task.Delay(10);
+            waitCount++;
         }
         board = new Board(); // 重置為標準初始局
         ClearLatestHint();
@@ -313,8 +318,8 @@ public class GameService : IGameService
 
     private async Task<SearchResult?> RunAiSearchAsync(bool applyBestMove)
     {
-        if (isThinking) return null;
-        isThinking = true;
+        // 原子地將 isThinkingFlag 從 0 設為 1；若已是 1 表示另一搜尋進行中，直接返回
+        if (Interlocked.CompareExchange(ref isThinkingFlag, 1, 0) != 0) return null;
         ThinkingProgress?.Invoke("AI 思考中...");
 
         var cts = new CancellationTokenSource();
@@ -406,7 +411,7 @@ public class GameService : IGameService
         }
         finally
         {
-            isThinking = false;
+            Interlocked.Exchange(ref isThinkingFlag, 0);
             if (result != null)
             {
                 Interlocked.Add(ref completedGameNodes, result.Nodes);
@@ -423,7 +428,14 @@ public class GameService : IGameService
 
         if (continueAiLoop)
         {
-            _ = RunAiSearchAsync(applyBestMove: true);
+            // 使用 ContinueWith 觀察例外，避免 fire-and-forget 靜默吞掉錯誤
+            // CS4014 在此為刻意的非同步接續，不需要 await
+#pragma warning disable CS4014
+            RunAiSearchAsync(applyBestMove: true)
+                .ContinueWith(
+                    t => GameMessage?.Invoke($"AiVsAi 搜尋發生錯誤：{t.Exception?.InnerException?.Message ?? t.Exception?.Message}"),
+                    TaskContinuationOptions.OnlyOnFaulted);
+#pragma warning restore CS4014
         }
 
         return result;
@@ -782,6 +794,8 @@ public class GameService : IGameService
 
         if (didUndo)
         {
+            // 悔棋後允許繼續走棋，重設遊戲結束旗標
+            isGameOver = false;
             NotifyUpdate();
         }
     }
@@ -799,6 +813,11 @@ public class GameService : IGameService
         if (fen != null)
         {
             board.ParseFen(fen);
+            // 重設遊戲狀態，避免遊戲結束後載入書籤仍無法繼續走棋
+            isGameOver = false;
+            pendingAiDrawOffer = false;
+            isDrawOfferProcessed = false;
+            ClearLatestHint();
             NotifyUpdate();
         }
     }
@@ -1008,6 +1027,15 @@ public class GameService : IGameService
     }
 
     private void NotifyUpdate() => BoardUpdated?.Invoke();
+
+    public void Dispose()
+    {
+        aiCts?.Cancel();
+        aiCts?.Dispose();
+        smartHintCts?.Cancel();
+        smartHintCts?.Dispose();
+        aiPauseSignal.Dispose();
+    }
 
     private async Task EnsureAiStoppedForPersistenceAsync(CancellationToken ct)
     {

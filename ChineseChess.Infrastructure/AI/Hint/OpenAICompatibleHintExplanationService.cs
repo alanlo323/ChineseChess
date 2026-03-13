@@ -17,24 +17,37 @@ using System.Threading.Tasks;
 
 namespace ChineseChess.Infrastructure.AI.Hint;
 
-public sealed class OpenAICompatibleHintExplanationService : IHintExplanationService
+public sealed class OpenAICompatibleHintExplanationService : IHintExplanationService, IDisposable
 {
     private readonly HintExplanationSettings settings;
     private readonly HttpClient httpClient;
+    // 僅在無參建構子自行建立 HttpClient 時才負責 Dispose（外部注入者自行管理）
+    private readonly bool ownsHttpClient;
     private static readonly ConcurrentDictionary<string, TiktokenTokenizer> TokenizerCache = new(StringComparer.OrdinalIgnoreCase);
     private const string DefaultEncoding = "cl100k_base";
 
     private const string ChatCompletionsPath = "/chat/completions";
 
     public OpenAICompatibleHintExplanationService(HintExplanationSettings settings)
-        : this(settings, new HttpClient { Timeout = GetTimeout(settings.TimeoutSeconds) })
+        : this(settings, new HttpClient { Timeout = GetTimeout(settings.TimeoutSeconds) }, ownsHttpClient: true)
     {
     }
 
     public OpenAICompatibleHintExplanationService(HintExplanationSettings settings, HttpClient httpClient)
+        : this(settings, httpClient, ownsHttpClient: false)
+    {
+    }
+
+    private OpenAICompatibleHintExplanationService(HintExplanationSettings settings, HttpClient httpClient, bool ownsHttpClient)
     {
         this.settings = settings;
         this.httpClient = httpClient;
+        this.ownsHttpClient = ownsHttpClient;
+    }
+
+    public void Dispose()
+    {
+        if (ownsHttpClient) httpClient.Dispose();
     }
 
     public async Task<string> ExplainAsync(HintExplanationRequest request, IProgress<string>? progress = null, CancellationToken ct = default)

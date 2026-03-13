@@ -3,10 +3,11 @@ using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Helpers;
 using ChineseChess.WPF.Core;
+using System;
 
 namespace ChineseChess.WPF.ViewModels;
 
-public class MainViewModel : ObservableObject
+public class MainViewModel : ObservableObject, IDisposable
 {
     private readonly IGameService gameService;
 
@@ -27,8 +28,8 @@ public class MainViewModel : ObservableObject
         ChessBoard = chessBoard;
         ControlPanel = controlPanel;
 
-        gameService.HintReady += hint => OnHintReady(hint);
-        gameService.ThinkingProgress += progress => OnThinkingProgress(progress);
+        gameService.HintReady += OnHintReady;
+        gameService.ThinkingProgress += OnThinkingProgress;
 
         // 若有提供，監聽 Service 的分析更新事件
         // 理想上 GameService 應提供分析事件或可綁定屬性
@@ -91,5 +92,12 @@ public class MainViewModel : ObservableObject
         }
 
         return $"{signedScore}（{turnLabel}）";
+    }
+
+    public void Dispose()
+    {
+        // 取消訂閱 GameService 事件，防止 ViewModel 被 Service 持有引用而無法被 GC
+        gameService.HintReady -= OnHintReady;
+        gameService.ThinkingProgress -= OnThinkingProgress;
     }
 }

@@ -358,7 +358,7 @@ public class SearchEngine : IAiEngine
     {
         return Task.Run(() =>
         {
-            var noopPause = new ManualResetEventSlim(true);
+            using var noopPause = new ManualResetEventSlim(true);
             var worker = new SearchWorker(board.Clone(), evaluator, tt, ct, ct, noopPause);
             return worker.EvaluateRootMoves(moves, depth, progress, threadLabel: "單執行緒");
         }, ct);

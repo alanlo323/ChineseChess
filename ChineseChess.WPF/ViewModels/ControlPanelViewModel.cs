@@ -511,72 +511,77 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
         gameService.SetDifficulty(searchDepth, searchThinkingTime * 1000);
 
-        gameService.GameMessage += msg =>
-        {
-            var app = global::System.Windows.Application.Current;
-            if (app == null) { StatusMessage = msg; return; }
-            app.Dispatcher.Invoke(() => StatusMessage = msg);
-        };
-
-        gameService.ThinkingProgress += _ =>
-        {
-            var app = global::System.Windows.Application.Current;
-            if (app == null) return;
-            app.Dispatcher.Invoke(RefreshTTStats);
-        };
-
-        gameService.HintReady += _ =>
-        {
-            var app = global::System.Windows.Application.Current;
-            if (app == null)
-            {
-                HintExplanationText = "（已取得提示，可按解釋）";
-                return;
-            }
-
-            app.Dispatcher.Invoke(() => HintExplanationText = "（已取得提示，可按解釋）");
-        };
-
-        gameService.BoardUpdated += () =>
-        {
-            var app = global::System.Windows.Application.Current;
-            if (app == null)
-            {
-                HintExplanationText = "（尚未產生提示）";
-                return;
-            }
-
-            app.Dispatcher.Invoke(() => HintExplanationText = "（尚未產生提示）");
-        };
-
-        // AI 主動提和：顯示 MessageBox 詢問玩家
-        gameService.DrawOffered += offerResult =>
-        {
-            var app = global::System.Windows.Application.Current;
-            if (app == null) return;
-            app.Dispatcher.Invoke(() =>
-            {
-                var answer = MessageBox.Show(
-                    $"AI 提議和棋。\n{offerResult.Reason}\n\n是否接受？",
-                    "AI 提和",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-                gameService.RespondToDrawOffer(answer == MessageBoxResult.Yes);
-            });
-        };
-
-        // 提和結果通知
-        gameService.DrawOfferResolved += result =>
-        {
-            var app = global::System.Windows.Application.Current;
-            if (app == null) return;
-            string message = result.Accepted
-                ? $"和棋成立！{result.Reason}"
-                : $"提和遭拒。{result.Reason}";
-            app.Dispatcher.Invoke(() => StatusMessage = message);
-        };
+        gameService.GameMessage += OnGameMessage;
+        gameService.ThinkingProgress += OnThinkingProgress;
+        gameService.HintReady += OnHintReady;
+        gameService.BoardUpdated += OnBoardUpdated;
+        gameService.DrawOffered += OnDrawOffered;
+        gameService.DrawOfferResolved += OnDrawOfferResolved;
 
         RefreshTTStats();
+    }
+
+    // ─── GameService 事件處理（具名方法，供建構子訂閱及 Dispose 取消訂閱）──────
+
+    private void OnGameMessage(string msg)
+    {
+        var app = global::System.Windows.Application.Current;
+        if (app == null) { StatusMessage = msg; return; }
+        app.Dispatcher.Invoke(() => StatusMessage = msg);
+    }
+
+    private void OnThinkingProgress(string _)
+    {
+        var app = global::System.Windows.Application.Current;
+        if (app == null) return;
+        app.Dispatcher.Invoke(RefreshTTStats);
+    }
+
+    private void OnHintReady(SearchResult _)
+    {
+        var app = global::System.Windows.Application.Current;
+        if (app == null)
+        {
+            HintExplanationText = "（已取得提示，可按解釋）";
+            return;
+        }
+        app.Dispatcher.Invoke(() => HintExplanationText = "（已取得提示，可按解釋）");
+    }
+
+    private void OnBoardUpdated()
+    {
+        var app = global::System.Windows.Application.Current;
+        if (app == null)
+        {
+            HintExplanationText = "（尚未產生提示）";
+            return;
+        }
+        app.Dispatcher.Invoke(() => HintExplanationText = "（尚未產生提示）");
+    }
+
+    private void OnDrawOffered(DrawOfferResult offerResult)
+    {
+        var app = global::System.Windows.Application.Current;
+        if (app == null) return;
+        app.Dispatcher.Invoke(() =>
+        {
+            var answer = MessageBox.Show(
+                $"AI 提議和棋。\n{offerResult.Reason}\n\n是否接受？",
+                "AI 提和",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            gameService.RespondToDrawOffer(answer == MessageBoxResult.Yes);
+        });
+    }
+
+    private void OnDrawOfferResolved(DrawOfferResult result)
+    {
+        var app = global::System.Windows.Application.Current;
+        if (app == null) return;
+        string message = result.Accepted
+            ? $"和棋成立！{result.Reason}"
+            : $"提和遭拒。{result.Reason}";
+        app.Dispatcher.Invoke(() => StatusMessage = message);
     }
 
     private void RefreshTTStats()
@@ -639,9 +644,14 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         sb.AppendLine("══ TT 條目分布 ══════════════════════════════");
         try
         {
-            var entries = gameService.EnumerateTTEntries().ToList();
+            // 限制枚舉上限，避免 TT 條目過多（數百萬筆）時造成 CPU 與記憶體壓力
+            const int MaxDisplayEntries = 5000;
+            var entries = gameService.EnumerateTTEntries().Take(MaxDisplayEntries).ToList();
+            bool wasTruncated = entries.Count == MaxDisplayEntries;
             int total = entries.Count;
-            sb.AppendLine($"有效條目：{total:N0}");
+            sb.AppendLine(wasTruncated
+                ? $"有效條目：（僅顯示前 {MaxDisplayEntries:N0} 筆，實際更多）"
+                : $"有效條目：{total:N0}");
             sb.AppendLine();
 
             if (total > 0)
@@ -749,6 +759,14 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        // 取消訂閱所有 GameService 事件，防止 ViewModel 被 Service 持有引用而無法被 GC
+        gameService.GameMessage -= OnGameMessage;
+        gameService.ThinkingProgress -= OnThinkingProgress;
+        gameService.HintReady -= OnHintReady;
+        gameService.BoardUpdated -= OnBoardUpdated;
+        gameService.DrawOffered -= OnDrawOffered;
+        gameService.DrawOfferResolved -= OnDrawOfferResolved;
+
         ttExplorerTimer.Stop();
         ttExplorerTimer.Dispose();
     }

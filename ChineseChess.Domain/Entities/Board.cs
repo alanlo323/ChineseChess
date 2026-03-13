@@ -2,6 +2,7 @@ using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 
@@ -214,6 +215,8 @@ public class Board : IBoard
     public void UnmakeNullMove()
     {
         if (history.Count == 0) throw new InvalidOperationException("No history to undo.");
+        // 確保彈出的狀態確實是 NullMove，防止呼叫順序錯誤導致棋盤狀態損壞
+        Debug.Assert(history.Peek().IsNullMove, "UnmakeNullMove 被呼叫但最後一筆歷史不是 NullMove");
         history.Pop();
 
         zobristKey ^= ZobristHash.SideToMoveKey;

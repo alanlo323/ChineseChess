@@ -2,6 +2,7 @@ using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.WPF.Core;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -150,7 +151,7 @@ public class SquareViewModel : ObservableObject
     }
 }
 
-public class ChessBoardViewModel : ObservableObject
+public class ChessBoardViewModel : ObservableObject, IDisposable
 {
     private readonly IGameService gameService;
     private SquareViewModel? selectedSquare;
@@ -262,60 +263,70 @@ public class ChessBoardViewModel : ObservableObject
 
     private async void OnSquareClick(object? param)
     {
-        if (param is not SquareViewModel square) return;
-        if (gameService.IsThinking) return;
-
-        if (selectedSquare == null)
+        try
         {
-            // 選取目前行棋方的棋子
-            if (!square.Piece.IsNone && square.Piece.Color == gameService.CurrentBoard.Turn)
-            {
-                ClearMoveHighlights();
-                ClearSmartHintHighlights();
-                selectedSquare = square;
-                square.IsSelected = true;
-                HighlightLegalMoves(square.Index);
-                await gameService.RequestSmartHintAsync(square.Index);
-            }
-        }
-        else
-        {
-            // 移動或取消選取
-            if (square == selectedSquare)
-            {
-                selectedSquare.IsSelected = false;
-                selectedSquare = null;
-                ClearMoveHighlights();
-                ClearSmartHintHighlights();
-                return;
-            }
+            if (param is not SquareViewModel square) return;
+            if (gameService.IsThinking) return;
 
-            // 嘗試移動
-            if (square.Piece.Color == gameService.CurrentBoard.Turn)
+            if (selectedSquare == null)
             {
-                // 切換選取
-                selectedSquare.IsSelected = false;
-                ClearMoveHighlights();
-                ClearSmartHintHighlights();
-
-                selectedSquare = square;
-                square.IsSelected = true;
-                HighlightLegalMoves(square.Index);
-                await gameService.RequestSmartHintAsync(square.Index);
+                // 選取目前行棋方的棋子
+                if (!square.Piece.IsNone && square.Piece.Color == gameService.CurrentBoard.Turn)
+                {
+                    ClearMoveHighlights();
+                    ClearSmartHintHighlights();
+                    selectedSquare = square;
+                    square.IsSelected = true;
+                    HighlightLegalMoves(square.Index);
+                    await gameService.RequestSmartHintAsync(square.Index);
+                }
             }
             else
             {
-                // 移動到空位或吃子
-                var from = selectedSquare.Index;
-                var move = new Move(from, square.Index);
+                // 移動或取消選取
+                if (square == selectedSquare)
+                {
+                    selectedSquare.IsSelected = false;
+                    selectedSquare = null;
+                    ClearMoveHighlights();
+                    ClearSmartHintHighlights();
+                    return;
+                }
 
-                ClearMoveHighlights();
-                ClearSmartHintHighlights();
-                selectedSquare.IsSelected = false;
-                selectedSquare = null;
+                // 嘗試移動
+                if (square.Piece.Color == gameService.CurrentBoard.Turn)
+                {
+                    // 切換選取
+                    selectedSquare.IsSelected = false;
+                    ClearMoveHighlights();
+                    ClearSmartHintHighlights();
 
-                await gameService.HumanMoveAsync(move);
+                    selectedSquare = square;
+                    square.IsSelected = true;
+                    HighlightLegalMoves(square.Index);
+                    await gameService.RequestSmartHintAsync(square.Index);
+                }
+                else
+                {
+                    // 移動到空位或吃子
+                    var from = selectedSquare.Index;
+                    var move = new Move(from, square.Index);
+
+                    ClearMoveHighlights();
+                    ClearSmartHintHighlights();
+                    selectedSquare.IsSelected = false;
+                    selectedSquare = null;
+
+                    await gameService.HumanMoveAsync(move);
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            // async void 中的未處理例外會導致應用程式崩潰，在此統一攔截並顯示訊息
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                System.Windows.MessageBox.Show($"操作時發生錯誤：{ex.Message}", "錯誤",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error));
         }
     }
 
@@ -427,5 +438,13 @@ public class ChessBoardViewModel : ObservableObject
         {
             Squares[move.To].IsValidMove = true;
         }
+    }
+
+    public void Dispose()
+    {
+        // 取消訂閱 GameService 事件，防止 ViewModel 因事件持有而無法被 GC
+        gameService.BoardUpdated -= OnBoardUpdated;
+        gameService.HintReady -= OnHintReady;
+        gameService.SmartHintReady -= OnSmartHintReady;
     }
 }
