@@ -51,7 +51,11 @@ public class SearchEngine : IAiEngine
             int threadCount = Math.Clamp(settings.ThreadCount, 1, 128);
             tt.NewGeneration();
             tt.TryAutoResize(); // 碰撞率過高時自動擴容（僅在搜尋開始前呼叫，確保 thread-safe）
-            var pauseSignal = settings.PauseSignal ?? new ManualResetEventSlim(true);
+            // 若呼叫端未提供 PauseSignal，則本地建立並負責 Dispose
+            ManualResetEventSlim? ownedPauseSignal = settings.PauseSignal == null
+                ? new ManualResetEventSlim(true)
+                : null;
+            var pauseSignal = settings.PauseSignal ?? ownedPauseSignal!;
 
             // 用獨立的 timeLimitCts 管理思考時間，讓監控任務依「實際搜尋時間」取消
             // 暫停期間不計入 time limit，恢復後繼續剩餘思考時間
@@ -288,6 +292,8 @@ public class SearchEngine : IAiEngine
                     heartbeatTimer.Stop();
                     heartbeatTimer.Dispose();
                 }
+
+                ownedPauseSignal?.Dispose();
             }
 
             result.Nodes = GetTotalNodes();
@@ -425,31 +431,29 @@ public class SearchEngine : IAiEngine
     public Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        if (asJson)
+        // 使用 Task.Run 避免大型 TT 的同步 I/O（BrotliStream/BinaryWriter）阻塞呼叫端執行緒
+        return Task.Run(() =>
         {
-            tt.ExportToJson(output);
-        }
-        else
-        {
-            tt.ExportToBinary(output);
-        }
-
-        return Task.CompletedTask;
+            ct.ThrowIfCancellationRequested();
+            if (asJson)
+                tt.ExportToJson(output);
+            else
+                tt.ExportToBinary(output);
+        }, ct);
     }
 
     public Task ImportTranspositionTableAsync(Stream input, bool asJson, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        if (asJson)
+        // 使用 Task.Run 避免大型 TT 的同步 I/O（BrotliStream/BinaryReader）阻塞呼叫端執行緒
+        return Task.Run(() =>
         {
-            tt.ImportFromJson(input);
-        }
-        else
-        {
-            tt.ImportFromBinary(input);
-        }
-
-        return Task.CompletedTask;
+            ct.ThrowIfCancellationRequested();
+            if (asJson)
+                tt.ImportFromJson(input);
+            else
+                tt.ImportFromBinary(input);
+        }, ct);
     }
 
     public TTStatistics GetTTStatistics() => tt.GetStatistics();

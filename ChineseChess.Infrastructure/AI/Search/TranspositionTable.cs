@@ -97,6 +97,8 @@ public class TranspositionTable
     /// </summary>
     public TranspositionTable Clone()
     {
+        if (size > (ulong)int.MaxValue)
+            throw new InvalidOperationException($"TT 過大無法複製：{size} 個條目超過 int 上限。");
         var clone = new TranspositionTable(size);
         System.Array.Copy(keys, clone.keys, (int)size);
         System.Array.Copy(data, clone.data, (int)size);
@@ -414,6 +416,8 @@ public class TranspositionTable
         using var brotli = new BrotliStream(output, CompressionLevel.Optimal, leaveOpen: true);
         using var bw = new BinaryWriter(brotli, System.Text.Encoding.UTF8, leaveOpen: true);
 
+        if (size > (ulong)int.MaxValue)
+            throw new InvalidOperationException($"TT 過大無法匯出：{size} 個條目超過 int 上限。");
         int tableSize = (int)size;
 
         // Col 0：完整 zobrist key（0 = 空槽，隨機資料欄分離可減少其他欄的干擾）

@@ -178,10 +178,9 @@ public class Board : IBoard
 
     public void UndoMove()
     {
-        if (history.Count > 0)
-        {
-            UnmakeMove(history.Peek().Move);
-        }
+        // 直接呼叫 UnmakeMove，若歷史為空則由 UnmakeMove 拋出 InvalidOperationException，
+        // 行為與 UnmakeMove 一致（呼叫端應先用 TryGetLastMove 確認可悔棋）
+        UnmakeMove(history.Peek().Move);
     }
 
     public bool TryGetLastMove(out Move move)
@@ -298,7 +297,11 @@ public class Board : IBoard
         // 記錄解析後局面的 Key 為起始點（和棋判定用）
         zobristHistory.Add(zobristKey);
 
-        // TODO：解析著法時計數（move clocks / counters）
+        // 解析 halfMoveClock（第 5 個欄位，索引 4）
+        if (parts.Length >= 5 && int.TryParse(parts[4], out int parsedHalfMove) && parsedHalfMove >= 0)
+        {
+            halfMoveClock = parsedHalfMove;
+        }
     }
 
     public string ToFen()
@@ -329,7 +332,7 @@ public class Board : IBoard
         }
         
         sb.Append(turn == PieceColor.Red ? " w" : " b");
-        sb.Append(" - - 0 1"); // 暫存計數器（原本以便用於後續欄位）
+        sb.Append($" - - {halfMoveClock} 1");
         return sb.ToString();
     }
 

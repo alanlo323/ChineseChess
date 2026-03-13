@@ -19,7 +19,7 @@ using System.Windows.Input;
 
 namespace ChineseChess.WPF.ViewModels;
 
-public class ControlPanelViewModel : ObservableObject
+public class ControlPanelViewModel : ObservableObject, IDisposable
 {
     private readonly IGameService gameService;
     private GameMode selectedMode = GameMode.PlayerVsAi;
@@ -745,5 +745,11 @@ public class ControlPanelViewModel : ObservableObject
             < 0 => score.ToString(),
             _ => "0"
         };
+    }
+
+    public void Dispose()
+    {
+        ttExplorerTimer.Stop();
+        ttExplorerTimer.Dispose();
     }
 }

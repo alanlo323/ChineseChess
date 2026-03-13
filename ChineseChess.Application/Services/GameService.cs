@@ -22,7 +22,7 @@ public class GameService : IGameService
     private readonly BookmarkManager bookmarkManager;
     private Board board;
     private GameMode currentMode;
-    private bool isThinking;
+    private volatile bool isThinking;
     private SearchSettings redAiSettings  = new SearchSettings();
     private SearchSettings blackAiSettings = new SearchSettings();
     private CancellationTokenSource? aiCts;
@@ -76,6 +76,11 @@ public class GameService : IGameService
         currentMode = mode;
         aiCts?.Cancel();
         aiPauseSignal.Set();
+        // 等待舊的 AI 搜尋任務完全結束後再重置棋盤，避免新舊任務並存的競爭條件
+        while (isThinking)
+        {
+            await Task.Delay(10);
+        }
         board = new Board(); // 重置為標準初始局
         ClearLatestHint();
         isGameOver = false;
@@ -312,8 +317,8 @@ public class GameService : IGameService
         isThinking = true;
         ThinkingProgress?.Invoke("AI 思考中...");
 
-        aiCts = new CancellationTokenSource();
-        var cts = aiCts;
+        var cts = new CancellationTokenSource();
+        aiCts = cts;
         var boardSnapshot = board.Clone();
         SearchResult? result = null;
         var continueAiLoop = false;
@@ -411,6 +416,9 @@ public class GameService : IGameService
             {
                 NotifyUpdate();
             }
+            // 先清除 field 再 dispose，防止外部在 dispose 後呼叫 Cancel 拋出 ObjectDisposedException
+            if (ReferenceEquals(aiCts, cts)) aiCts = null;
+            cts.Dispose();
         }
 
         if (continueAiLoop)
@@ -532,9 +540,9 @@ public class GameService : IGameService
             {
                 boardAtNode.MakeMove(node.MoveToHere);
             }
-            catch
+            catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException)
             {
-                // ignore move application failure and keep boardAtNode unchanged
+                // 過期或碰撞的 TT 條目，走法在當前局面非法，維持 boardAtNode 不變
             }
         }
 
@@ -835,8 +843,8 @@ public class GameService : IGameService
             return new SearchResult { BestMove = Move.Null };
         }
 
-        StoreLatestHint(result, board);
-        return result ?? new SearchResult { BestMove = Move.Null };
+        // StoreLatestHint 已在 RunAiSearchAsync 的 else 分支呼叫，此處無需重複呼叫
+        return result;
     }
 
     private void StoreLatestHint(SearchResult hint, IBoard sourceBoard)
@@ -910,9 +918,11 @@ public class GameService : IGameService
     {
         if (!IsSmartHintEnabled) return;
 
-        // 取消上一次尚未完成的智能提示搜尋
-        smartHintCts?.Cancel();
+        // 取消並釋放上一次尚未完成的智能提示搜尋
+        var prevSmartHintCts = smartHintCts;
         smartHintCts = new CancellationTokenSource();
+        prevSmartHintCts?.Cancel();
+        prevSmartHintCts?.Dispose();
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, smartHintCts.Token);
 
         try

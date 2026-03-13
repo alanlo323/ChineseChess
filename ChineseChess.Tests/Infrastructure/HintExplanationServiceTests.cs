@@ -215,7 +215,8 @@ public class HintExplanationServiceTests
             MaxTokens = 256
         };
 
-        var progressResults = new List<string>();
+        // 使用同步的 RecordingProgress 而非 Progress<T>，避免執行緒池非同步回呼與斷言競爭
+        var progress = new RecordingProgress();
         using var httpClient = new HttpClient(new CapturingHandler(_ =>
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -240,15 +241,12 @@ public class HintExplanationServiceTests
             BestMoveNotation = "車一進一"
         };
 
-        var explanation = await service.ExplainAsync(
-            request,
-            new Progress<string>(text => progressResults.Add(text)),
-            CancellationToken.None);
+        var explanation = await service.ExplainAsync(request, progress, CancellationToken.None);
 
         Assert.Equal("先步", explanation);
-        Assert.NotEmpty(progressResults);
-        Assert.Contains(progressResults, text => text.Contains("（已輸出總Token：34，推理：12）"));
-        Assert.Contains(progressResults, text => text.Contains("（已輸出總Token：68，推理：20）"));
+        Assert.NotEmpty(progress.Items);
+        Assert.Contains(progress.Items, text => text.Contains("（已輸出總Token：34，推理：12）"));
+        Assert.Contains(progress.Items, text => text.Contains("（已輸出總Token：68，推理：20）"));
     }
 
     [Fact]
