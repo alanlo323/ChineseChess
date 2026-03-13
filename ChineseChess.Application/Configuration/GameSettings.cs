@@ -18,7 +18,7 @@ public class GameSettings
     public int BlackSearchThinkingTimeSeconds { get; set; } = 3;
 
     // ─── TT 設定 ─────────────────────────────────────────────────────────
-    public bool UseSharedTranspositionTable { get; set; } = false;
+    public bool UseSharedTranspositionTable { get; set; } = true;
     public int TranspositionTableSizeMb { get; set; } = 128;
 
     // ─── 智能提示 ─────────────────────────────────────────────────────────

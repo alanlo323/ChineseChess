@@ -76,7 +76,7 @@ public interface IGameService
     void SetRedAiDifficulty(int depth, int timeMs, int threadCount = 0);
     void SetBlackAiDifficulty(int depth, int timeMs, int threadCount = 0);
 
-    // TT 共用/獨立模式（預設 false = 獨立，開局時從紅方 TT 複製一份）
+    // TT 共用/獨立模式（預設 true = 共用，開局時直接共用紅方 TT）
     bool UseSharedTranspositionTable { get; set; }
 
     Task<SearchResult> GetHintAsync(); // 取得目前局面的分析結果

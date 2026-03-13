@@ -43,7 +43,7 @@ public class GameService : IGameService, IDisposable
     public int SmartHintDepth { get; set; } = 2;
     public long LastSearchNodes => Interlocked.Read(ref lastSearchNodes);
     public long LastSearchNps => Interlocked.Read(ref lastSearchNps);
-    public bool UseSharedTranspositionTable { get; set; } = false;
+    public bool UseSharedTranspositionTable { get; set; } = true;
     private long lastSearchNodes;
     private long lastSearchNps;
     private long completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
