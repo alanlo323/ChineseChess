@@ -19,6 +19,7 @@ public class GameSettings
 
     // ─── TT 設定 ─────────────────────────────────────────────────────────
     public bool UseSharedTranspositionTable { get; set; } = true;
+    public bool CopyRedTtToBlackAtStart { get; set; } = true;
     public int TranspositionTableSizeMb { get; set; } = 128;
 
     // ─── 智能提示 ─────────────────────────────────────────────────────────

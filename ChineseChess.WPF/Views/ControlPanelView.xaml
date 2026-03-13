@@ -255,6 +255,11 @@
                                       IsChecked="{Binding UseSharedTT}"
                                       Foreground="{StaticResource InkBrush}"
                                       Margin="0,4,0,0" />
+                            <CheckBox Content="獨立 TT 模式時，黑方開局複製紅方 TT"
+                                      IsChecked="{Binding CopyRedTtToBlackAtStart}"
+                                      Visibility="{Binding ShowDualTTStats, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                      Foreground="{StaticResource InkBrush}"
+                                      Margin="0,4,0,0" />
                         </StackPanel>
 
                         <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />

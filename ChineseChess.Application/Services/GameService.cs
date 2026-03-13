@@ -44,6 +44,7 @@ public class GameService : IGameService, IDisposable
     public long LastSearchNodes => Interlocked.Read(ref lastSearchNodes);
     public long LastSearchNps => Interlocked.Read(ref lastSearchNps);
     public bool UseSharedTranspositionTable { get; set; } = true;
+    public bool CopyRedTtToBlackAtStart { get; set; } = true;
     private long lastSearchNodes;
     private long lastSearchNps;
     private long completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
@@ -102,8 +103,10 @@ public class GameService : IGameService, IDisposable
         if (currentMode == GameMode.AiVsAi)
         {
             aiEngineBlack = UseSharedTranspositionTable
-                ? null                           // 共用：直接用 aiEngine
-                : aiEngine.CloneWithCopiedTT(); // 獨立：從紅方 TT 複製一份
+                ? null                                     // Shared: reuse red engine
+                : (CopyRedTtToBlackAtStart
+                    ? aiEngine.CloneWithCopiedTT()          // Independent: initialize with red TT snapshot
+                    : aiEngine.CloneWithEmptyTT());         // Independent: initialize with empty TT
         }
         else
         {

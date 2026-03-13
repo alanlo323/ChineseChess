@@ -465,6 +465,9 @@ public class SearchEngine : IAiEngine
     public IAiEngine CloneWithCopiedTT() => new SearchEngine(tt.Clone());
 
     /// <inheritdoc/>
+    public IAiEngine CloneWithEmptyTT() => new SearchEngine(new TranspositionTable(tt.GetStatistics().Capacity));
+
+    /// <inheritdoc/>
     public void MergeTranspositionTableFrom(IAiEngine other)
     {
         if (other is SearchEngine otherEngine)

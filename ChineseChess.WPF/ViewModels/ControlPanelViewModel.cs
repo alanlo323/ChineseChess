@@ -31,6 +31,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private int blackSearchDepth;
     private int blackSearchThinkingTime;
     private bool useSharedTT;
+    private bool copyRedTtToBlackAtStart;
     private bool isSmartHintEnabled;
     private int smartHintDepth;
     private string hintExplanationText = "（尚未產生提示）";
@@ -166,6 +167,18 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         }
     }
 
+    public bool CopyRedTtToBlackAtStart
+    {
+        get => copyRedTtToBlackAtStart;
+        set
+        {
+            if (SetProperty(ref copyRedTtToBlackAtStart, value))
+            {
+                gameService.CopyRedTtToBlackAtStart = value;
+            }
+        }
+    }
+
     // 獨立TT且AI對AI模式才顯示雙欄統計
     public bool ShowDualTTStats => IsAiVsAiMode && !useSharedTT;
 
@@ -272,12 +285,14 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         blackSearchDepth       = settings.BlackSearchDepth;
         blackSearchThinkingTime = settings.BlackSearchThinkingTimeSeconds;
         useSharedTT            = settings.UseSharedTranspositionTable;
+        copyRedTtToBlackAtStart = settings.CopyRedTtToBlackAtStart;
         isSmartHintEnabled     = settings.IsSmartHintEnabled;
         smartHintDepth         = settings.SmartHintDepth;
 
         this.gameService.IsSmartHintEnabled = isSmartHintEnabled;
         this.gameService.SmartHintDepth     = smartHintDepth;
         this.gameService.UseSharedTranspositionTable = useSharedTT;
+        this.gameService.CopyRedTtToBlackAtStart   = copyRedTtToBlackAtStart;
 
         RefreshTTStatsCommand = new RelayCommand(_ => RefreshTTStats());
         StartGameCommand = new RelayCommand(async _ => await gameService.StartGameAsync(SelectedMode));

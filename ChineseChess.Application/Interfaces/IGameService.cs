@@ -76,8 +76,10 @@ public interface IGameService
     void SetRedAiDifficulty(int depth, int timeMs, int threadCount = 0);
     void SetBlackAiDifficulty(int depth, int timeMs, int threadCount = 0);
 
-    // TT 共用/獨立模式（預設 true = 共用，開局時直接共用紅方 TT）
+    // TT shared/independent mode (default true = shared).
     bool UseSharedTranspositionTable { get; set; }
+    // Independent TT mode: whether black engine should copy red TT at game start.
+    bool CopyRedTtToBlackAtStart { get; set; }
 
     Task<SearchResult> GetHintAsync(); // 取得目前局面的分析結果
     Task<string> ExplainLatestHintAsync(IProgress<string>? progress = null, CancellationToken ct = default); // 解釋最新提示

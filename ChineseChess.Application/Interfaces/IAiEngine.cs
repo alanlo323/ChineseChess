@@ -100,6 +100,9 @@ public interface IAiEngine
     /// <summary>建立一個新引擎，其 TT 為本引擎 TT 的深度複製（獨立 TT 模式用）。</summary>
     IAiEngine CloneWithCopiedTT();
 
+    /// <summary>建立一個新引擎，其 TT 與本引擎同大小但為空白（獨立 TT 模式可選）。</summary>
+    IAiEngine CloneWithEmptyTT();
+
     /// <summary>將 <paramref name="other"/> 引擎的 TT 以深度優先策略合併進本引擎的 TT。</summary>
     void MergeTranspositionTableFrom(IAiEngine other);
 
