@@ -10,7 +10,9 @@
       "Bash(dotnet run:*)",
       "Bash(dotnet list:*)",
       "Bash(dotnet add:*)",
-      "Bash(npx ecc-agentshield:*)"
+      "Bash(npx ecc-agentshield:*)",
+      "Bash(find:*)",
+      "Bash(cd:*)"
     ]
   },
   "outputStyle": "Explanatory"

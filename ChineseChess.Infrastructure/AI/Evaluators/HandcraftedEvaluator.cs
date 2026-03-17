@@ -133,6 +133,36 @@ public class HandcraftedEvaluator : IEvaluator
     }
 
     /// <summary>
+    /// 快速評估：只含 Material + PST（含 GamePhase 插值）。
+    /// 跳過王安全、機動力、兵型、炮威脅、馬腳封堵、車壓制、棋子協同、空間控制。
+    /// </summary>
+    public int EvaluateFast(IBoard board)
+    {
+        int phase = GamePhase.Calculate(board);
+        int score = 0;
+
+        for (int i = 0; i < BoardSize; i++)
+        {
+            var p = board.GetPiece(i);
+            if (p.IsNone) continue;
+
+            int sign = p.Color == PieceColor.Red ? 1 : -1;
+
+            // 材料分
+            score += sign * PieceValues[(int)p.Type];
+
+            // PST（位置分）：根據棋局相位插值
+            int pstFull = PieceSquareTables.GetScore(p.Type, p.Color, i);
+            int pstHalf = pstFull / 2;
+            int pstValue = GamePhase.Interpolate(pstFull, pstHalf, phase);
+            score += sign * pstValue;
+        }
+
+        // 以輪到行動的一方為觀點回傳分數
+        return board.Turn == PieceColor.Red ? score : -score;
+    }
+
+    /// <summary>
     /// 計算馬在 <paramref name="horseIndex"/> 位置被封堵的腳位數量。
     /// 馬的四個腳位為：上(r-1,c)、下(r+1,c)、左(r,c-1)、右(r,c+1)。
     /// 任何棋子（友方或敵方）佔據腳位均視為封堵。

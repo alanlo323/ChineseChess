@@ -66,6 +66,13 @@ public class GameService : IGameService, IDisposable
     public bool IsOpeningBookLoaded => openingBook?.IsLoaded ?? false;
     public int OpeningBookEntryCount => openingBook?.EntryCount ?? 0;
 
+    // ─── 棋鐘（限時模式） ──────────────────────────────────────────────────
+    /// <summary>
+    /// 棋鐘實例。僅限時模式啟動時有值（TimedGameSettings.IsEnabled = true），
+    /// 非限時模式下為 null。
+    /// </summary>
+    public IGameClock? Clock { get; private set; }
+
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
     public event Action<SearchResult>? HintReady;

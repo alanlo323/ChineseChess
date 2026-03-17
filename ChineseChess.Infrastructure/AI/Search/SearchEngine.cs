@@ -21,6 +21,11 @@ public class SearchEngine : IAiEngine
 
     private const int HeartbeatIntervalMs = 100;
 
+    // Aspiration Window 相關常數
+    private const int AspWindowDelta = 50;          // 初始窗口半寬
+    private const int AspWindowExpansionFactor = 4; // 重試時窗口擴大倍數
+    private const int AspWindowMaxRetries = 2;       // 最大重試次數（超過後回退全窗口）
+
     private sealed class SearchProgressState
     {
         public int CurrentDepth;
@@ -202,8 +207,10 @@ public class SearchEngine : IAiEngine
             }
 
             // 啟動「有效時間監控」任務：只在 AI 實際搜尋時計時，暫停時凍結倒數
+            // 監控 HardTimeLimitMs（向下相容：若未設定則用 TimeLimitMs）
+            int effectiveHardLimitMs = settings.EffectiveHardLimitMs;
             Task? timeLimitMonitor = null;
-            if (settings.TimeLimitMs > 0)
+            if (effectiveHardLimitMs > 0)
             {
                 if (!pauseSignal.IsSet)
                 {
@@ -228,7 +235,7 @@ public class SearchEngine : IAiEngine
                                 continue;
                             }
 
-                            if (GetActiveElapsedMs() >= settings.TimeLimitMs)
+                            if (GetActiveElapsedMs() >= effectiveHardLimitMs)
                             {
                                 timeLimitCts.Cancel();
                                 return;
@@ -246,6 +253,8 @@ public class SearchEngine : IAiEngine
 
             try
             {
+                int prevScore = 0;
+
                 for (int depth = 1; depth <= settings.Depth; depth++)
                 {
                     if (token.IsCancellationRequested)
@@ -253,7 +262,64 @@ public class SearchEngine : IAiEngine
                         break;
                     }
 
-                    int score = mainWorker.SearchSingleDepth(depth);
+                    int score;
+
+                    // Aspiration Window：depth=1 使用全窗口，depth>=2 使用縮小窗口
+                    if (depth == 1)
+                    {
+                        score = mainWorker.SearchSingleDepth(depth, -SearchWorker.InfinityValue, SearchWorker.InfinityValue);
+                    }
+                    else
+                    {
+                        // 以上一層分數為中心建立縮小窗口
+                        int delta = AspWindowDelta;
+                        int alpha = prevScore - delta;
+                        int beta = prevScore + delta;
+                        int retries = 0;
+                        score = prevScore; // 預設保留上一層結果
+
+                        while (true)
+                        {
+                            if (token.IsCancellationRequested) break;
+
+                            int candidate = mainWorker.SearchSingleDepth(depth, alpha, beta);
+
+                            if (candidate <= alpha)
+                            {
+                                // Fail-low：分數低於下界，擴大下界後重試
+                                if (retries >= AspWindowMaxRetries)
+                                {
+                                    // 超過重試上限，回退全窗口
+                                    score = mainWorker.SearchSingleDepth(depth, -SearchWorker.InfinityValue, SearchWorker.InfinityValue);
+                                    break;
+                                }
+                                delta *= AspWindowExpansionFactor;
+                                alpha = prevScore - delta;
+                                retries++;
+                            }
+                            else if (candidate >= beta)
+                            {
+                                // Fail-high：分數高於上界，擴大上界後重試
+                                if (retries >= AspWindowMaxRetries)
+                                {
+                                    // 超過重試上限，回退全窗口
+                                    score = mainWorker.SearchSingleDepth(depth, -SearchWorker.InfinityValue, SearchWorker.InfinityValue);
+                                    break;
+                                }
+                                delta *= AspWindowExpansionFactor;
+                                beta = prevScore + delta;
+                                retries++;
+                            }
+                            else
+                            {
+                                // 搜尋成功（分數在窗口內）
+                                score = candidate;
+                                break;
+                            }
+                        }
+                    }
+
+                    prevScore = score;
 
                     var bestMove = mainWorker.ProbeBestMove();
 
@@ -276,6 +342,13 @@ public class SearchEngine : IAiEngine
                     }
 
                     ReportProgress(false, depth, score, bestMoveNotation, bestMoveFromIdx, bestMoveToIdx);
+
+                    // Soft 時限檢查：每完成一整層後才檢查（不在重搜期間截斷）
+                    if (settings.SoftTimeLimitMs.HasValue
+                        && GetActiveElapsedMs() >= settings.SoftTimeLimitMs.Value)
+                    {
+                        break;
+                    }
                 }
             }
             catch (OperationCanceledException)

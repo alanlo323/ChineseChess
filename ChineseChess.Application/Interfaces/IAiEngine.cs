@@ -40,9 +40,27 @@ public class SearchResult
 public class SearchSettings
 {
     public int Depth { get; set; } = 5;
+    /// <summary>
+    /// 原有時間限制（毫秒）。向下相容：若未設定 HardTimeLimitMs，則以此值作為硬時限。
+    /// </summary>
     public int TimeLimitMs { get; set; } = 3000;
+    /// <summary>
+    /// 軟時限（毫秒）：在完成每一整層後檢查是否超過此時限。
+    /// null 表示不使用軟時限（僅靠 Depth 上限或 HardTimeLimitMs 停止）。
+    /// </summary>
+    public int? SoftTimeLimitMs { get; set; } = null;
+    /// <summary>
+    /// 硬時限（毫秒）：到達時強制中途取消搜尋。
+    /// null 表示採用 TimeLimitMs（向下相容）。
+    /// </summary>
+    public int? HardTimeLimitMs { get; set; } = null;
     public int ThreadCount { get; set; } = Environment.ProcessorCount;
     public ManualResetEventSlim? PauseSignal { get; set; } = null;
+
+    /// <summary>
+    /// 取得實際硬時限（毫秒）：HardTimeLimitMs ?? TimeLimitMs（向下相容）。
+    /// </summary>
+    public int EffectiveHardLimitMs => HardTimeLimitMs ?? TimeLimitMs;
 }
 
 public class MoveEvaluation

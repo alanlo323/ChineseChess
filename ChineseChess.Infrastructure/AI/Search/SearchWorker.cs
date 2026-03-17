@@ -35,6 +35,10 @@ internal sealed class SearchWorker
     internal int effectiveMaxPly = MaxSearchPly;
 
     private const int Infinity = 30000;
+    // 公開 Infinity 值，供 SearchEngine 使用（Aspiration Window 回退全窗口）
+    internal const int InfinityValue = Infinity;
+    // Lazy Evaluation：EvaluateFast 與 Evaluate 的允許差距邊際
+    private const int LazyMargin = 200;
     private const int MateScore = 20000;
     private const int QuiescenceMaxPly = 8;
     private const int MaxSearchPly = 128;
@@ -42,6 +46,8 @@ internal sealed class SearchWorker
     private const int SafeCaptureBonus = 1_500;
     private const int GuardedCapturePenaltyMultiplier = 12;
     private const int HighValueTacticalThreshold = 270;
+    // IIR：Internal Iterative Reduction 相關常數
+    private const int IirMinDepth = 4;                  // 觸發 IIR 的最小搜尋深度
     // SE：奇異延伸相關常數
     private const int SingularExtensionMinDepth = 6;   // 觸發 SE 的最小搜尋深度
     private const int SingularMargin = 2;               // 排除搜尋的分數邊際（sBeta = ttScore - SingularMargin * depth）
@@ -83,6 +89,11 @@ internal sealed class SearchWorker
 
         try
         {
+            int prevScore = 0;
+            const int helperAspDelta = 50;
+            const int helperAspExpansion = 4;
+            const int helperAspMaxRetries = 2;
+
             for (int depth = 1; depth <= targetDepth; depth++)
             {
                 CheckPauseOrCancellation();
@@ -91,7 +102,57 @@ internal sealed class SearchWorker
                 // H2a：每輪迭代加深開始前衰減歷史表，讓舊資訊逐漸淡出
                 if (depth > 1) DecayHistory();
 
-                int score = Negamax(depth, 0, -Infinity, Infinity, false);
+                int score;
+
+                // Aspiration Window：depth=1 全窗口，depth>=2 縮小窗口
+                if (depth == 1)
+                {
+                    score = Negamax(depth, 0, -Infinity, Infinity, false);
+                }
+                else
+                {
+                    int delta = helperAspDelta;
+                    int alpha = prevScore - delta;
+                    int beta = prevScore + delta;
+                    int retries = 0;
+                    score = prevScore;
+
+                    while (true)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        int candidate = Negamax(depth, 0, alpha, beta, false);
+
+                        if (candidate <= alpha)
+                        {
+                            if (retries >= helperAspMaxRetries)
+                            {
+                                score = Negamax(depth, 0, -Infinity, Infinity, false);
+                                break;
+                            }
+                            delta *= helperAspExpansion;
+                            alpha = prevScore - delta;
+                            retries++;
+                        }
+                        else if (candidate >= beta)
+                        {
+                            if (retries >= helperAspMaxRetries)
+                            {
+                                score = Negamax(depth, 0, -Infinity, Infinity, false);
+                                break;
+                            }
+                            delta *= helperAspExpansion;
+                            beta = prevScore + delta;
+                            retries++;
+                        }
+                        else
+                        {
+                            score = candidate;
+                            break;
+                        }
+                    }
+                }
+
+                prevScore = score;
 
                 var bestMove = Move.Null;
                 if (tt.Probe(board.ZobristKey, out var entry))
@@ -118,9 +179,15 @@ internal sealed class SearchWorker
     /// 由主 worker 的外部協調器逐深度驅動時使用。
     /// </summary>
     public int SearchSingleDepth(int depth)
+        => SearchSingleDepth(depth, -Infinity, Infinity);
+
+    /// <summary>
+    /// 搜尋單一深度，接受自訂 alpha/beta 窗口（用於 Aspiration Window）。
+    /// </summary>
+    public int SearchSingleDepth(int depth, int alpha, int beta)
     {
         CheckPauseOrCancellation();
-        return Negamax(depth, 0, -Infinity, Infinity, false);
+        return Negamax(depth, 0, alpha, beta, false);
     }
 
     public Move ProbeBestMove()
@@ -218,6 +285,13 @@ internal sealed class SearchWorker
             ttFlag = entry.Flag;
         }
 
+        // 1b. IIR（Internal Iterative Reduction）：
+        // TT 無命中 + depth 達門檻 + 非排除搜尋節點 → depth 減一，節省搜尋成本
+        if (ttMove.IsNull && depth >= IirMinDepth && excludedMove.IsNull)
+        {
+            depth -= 1;
+        }
+
         // 2. 和局早返（重覆局面 OR 無吃子超限）
         if (ply > 0 && (board.IsDrawByRepetition(threshold: 2) || board.IsDrawByNoCapture()))
         {
@@ -233,13 +307,23 @@ internal sealed class SearchWorker
         bool inCheck = board.IsCheck(board.Turn);
 
         // 3. Razor 剪枝（depth == 3，且不在將軍/非 PV）
+        // Lazy Evaluation：先以 EvaluateFast 預篩，再視需要呼叫完整 Evaluate
         if (depth == 3 && !inCheck && !isPvNode)
         {
-            int staticEval = evaluator.Evaluate(board);
-            if (staticEval + 900 <= alpha)
+            int fastEval = evaluator.EvaluateFast(board);
+            if (fastEval + 900 > alpha)
             {
-                int razorScore = Quiescence(alpha, beta, 0);
-                if (razorScore <= alpha) return alpha;
+                // 快速評估接近或超過 alpha，不剪枝（EvaluateFast 可能低估）
+            }
+            else
+            {
+                // EvaluateFast 遠低於 alpha，呼叫完整評估確認
+                int staticEval = evaluator.Evaluate(board);
+                if (staticEval + 900 <= alpha)
+                {
+                    int razorScore = Quiescence(alpha, beta, 0);
+                    if (razorScore <= alpha) return alpha;
+                }
             }
         }
 
@@ -254,13 +338,30 @@ internal sealed class SearchWorker
         }
 
         // 5. Futility 剪枝旗標
+        // Lazy Evaluation：先以 EvaluateFast 預篩，再視需要呼叫完整 Evaluate
         bool futilityPruning = false;
         if (depth <= 2 && !inCheck && !isPvNode)
         {
-            int staticEval = evaluator.Evaluate(board);
-            if (staticEval + FutilityMargins[depth] <= alpha)
+            int margin = FutilityMargins[depth];
+            int fastEval = evaluator.EvaluateFast(board);
+
+            if (fastEval + margin > alpha + LazyMargin)
             {
+                // 快速評估明顯超過 alpha + LazyMargin，不剪枝（不需要呼叫完整評估）
+            }
+            else if (fastEval + margin < alpha - LazyMargin)
+            {
+                // 快速評估明顯低於 alpha - LazyMargin，直接剪枝（不需要呼叫完整評估）
                 futilityPruning = true;
+            }
+            else
+            {
+                // 在邊界附近，呼叫完整評估判定
+                int staticEval = evaluator.Evaluate(board);
+                if (staticEval + margin <= alpha)
+                {
+                    futilityPruning = true;
+                }
             }
         }
 
