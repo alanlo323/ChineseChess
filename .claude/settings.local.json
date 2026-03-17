@@ -14,7 +14,8 @@
       "Bash(find:*)",
       "Bash(cd:*)",
       "Bash(xargs grep:*)",
-      "Bash(grep -h \"PackageReference\" \"/d/Git/ChineseChess\"/**/*.csproj)"
+      "Bash(grep -h \"PackageReference\" \"/d/Git/ChineseChess\"/**/*.csproj)",
+      "Bash(wc:*)"
     ]
   },
   "outputStyle": "Explanatory"

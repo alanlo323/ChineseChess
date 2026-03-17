@@ -73,8 +73,8 @@ public sealed class ExternalEngineAdapter : IAiEngine, IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError  = true,
             CreateNoWindow         = true,
-            StandardInputEncoding  = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8
+            StandardInputEncoding  = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
         };
 
         process = Process.Start(psi) ?? throw new InvalidOperationException($"無法啟動外部引擎：{executablePath}");
