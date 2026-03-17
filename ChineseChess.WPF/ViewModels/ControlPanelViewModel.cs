@@ -35,6 +35,11 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private bool copyRedTtToBlackAtStart;
     private bool isSmartHintEnabled;
     private int smartHintDepth;
+    private bool isTimedModeEnabled;
+    private int timedModeMinutesPerPlayer;
+    private string redTimeDisplay = "--:--";
+    private string blackTimeDisplay = "--:--";
+    private readonly System.Timers.Timer clockDisplayTimer;
     private string hintExplanationText = "（尚未產生提示）";
     private TTStatistics ttStats = new TTStatistics();
     private TTStatistics? blackTtStats = null;
@@ -218,6 +223,53 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ─── 限時模式 ─────────────────────────────────────────────────────────
+
+    public bool IsTimedModeEnabled
+    {
+        get => isTimedModeEnabled;
+        set
+        {
+            if (SetProperty(ref isTimedModeEnabled, value))
+            {
+                gameService.IsTimedModeEnabled = value;
+                OnPropertyChanged(nameof(IsTimedModeSettingsVisible));
+                OnPropertyChanged(nameof(IsTimeLimitControlVisible));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 是否顯示時間限制控制（限時模式下，由棋鐘管理時間，固定時限無意義）。
+    /// </summary>
+    public bool IsTimeLimitControlVisible => !isTimedModeEnabled;
+
+    public int TimedModeMinutesPerPlayer
+    {
+        get => timedModeMinutesPerPlayer;
+        set
+        {
+            if (SetProperty(ref timedModeMinutesPerPlayer, value))
+            {
+                gameService.TimedModeMinutesPerPlayer = value;
+            }
+        }
+    }
+
+    public bool IsTimedModeSettingsVisible => isTimedModeEnabled;
+
+    public string RedTimeDisplay
+    {
+        get => redTimeDisplay;
+        private set => SetProperty(ref redTimeDisplay, value);
+    }
+
+    public string BlackTimeDisplay
+    {
+        get => blackTimeDisplay;
+        private set => SetProperty(ref blackTimeDisplay, value);
+    }
+
     // ─── TT 統計（紅方 / 共用）────────────────────────────────────────────
 
     public string TtCapacity => $"{ttStats.Capacity:N0}";
@@ -323,11 +375,15 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         copyRedTtToBlackAtStart = settings.CopyRedTtToBlackAtStart;
         isSmartHintEnabled     = settings.IsSmartHintEnabled;
         smartHintDepth         = settings.SmartHintDepth;
+        isTimedModeEnabled     = settings.IsTimedModeEnabled;
+        timedModeMinutesPerPlayer = settings.TimedModeMinutesPerPlayer;
 
         this.gameService.IsSmartHintEnabled = isSmartHintEnabled;
         this.gameService.SmartHintDepth     = smartHintDepth;
         this.gameService.UseSharedTranspositionTable = useSharedTT;
         this.gameService.CopyRedTtToBlackAtStart   = copyRedTtToBlackAtStart;
+        this.gameService.IsTimedModeEnabled         = isTimedModeEnabled;
+        this.gameService.TimedModeMinutesPerPlayer  = timedModeMinutesPerPlayer;
 
         RefreshTTStatsCommand = new RelayCommand(_ => RefreshTTStats());
         StartGameCommand = new RelayCommand(async _ => await gameService.StartGameAsync(SelectedMode));
@@ -559,6 +615,12 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         ttExplorerTimer.AutoReset = true;
         ttExplorerTimer.Elapsed += (_, _) => ScheduleTTExplorerRefresh();
         ttExplorerTimer.Start();
+
+        // 棋鐘顯示計時器：每秒更新一次，顯示雙方剩餘時間
+        clockDisplayTimer = new System.Timers.Timer(500);
+        clockDisplayTimer.AutoReset = true;
+        clockDisplayTimer.Elapsed += (_, _) => UpdateClockDisplay();
+        clockDisplayTimer.Start();
 
         gameService.SetDifficulty(searchDepth, searchThinkingTime * 1000);
 
@@ -928,6 +990,44 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         };
     }
 
+    private void UpdateClockDisplay()
+    {
+        var clock = gameService.Clock;
+        string red, black;
+
+        if (clock == null)
+        {
+            red   = "--:--";
+            black = "--:--";
+        }
+        else
+        {
+            red   = FormatTime(clock.RedRemaining);
+            black = FormatTime(clock.BlackRemaining);
+        }
+
+        var app = global::System.Windows.Application.Current;
+        if (app == null)
+        {
+            RedTimeDisplay   = red;
+            BlackTimeDisplay = black;
+        }
+        else
+        {
+            app.Dispatcher.Invoke(() =>
+            {
+                RedTimeDisplay   = red;
+                BlackTimeDisplay = black;
+            });
+        }
+    }
+
+    private static string FormatTime(TimeSpan t)
+    {
+        if (t <= TimeSpan.Zero) return "00:00";
+        return $"{(int)t.TotalMinutes:D2}:{t.Seconds:D2}";
+    }
+
     public void Dispose()
     {
         // 取消訂閱所有 GameService 事件，防止 ViewModel 被 Service 持有引用而無法被 GC
@@ -946,5 +1046,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
         ttExplorerTimer.Stop();
         ttExplorerTimer.Dispose();
+        clockDisplayTimer.Stop();
+        clockDisplayTimer.Dispose();
     }
 }

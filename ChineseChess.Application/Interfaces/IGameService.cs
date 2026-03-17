@@ -101,6 +101,12 @@ public interface IGameService
     // Independent TT mode: whether black engine should copy red TT at game start.
     bool CopyRedTtToBlackAtStart { get; set; }
 
+    // ─── 限時模式 ─────────────────────────────────────────────────────────
+    bool IsTimedModeEnabled { get; set; }
+    int TimedModeMinutesPerPlayer { get; set; }
+    /// <summary>棋鐘實例。僅限時模式開局後有值，否則為 null。</summary>
+    IGameClock? Clock { get; }
+
     Task<SearchResult> GetHintAsync(); // 取得目前局面的分析結果
     Task<string> ExplainLatestHintAsync(IProgress<string>? progress = null, CancellationToken ct = default); // 解釋最新提示
     Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default); // 取得指定棋子的所有走法評分

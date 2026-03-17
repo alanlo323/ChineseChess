@@ -68,10 +68,15 @@ public class GameService : IGameService, IDisposable
 
     // ─── 棋鐘（限時模式） ──────────────────────────────────────────────────
     /// <summary>
-    /// 棋鐘實例。僅限時模式啟動時有值（TimedGameSettings.IsEnabled = true），
-    /// 非限時模式下為 null。
+    /// 棋鐘實例。僅限時模式啟動時有值，非限時模式下為 null。
     /// </summary>
     public IGameClock? Clock { get; private set; }
+
+    public bool IsTimedModeEnabled { get; set; } = false;
+    public int TimedModeMinutesPerPlayer { get; set; } = 10;
+
+    /// <summary>棋鐘 Tick 計時器：每秒觸發一次，驅動超時偵測。</summary>
+    private System.Threading.Timer? clockTickTimer;
 
     public event Action? BoardUpdated;
     public event Action<string>? GameMessage;
@@ -136,6 +141,22 @@ public class GameService : IGameService, IDisposable
             aiEngineBlack = null;
         }
 
+        // 棋鐘：限時模式才建立，非限時模式清除舊鐘
+        StopAndDisposeClock();
+        if (IsTimedModeEnabled)
+        {
+            var newClock = new GameClock(TimeSpan.FromMinutes(TimedModeMinutesPerPlayer));
+            newClock.OnTimeout += OnClockTimeout;
+            Clock = newClock;
+            Clock.Start(board.Turn);
+            // 每秒 Tick 一次以偵測超時
+            clockTickTimer = new System.Threading.Timer(
+                _ => Clock?.Tick(),
+                null,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(1));
+        }
+
         NotifyUpdate();
         GameMessage?.Invoke("Game Started");
 
@@ -154,6 +175,7 @@ public class GameService : IGameService, IDisposable
     {
         aiPauseSignal.Set();
         aiCts?.Cancel();
+        StopAndDisposeClock();
         ThinkingProgress?.Invoke("AI 思考已停止");
         return Task.CompletedTask;
     }
@@ -167,6 +189,7 @@ public class GameService : IGameService, IDisposable
         }
 
         aiPauseSignal.Reset();
+        Clock?.Pause();
         return Task.CompletedTask;
     }
 
@@ -179,6 +202,7 @@ public class GameService : IGameService, IDisposable
         }
 
         aiPauseSignal.Set();
+        Clock?.Resume();
         return Task.CompletedTask;
     }
 
@@ -331,6 +355,7 @@ public class GameService : IGameService, IDisposable
         }
 
         board.MakeMove(move);
+        Clock?.SwitchTurn();
         ClearLatestHint();
         NotifyUpdate();
 
@@ -370,6 +395,19 @@ public class GameService : IGameService, IDisposable
             ThreadCount = activeSettings.ThreadCount,
             PauseSignal = aiPauseSignal
         };
+
+        // 限時模式：純粹根據棋鐘剩餘時間計算 Soft/Hard 時限，不受固定時限設定影響
+        // Soft 觸發：完成整層後停止（不中途截斷），保證回傳有效最佳著法
+        // Hard 觸發：強制中途取消，防止超時
+        if (applyBestMove && IsTimedModeEnabled && Clock != null)
+        {
+            var remaining = board.Turn == PieceColor.Red ? Clock.RedRemaining : Clock.BlackRemaining;
+            var remainingMs = Math.Max(0, (int)remaining.TotalMilliseconds);
+            var (softMs, hardMs) = CalculateTimedModeBudget(remainingMs);
+            settings.SoftTimeLimitMs = softMs;
+            settings.HardTimeLimitMs = hardMs;
+        }
+
         long baseNodes = Interlocked.Read(ref completedGameNodes);
         var progress = new Progress<SearchProgress>(p =>
         {
@@ -428,6 +466,7 @@ public class GameService : IGameService, IDisposable
                     var searchTurn   = board.Turn;
                     var moveNotation = MoveNotation.ToNotation(result.BestMove, board);
                     board.MakeMove(result.BestMove);
+                    Clock?.SwitchTurn();
                     ClearLatestHint();
                     NotifyUpdate();
                     var moveSource = result.IsFromOpeningBook ? "開局庫" : "AI";
@@ -806,6 +845,7 @@ public class GameService : IGameService, IDisposable
         if (board.IsDrawByRepetition())
         {
             isGameOver = true;
+            StopAndDisposeClock();
             GameMessage?.Invoke("和棋！三次重覆局面");
             return true;
         }
@@ -814,6 +854,7 @@ public class GameService : IGameService, IDisposable
         if (board.IsDrawByNoCapture())
         {
             isGameOver = true;
+            StopAndDisposeClock();
             GameMessage?.Invoke("和棋！六十步無吃子");
             return true;
         }
@@ -822,6 +863,7 @@ public class GameService : IGameService, IDisposable
         if (board.GenerateLegalMoves().Any()) return false;
 
         isGameOver = true;
+        StopAndDisposeClock();
         var winner = currentTurn == PieceColor.Red ? "黑方" : "紅方";
         if (board.IsCheck(currentTurn))
             GameMessage?.Invoke($"將死！{winner}獲勝！");
@@ -1129,8 +1171,58 @@ public class GameService : IGameService, IDisposable
 
     private void NotifyUpdate() => BoardUpdated?.Invoke();
 
+    /// <summary>
+    /// 超時事件處理：某方時間耗盡，判定對方獲勝。
+    /// 由 System.Threading.Timer 執行緒觸發，注意 GameMessage 訂閱者須自行處理執行緒切換。
+    /// </summary>
+    private void OnClockTimeout(object? sender, PieceColor timedOutColor)
+    {
+        if (isGameOver) return;
+        isGameOver = true;
+        StopAndDisposeClock();
+        var loser  = timedOutColor == PieceColor.Red ? "紅方" : "黑方";
+        var winner = timedOutColor == PieceColor.Red ? "黑方" : "紅方";
+        GameMessage?.Invoke($"時間到！{loser}超時，{winner}獲勝！");
+    }
+
+    /// <summary>停止並釋放棋鐘及 Tick 計時器。</summary>
+    private void StopAndDisposeClock()
+    {
+        clockTickTimer?.Dispose();
+        clockTickTimer = null;
+
+        if (Clock != null)
+        {
+            Clock.OnTimeout -= OnClockTimeout;
+            Clock.Stop();
+            Clock = null;
+        }
+    }
+
+    /// <summary>
+    /// 根據棋鐘剩餘時間計算 Soft/Hard 搜尋時限。
+    /// <para>
+    /// 預估剩餘 <c>EstimatedMovesLeft</c> 步，每步分配 Soft = 剩餘時間 / 30，
+    /// Hard = Soft × 2。不受固定時限設定影響，完全由棋鐘剩餘時間決定。
+    /// 剩餘時間極少（≤ 500ms）時返回最低限度時限，確保仍能走棋。
+    /// </para>
+    /// </summary>
+    internal static (int softMs, int hardMs) CalculateTimedModeBudget(int remainingMs)
+    {
+        const int EstimatedMovesLeft = 30;
+        if (remainingMs > 500)
+        {
+            int softMs = Math.Max(100, remainingMs / EstimatedMovesLeft);
+            int hardMs = softMs * 2;
+            return (softMs, hardMs);
+        }
+        // 剩餘時間極少：快速走棋，避免直接超時
+        return (100, 300);
+    }
+
     public void Dispose()
     {
+        StopAndDisposeClock();
         aiCts?.Cancel();
         aiCts?.Dispose();
         smartHintCts?.Cancel();

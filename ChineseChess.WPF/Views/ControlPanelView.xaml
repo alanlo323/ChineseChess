@@ -20,6 +20,46 @@
                 Opacity="0.35"
                 Margin="0,10,0,0" />
 
+        <!-- 棋鐘顯示（限時模式下顯示於最上方）-->
+        <Grid DockPanel.Dock="Top"
+              Margin="0,8,0,0"
+              Visibility="{Binding IsTimedModeSettingsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="#FFEECC" CornerRadius="4" Padding="6,4" Margin="0,0,4,0">
+                <StackPanel>
+                    <TextBlock Text="紅方剩餘"
+                               Style="{StaticResource FormLabelStyle}"
+                               Foreground="#CC2200"
+                               FontSize="10"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding RedTimeDisplay}"
+                               Style="{StaticResource StatusTextStyle}"
+                               Foreground="#CC2200"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Background="#EEE8D5" CornerRadius="4" Padding="6,4" Margin="4,0,0,0">
+                <StackPanel>
+                    <TextBlock Text="黑方剩餘"
+                               Style="{StaticResource FormLabelStyle}"
+                               Foreground="#222222"
+                               FontSize="10"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding BlackTimeDisplay}"
+                               Style="{StaticResource StatusTextStyle}"
+                               Foreground="#222222"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
         <!-- 局面訊息卡 -->
         <Border DockPanel.Dock="Top"
                 Style="{StaticResource SubPanelCardStyle}"
@@ -131,8 +171,9 @@
                                            Style="{StaticResource FormLabelStyle}"
                                            VerticalAlignment="Center" HorizontalAlignment="Right" />
                             </Grid>
-                            <!-- 時間（內聯）-->
-                            <Grid Margin="0,0,0,4">
+                            <!-- 時間（內聯）：限時模式下隱藏 -->
+                            <Grid Margin="0,0,0,4"
+                                  Visibility="{Binding IsTimeLimitControlVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="52" />
                                     <ColumnDefinition Width="*" />
@@ -185,7 +226,8 @@
                                                    Style="{StaticResource FormLabelStyle}"
                                                    VerticalAlignment="Center" HorizontalAlignment="Right" />
                                     </Grid>
-                                    <Grid Margin="0,0,0,4">
+                                    <Grid Margin="0,0,0,4"
+                                          Visibility="{Binding IsTimeLimitControlVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="36" />
                                             <ColumnDefinition Width="*" />
@@ -229,7 +271,8 @@
                                                    Style="{StaticResource FormLabelStyle}"
                                                    VerticalAlignment="Center" HorizontalAlignment="Right" />
                                     </Grid>
-                                    <Grid Margin="0,0,0,4">
+                                    <Grid Margin="0,0,0,4"
+                                          Visibility="{Binding IsTimeLimitControlVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="36" />
                                             <ColumnDefinition Width="*" />
@@ -287,6 +330,38 @@
                                        Style="{StaticResource FormLabelStyle}"
                                        VerticalAlignment="Center" HorizontalAlignment="Right" />
                         </Grid>
+
+                        <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />
+
+                        <!-- 限時模式 -->
+                        <TextBlock Text="限時模式"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,0,0,6" />
+                        <CheckBox Content="啟用限時模式（開局時生效）"
+                                  IsChecked="{Binding IsTimedModeEnabled}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,0,0,6" />
+                        <!-- 每方時間設定（僅在啟用時顯示）-->
+                        <StackPanel Visibility="{Binding IsTimedModeSettingsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="52" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="每方"
+                                           Style="{StaticResource FormLabelStyle}"
+                                           VerticalAlignment="Center" />
+                                <Slider Grid.Column="1" Minimum="1" Maximum="60"
+                                        Value="{Binding TimedModeMinutesPerPlayer}"
+                                        TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Style="{StaticResource DifficultySliderStyle}"
+                                        Margin="6,0" Height="20" />
+                                <TextBlock Grid.Column="2" Text="{Binding TimedModeMinutesPerPlayer, StringFormat={}{0} 分}"
+                                           Style="{StaticResource FormLabelStyle}"
+                                           VerticalAlignment="Center" HorizontalAlignment="Right" />
+                            </Grid>
+                        </StackPanel>
 
                     </StackPanel>
                 </ScrollViewer>

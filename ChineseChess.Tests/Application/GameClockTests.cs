@@ -148,6 +148,82 @@ public class GameClockTests
 
         Assert.Null(service.Clock);
     }
+
+    // ─── 測試 7：CalculateTimedModeBudget — 純棋鐘計算，不受固定時限影響 ───
+
+    [Theory]
+    [InlineData(600_000, 20000, 40000)]  // 10分鐘：soft=20000，hard=40000（不再被 cap）
+    [InlineData(30_000,   1000,  2000)]  // 30秒：soft=1000，hard=2000
+    [InlineData(9_000,     300,   600)]  // 9秒：soft=300，hard=600
+    [InlineData(3_000,     100,   200)]  // 3秒：soft=100，hard=200
+    [InlineData(501,       100,   200)]  // 剛超過 500ms：最低值 100/200
+    public void CalculateTimedModeBudget_SufficientTime_ReturnsExpected(
+        int remainingMs, int expectedSoft, int expectedHard)
+    {
+        var (soft, hard) = GameService.CalculateTimedModeBudget(remainingMs);
+
+        Assert.Equal(expectedSoft, soft);
+        Assert.Equal(expectedHard, hard);
+    }
+
+    // ─── 測試 8：CalculateTimedModeBudget — 剩餘時間極少（≤ 500ms）快速模式 ───
+
+    [Theory]
+    [InlineData(500)]
+    [InlineData(100)]
+    [InlineData(0)]
+    public void CalculateTimedModeBudget_LowTime_ReturnsMinimalBudget(int remainingMs)
+    {
+        var (soft, hard) = GameService.CalculateTimedModeBudget(remainingMs);
+
+        Assert.Equal(100, soft);
+        Assert.Equal(300, hard);
+    }
+
+    // ─── 測試 9：限時模式下，AI 收到正確的 Soft/Hard 時限設定 ───
+
+    [Fact]
+    public async Task GameService_TimedMode_AiReceivesSoftAndHardLimits()
+    {
+        var engine = new CapturingMockAiEngine();
+        var service = new GameService(engine);
+        service.IsTimedModeEnabled = true;
+        service.TimedModeMinutesPerPlayer = 10; // 10分鐘
+        service.SetDifficulty(depth: 6, timeMs: 3000);
+
+        await service.StartGameAsync(ChineseChess.Application.Enums.GameMode.PlayerVsAi);
+
+        // 人類（紅方）走一步，觸發 AI 搜尋
+        var move = service.CurrentBoard.GenerateLegalMoves().First();
+        await service.HumanMoveAsync(move);
+
+        // AI 應收到 SoftTimeLimitMs 和 HardTimeLimitMs（均為正值）
+        Assert.NotNull(engine.LastSettings);
+        Assert.NotNull(engine.LastSettings.SoftTimeLimitMs);
+        Assert.NotNull(engine.LastSettings.HardTimeLimitMs);
+        Assert.True(engine.LastSettings.SoftTimeLimitMs > 0);
+        Assert.True(engine.LastSettings.HardTimeLimitMs > engine.LastSettings.SoftTimeLimitMs);
+    }
+
+    // ─── 測試 10：非限時模式下，AI 的 Soft/Hard 時限不應被設定 ───
+
+    [Fact]
+    public async Task GameService_NonTimedMode_AiDoesNotReceiveSoftHardLimits()
+    {
+        var engine = new CapturingMockAiEngine();
+        var service = new GameService(engine);
+        service.IsTimedModeEnabled = false;
+        service.SetDifficulty(depth: 6, timeMs: 3000);
+
+        await service.StartGameAsync(ChineseChess.Application.Enums.GameMode.PlayerVsAi);
+
+        var move = service.CurrentBoard.GenerateLegalMoves().First();
+        await service.HumanMoveAsync(move);
+
+        Assert.NotNull(engine.LastSettings);
+        Assert.Null(engine.LastSettings.SoftTimeLimitMs);
+        Assert.Null(engine.LastSettings.HardTimeLimitMs);
+    }
 }
 
 /// <summary>
@@ -168,6 +244,55 @@ internal sealed class FakeNowProvider
     {
         current = current.Add(duration);
     }
+}
+
+/// <summary>
+/// 捕獲搜尋設定的 Mock AI 引擎：記錄最後一次 SearchAsync 收到的 SearchSettings，供測試驗證。
+/// </summary>
+internal sealed class CapturingMockAiEngine : ChineseChess.Application.Interfaces.IAiEngine
+{
+    public ChineseChess.Application.Interfaces.SearchSettings? LastSettings { get; private set; }
+
+    public Task<ChineseChess.Application.Interfaces.SearchResult> SearchAsync(
+        ChineseChess.Domain.Entities.IBoard board,
+        ChineseChess.Application.Interfaces.SearchSettings settings,
+        CancellationToken ct = default,
+        IProgress<ChineseChess.Application.Interfaces.SearchProgress>? progress = null)
+    {
+        LastSettings = settings;
+        var result = new ChineseChess.Application.Interfaces.SearchResult();
+        var moves = board.GenerateLegalMoves().GetEnumerator();
+        if (moves.MoveNext()) result.BestMove = moves.Current;
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<ChineseChess.Application.Interfaces.MoveEvaluation>> EvaluateMovesAsync(
+        ChineseChess.Domain.Entities.IBoard board,
+        IEnumerable<ChineseChess.Domain.Entities.Move> moves,
+        int depth,
+        CancellationToken ct = default,
+        IProgress<string>? progress = null)
+        => Task.FromResult<IReadOnlyList<ChineseChess.Application.Interfaces.MoveEvaluation>>(
+            new List<ChineseChess.Application.Interfaces.MoveEvaluation>());
+
+    public Task ExportTranspositionTableAsync(System.IO.Stream output, bool asJson, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public Task ImportTranspositionTableAsync(System.IO.Stream input, bool asJson, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public ChineseChess.Application.Interfaces.TTStatistics GetTTStatistics()
+        => new ChineseChess.Application.Interfaces.TTStatistics();
+
+    public IAiEngine CloneWithCopiedTT() => new CapturingMockAiEngine();
+    public IAiEngine CloneWithEmptyTT() => new CapturingMockAiEngine();
+    public void MergeTranspositionTableFrom(IAiEngine other) { }
+
+    public IEnumerable<ChineseChess.Application.Interfaces.TTEntry> EnumerateTTEntries()
+        => Array.Empty<ChineseChess.Application.Interfaces.TTEntry>();
+
+    public ChineseChess.Application.Interfaces.TTTreeNode? ExploreTTTree(
+        ChineseChess.Domain.Entities.IBoard board, int maxDepth = 6) => null;
 }
 
 /// <summary>

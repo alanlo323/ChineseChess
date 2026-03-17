@@ -26,6 +26,10 @@ public class GameSettings
     public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
 
+    // ─── 限時模式 ─────────────────────────────────────────────────────────
+    public bool IsTimedModeEnabled { get; set; } = false;
+    public int TimedModeMinutesPerPlayer { get; set; } = 10;
+
     // ─── 提和設定 ─────────────────────────────────────────────────────────
     public int DrawOfferThreshold { get; set; } = 50;
     public int DrawRefuseThreshold { get; set; } = 100;
