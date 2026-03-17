@@ -605,7 +605,7 @@
                                        Style="{StaticResource FormLabelStyle}" />
                         </Border>
                         <!-- 啟用/停用 -->
-                        <CheckBox Content="啟用 AI 局面分析（AI vs AI 模式）"
+                        <CheckBox Content="啟用 AI 局面分析（AI 走子後自動更新）"
                                   IsChecked="{Binding IsGameAnalysisEnabled}"
                                   Foreground="{StaticResource InkBrush}"
                                   Margin="0,0,0,8" />

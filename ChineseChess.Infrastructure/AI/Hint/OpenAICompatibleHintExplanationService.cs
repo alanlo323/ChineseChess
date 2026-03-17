@@ -489,8 +489,8 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             "AI 評分: {3}\n" +
             "搜尋深度: {4}\n" +
             "節點數: {5}\n" +
-            "PV: {6}\n" +
-            "思路樹: {7}",
+            "主線參考: {6}\n" +
+            "延伸參考: {7}",
             request.Fen,
             request.SideToMove,
             request.BestMoveNotation,

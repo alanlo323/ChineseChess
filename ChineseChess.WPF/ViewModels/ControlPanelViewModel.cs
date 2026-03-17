@@ -47,12 +47,12 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private const int TTExplorerTabIndex = 2;
     private const int GameAnalysisTabIndex = 4;
 
-    // ─── 局面分析（AI vs AI 模式）─────────────────────────────────────────
+    // ─── 局面分析（AI 走子後進行）────────────────────────────
     private readonly IGameAnalysisService? gameAnalysisService;
     private readonly string gameAnalysisDisclaimer;
     private bool isGameAnalysisEnabled;
     private bool isAnalyzing;
-    private string gameAnalysisText = "（等待 AI vs AI 對局開始...）";
+    private string gameAnalysisText = "（等待 AI 走子後開始分析...）";
     private CancellationTokenSource? analysisCts;
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
@@ -634,9 +634,8 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     private void OnMoveCompleted(MoveCompletedEventArgs args)
     {
-        // 僅在 AI vs AI 模式且分析功能啟用時觸發
+        // Triggered after an AI move completes when analysis is enabled.
         if (!isGameAnalysisEnabled || gameAnalysisService == null) return;
-        if (gameService.CurrentMode != GameMode.AiVsAi) return;
 
         // 取消上一次尚未完成的分析
         analysisCts?.Cancel();

@@ -42,7 +42,7 @@ public interface IGameService
     event Action<SearchResult>? HintUpdated; // 提示搜尋進行中的即時最佳著法更新
     event Action<string>? ThinkingProgress;
     event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady; // 智能提示結果
-    /// <summary>AI 每步棋走完後觸發（applyBestMove=true 路徑），僅在 AiVsAi 模式下供局面分析使用。</summary>
+    /// <summary>AI 每步棋走完後觸發（applyBestMove=true 路徑），供局面分析使用。</summary>
     event Action<MoveCompletedEventArgs>? MoveCompleted;
 
     /// <summary>提示搜尋是否正在進行中。</summary>
