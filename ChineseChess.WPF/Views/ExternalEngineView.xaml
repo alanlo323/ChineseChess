@@ -1,0 +1,190 @@
+<UserControl x:Class="ChineseChess.WPF.Views.ExternalEngineView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:ExternalEngineViewModel}">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,8">
+
+            <!-- ─── 紅方外部引擎 ────────────────────────────────── -->
+            <TextBlock Text="紅方引擎"
+                       Style="{StaticResource SectionTitleStyle}"
+                       Foreground="#CC2200"
+                       Margin="0,0,0,6" />
+
+            <CheckBox Content="使用外部引擎（取代內建引擎）"
+                      IsChecked="{Binding UseRedExternalEngine}"
+                      Foreground="{StaticResource InkBrush}"
+                      Margin="0,0,0,6" />
+
+            <!-- 協議選擇 -->
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="協議："
+                           Style="{StaticResource FormLabelStyle}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding EngineProtocols}"
+                          SelectedItem="{Binding RedProtocol}"
+                          Style="{StaticResource InputControlStyle}"
+                          IsEnabled="{Binding UseRedExternalEngine}" />
+            </Grid>
+
+            <!-- 引擎路徑 -->
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0"
+                         Text="{Binding RedEnginePath, UpdateSourceTrigger=PropertyChanged}"
+                         IsEnabled="{Binding UseRedExternalEngine}"
+                         Margin="0,0,6,0" />
+                <Button Grid.Column="1"
+                        Content="瀏覽..."
+                        Command="{Binding BrowseRedEngineCommand}"
+                        Style="{StaticResource CompactButtonStyle}"
+                        Width="50"
+                        IsEnabled="{Binding UseRedExternalEngine}" />
+            </Grid>
+
+            <!-- 套用按鈕 + 狀態 -->
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Content="套用"
+                        Command="{Binding ApplyRedEngineCommand}"
+                        Style="{StaticResource CompactButtonStyle}"
+                        Width="50"
+                        Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding RedEngineStatus}"
+                           Style="{StaticResource StatusTextStyle}"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap" />
+            </Grid>
+
+            <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />
+
+            <!-- ─── 黑方外部引擎 ────────────────────────────────── -->
+            <TextBlock Text="黑方引擎"
+                       Style="{StaticResource SectionTitleStyle}"
+                       Foreground="#222222"
+                       Margin="0,0,0,6" />
+
+            <CheckBox Content="使用外部引擎（取代內建引擎）"
+                      IsChecked="{Binding UseBlackExternalEngine}"
+                      Foreground="{StaticResource InkBrush}"
+                      Margin="0,0,0,6" />
+
+            <!-- 協議選擇 -->
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="協議："
+                           Style="{StaticResource FormLabelStyle}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding EngineProtocols}"
+                          SelectedItem="{Binding BlackProtocol}"
+                          Style="{StaticResource InputControlStyle}"
+                          IsEnabled="{Binding UseBlackExternalEngine}" />
+            </Grid>
+
+            <!-- 引擎路徑 -->
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0"
+                         Text="{Binding BlackEnginePath, UpdateSourceTrigger=PropertyChanged}"
+                         IsEnabled="{Binding UseBlackExternalEngine}"
+                         Margin="0,0,6,0" />
+                <Button Grid.Column="1"
+                        Content="瀏覽..."
+                        Command="{Binding BrowseBlackEngineCommand}"
+                        Style="{StaticResource CompactButtonStyle}"
+                        Width="50"
+                        IsEnabled="{Binding UseBlackExternalEngine}" />
+            </Grid>
+
+            <!-- 套用按鈕 + 狀態 -->
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Content="套用"
+                        Command="{Binding ApplyBlackEngineCommand}"
+                        Style="{StaticResource CompactButtonStyle}"
+                        Width="50"
+                        Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding BlackEngineStatus}"
+                           Style="{StaticResource StatusTextStyle}"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap" />
+            </Grid>
+
+            <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />
+
+            <!-- ─── 雙協議伺服器 ───────────────────────────────── -->
+            <TextBlock Text="UCI / UCCI 伺服器"
+                       Style="{StaticResource SectionTitleStyle}"
+                       Margin="0,0,0,6" />
+            <TextBlock Text="開啟後可讓外部棋類管理軟體（如 Arena）連線至此程式的內建引擎。"
+                       Style="{StaticResource FormLabelStyle}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,8" />
+
+            <!-- 埠號設定 -->
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="80" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="TCP 埠號："
+                           Style="{StaticResource FormLabelStyle}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <TextBox Grid.Column="1"
+                         Text="{Binding ServerPort, UpdateSourceTrigger=PropertyChanged}"
+                         IsEnabled="{Binding IsServerStopped}" />
+            </Grid>
+
+            <!-- 啟動 / 停止按鈕 -->
+            <UniformGrid Columns="2" Margin="0,0,0,6">
+                <Button Content="啟動伺服器"
+                        Command="{Binding StartServerCommand}"
+                        Style="{StaticResource CompactButtonStyle}"
+                        Margin="0,0,6,0" />
+                <Button Content="停止伺服器"
+                        Command="{Binding StopServerCommand}"
+                        Style="{StaticResource CompactButtonStyle}" />
+            </UniformGrid>
+
+            <!-- 伺服器狀態 -->
+            <TextBlock Text="{Binding ServerStatus}"
+                       Style="{StaticResource StatusTextStyle}"
+                       TextWrapping="Wrap" />
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

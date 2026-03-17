@@ -68,3 +68,7 @@
     殘局知識強化 → NNUE
 
   最值得優先做的是 Aspiration Window：程式碼改動少（約 20 行加在迭代加深迴圈外層），但對中深度搜尋的節點削減效果立竿見影。
+
+
+加入UCI和UCCI協議的支持 | 加入UI控制項, 開啟UCI/UCCI伺服器 | 加入電腦玩家可以戴入第三方UCI引擎
+加入SEE → ProbCut → Multi-PV

@@ -12,7 +12,9 @@
       "Bash(dotnet add:*)",
       "Bash(npx ecc-agentshield:*)",
       "Bash(find:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -h \"PackageReference\" \"/d/Git/ChineseChess\"/**/*.csproj)"
     ]
   },
   "outputStyle": "Explanatory"

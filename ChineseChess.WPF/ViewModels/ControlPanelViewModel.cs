@@ -358,8 +358,12 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     public ICommand RefreshTTStatsCommand { get; }
     public ICommand MergeTranspositionTablesCommand { get; }
 
-    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null)
+    /// <summary>外部引擎 / 伺服器設定的 ViewModel（供 ExternalEngineView 綁定）。</summary>
+    public ExternalEngineViewModel? ExternalEngine { get; }
+
+    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null)
     {
+        ExternalEngine = externalEngineViewModel;
         this.gameService = gameService;
         this.gameAnalysisService = gameAnalysisService;
         isGameAnalysisEnabled   = analysisSettings?.IsEnabled ?? true;

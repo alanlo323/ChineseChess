@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             xmlns:views="clr-namespace:ChineseChess.WPF.Views"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ControlPanelViewModel}">
     <DockPanel Margin="12" LastChildFill="True">
@@ -696,6 +697,11 @@
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </ScrollViewer>
+            </TabItem>
+
+            <!-- 外部引擎頁 -->
+            <TabItem Header="外部引擎">
+                <views:ExternalEngineView DataContext="{Binding ExternalEngine}" />
             </TabItem>
 
         </TabControl>

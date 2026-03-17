@@ -88,16 +88,20 @@ public class GameService : IGameService, IDisposable
     public event Action<DrawOfferResult>? DrawOfferResolved;
     public event Action<MoveCompletedEventArgs>? MoveCompleted;
 
+    private readonly IEngineProvider? engineProvider;
+
     public GameService(
         IAiEngine aiEngine,
         IHintExplanationService? hintExplanationService = null,
         IOpeningBook? openingBook = null,
-        OpeningBookSettings? openingBookSettings = null)
+        OpeningBookSettings? openingBookSettings = null,
+        IEngineProvider? engineProvider = null)
     {
         this.aiEngine = aiEngine;
         this.hintExplanationService = hintExplanationService;
         this.openingBook = openingBook;
         this.openingBookSettings = openingBookSettings ?? new OpeningBookSettings();
+        this.engineProvider = engineProvider;
         bookmarkManager = new BookmarkManager();
         board = new Board(); // 初始局面
     }
@@ -130,11 +134,19 @@ public class GameService : IGameService, IDisposable
         // AiVsAi：依設定初始化黑方引擎
         if (currentMode == GameMode.AiVsAi)
         {
-            aiEngineBlack = UseSharedTranspositionTable
-                ? null                                     // Shared: reuse red engine
-                : (CopyRedTtToBlackAtStart
-                    ? aiEngine.CloneWithCopiedTT()          // Independent: initialize with red TT snapshot
-                    : aiEngine.CloneWithEmptyTT());         // Independent: initialize with empty TT
+            if (engineProvider != null)
+            {
+                // engineProvider 管理引擎生命週期，GameService 不需自行克隆
+                aiEngineBlack = null;
+            }
+            else
+            {
+                aiEngineBlack = UseSharedTranspositionTable
+                    ? null                                     // Shared: reuse red engine
+                    : (CopyRedTtToBlackAtStart
+                        ? aiEngine.CloneWithCopiedTT()          // Independent: initialize with red TT snapshot
+                        : aiEngine.CloneWithEmptyTT());         // Independent: initialize with empty TT
+            }
         }
         else
         {
@@ -693,6 +705,14 @@ public class GameService : IGameService, IDisposable
     // 根據目前輪次選擇引擎（AiVsAi 獨立TT 時，黑方用 aiEngineBlack）
     private IAiEngine GetCurrentEngine()
     {
+        // 若有 engineProvider，優先由它決定紅黑方引擎
+        if (engineProvider != null)
+        {
+            return (currentMode == GameMode.AiVsAi && board.Turn == PieceColor.Black)
+                ? engineProvider.GetBlackEngine()
+                : engineProvider.GetRedEngine();
+        }
+        // 原邏輯（向下相容，無 engineProvider 時）
         if (currentMode == GameMode.AiVsAi && aiEngineBlack != null && board.Turn == PieceColor.Black)
             return aiEngineBlack;
         return aiEngine;

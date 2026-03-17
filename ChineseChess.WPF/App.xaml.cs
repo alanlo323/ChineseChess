@@ -4,6 +4,7 @@ using ChineseChess.Application.Services;
 using ChineseChess.Infrastructure.AI.Analysis;
 using ChineseChess.Infrastructure.AI.Book;
 using ChineseChess.Infrastructure.AI.Hint;
+using ChineseChess.Infrastructure.AI.Protocol;
 using ChineseChess.Infrastructure.AI.Search;
 using ChineseChess.WPF.ViewModels;
 using MainWindowView = ChineseChess.WPF.Views.MainWindow;
@@ -56,14 +57,28 @@ public partial class App : System.Windows.Application
 
         // 基礎設施（Infrastructure）
         services.AddSingleton<IAiEngine, SearchEngine>();
+        services.AddSingleton<IChessEngineServer>(sp =>
+            new ChessEngineServer(sp.GetRequiredService<IAiEngine>()));
 
         // 應用層（Application）
-        services.AddSingleton<IGameService, GameService>();
+        services.AddSingleton<IEngineProvider, EngineProvider>();
+        services.AddSingleton<IGameService>(sp => new GameService(
+            sp.GetRequiredService<IAiEngine>(),
+            sp.GetService<IHintExplanationService>(),
+            sp.GetService<IOpeningBook>(),
+            sp.GetService<OpeningBookSettings>(),
+            sp.GetRequiredService<IEngineProvider>()));
 
         // ViewModel 層
         services.AddTransient<MainViewModel>();
         services.AddTransient<ChessBoardViewModel>();
-        services.AddTransient<ControlPanelViewModel>();
+        services.AddTransient<ExternalEngineViewModel>();
+        services.AddTransient<ControlPanelViewModel>(sp => new ControlPanelViewModel(
+            sp.GetRequiredService<IGameService>(),
+            sp.GetRequiredService<GameSettings>(),
+            sp.GetService<IGameAnalysisService>(),
+            sp.GetService<GameAnalysisSettings>(),
+            sp.GetRequiredService<ExternalEngineViewModel>()));
 
         // 視圖層（Views）
         services.AddTransient<MainWindowView>();
