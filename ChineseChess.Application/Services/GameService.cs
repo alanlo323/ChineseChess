@@ -409,10 +409,12 @@ public class GameService : IGameService, IDisposable
         }
 
         long baseNodes = Interlocked.Read(ref completedGameNodes);
+        long lastElapsedMs = 0;
         var progress = new Progress<SearchProgress>(p =>
         {
             Interlocked.Exchange(ref lastSearchNodes, baseNodes + p.Nodes);
             Interlocked.Exchange(ref lastSearchNps, p.NodesPerSecond);
+            lastElapsedMs = p.ElapsedMs;
             ThinkingProgress?.Invoke(FormatThinkingProgress(p));
 
             // 提示搜尋模式下，非心跳且有有效座標且深度 >= 2 時觸發 HintUpdated
@@ -472,7 +474,7 @@ public class GameService : IGameService, IDisposable
                     var moveSource = result.IsFromOpeningBook ? "開局庫" : "AI";
                     var scoreStr = result.IsFromOpeningBook ? "定式" : FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方");
                     GameMessage?.Invoke($"{moveSource} 走了 {moveNotation}（{scoreStr}）");
-                    ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, moveNotation));
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, "思考完成", moveNotation, lastElapsedMs));
                     MoveCompleted?.Invoke(new MoveCompletedEventArgs
                     {
                         Fen          = board.ToFen(),
@@ -492,7 +494,7 @@ public class GameService : IGameService, IDisposable
                     // HintReady 觸發前先清除搜尋旗標
                     isHintSearchingFlag = false;
                     HintReady?.Invoke(result);
-                    ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, moveNotation));
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, "提示完成", moveNotation, lastElapsedMs));
                 }
 
                 if (applyBestMove && !CheckGameOver())
@@ -1098,8 +1100,10 @@ public class GameService : IGameService, IDisposable
 
             ThinkingProgress?.Invoke($"智能提示：開始分析 {moves.Count} 個走法（深度 {SmartHintDepth}）...");
 
+            var smartHintStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var progress = new Progress<string>(msg => ThinkingProgress?.Invoke(msg));
             var evaluations = await aiEngine.EvaluateMovesAsync(boardSnapshot, moves, SmartHintDepth, linkedCts.Token, progress);
+            smartHintStopwatch.Stop();
 
             if (!linkedCts.Token.IsCancellationRequested)
             {
@@ -1108,7 +1112,8 @@ public class GameService : IGameService, IDisposable
                 {
                     string scoreStr    = best.Score > 0 ? $"+{best.Score}" : best.Score.ToString();
                     string bestNotation = MoveNotation.ToNotation(best.Move, board);
-                    ThinkingProgress?.Invoke($"智能提示完成：最佳走法 {bestNotation} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法");
+                    string elapsedText = $" | 用時: {smartHintStopwatch.Elapsed.TotalSeconds:0.0}s";
+                    ThinkingProgress?.Invoke($"智能提示完成：最佳走法 {bestNotation} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法{elapsedText}");
                 }
                 SmartHintReady?.Invoke(evaluations);
             }
@@ -1138,18 +1143,19 @@ public class GameService : IGameService, IDisposable
         return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {scoreText}，建議 {bestMove}{ttHitRate}";
     }
 
-    private static string FormatHintProgress(SearchResult result, PieceColor searchTurn, string? notation = null)
+    private static string FormatHintProgress(SearchResult result, PieceColor searchTurn, string label, string? notation = null, long elapsedMs = 0)
     {
         if (result.BestMove.IsNull)
         {
-            return "提示：目前局面沒有可行的最佳走法";
+            return $"{label}：目前局面沒有可行的最佳走法";
         }
 
         var turnLabel = searchTurn == PieceColor.Red ? "紅方" : "黑方";
         var scoreText = FormatScore(result.Score, turnLabel);
         var moveText  = notation ?? result.BestMove.ToString();
+        var elapsedText = elapsedMs > 0 ? $" | 用時: {elapsedMs / 1000.0:0.0}s" : string.Empty;
 
-        return $"提示完成：{moveText} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes}";
+        return $"{label}：{moveText} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes}{elapsedText}";
     }
 
     private static string FormatScore(int score, string turnLabel)
