@@ -63,7 +63,7 @@ public static class MoveClassifier
     /// 前進：同列且往對方陣地方向（紅兵向上 row 減小，黑卒向下 row 增大）。
     /// 橫移：不同列（fromCol != toCol），視為可逆的 Idle。
     /// </summary>
-    private static bool IsPawnAdvance(Move move, PieceColor color)
+    public static bool IsPawnAdvance(Move move, PieceColor color)
     {
         int fromCol = move.From % BoardWidth;
         int toCol   = move.To   % BoardWidth;

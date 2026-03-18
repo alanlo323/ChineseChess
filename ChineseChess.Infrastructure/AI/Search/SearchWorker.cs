@@ -1,4 +1,7 @@
+using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
+using ChineseChess.Application.Models;
+using ChineseChess.Application.Services;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Infrastructure.AI.Evaluators;
@@ -34,6 +37,14 @@ internal sealed class SearchWorker
     private readonly int[] pvLength;
     // 每次搜尋前可動態調整，避免 check extension 在淺層搜尋中無限延伸
     internal int effectiveMaxPly = MaxSearchPly;
+
+    // WXF 搜尋路徑追蹤（per-ply，固定大小，無 GC 壓力）
+    private readonly ulong[]              plyZobristKeys    = new ulong[MaxSearchPly + 1];
+    private readonly MoveClassification[] plyClassifications = new MoveClassification[MaxSearchPly];
+    private readonly PieceColor[]         plyTurns           = new PieceColor[MaxSearchPly];
+
+    // WXF 長將/長捉判決分數（低於 CheckmateThreshold=15000，高於任何靜態估值）
+    private const int WxfRepetitionWinScore = 10000;
 
     private const int Infinity = 30000;
     // 公開 Infinity 值，供 SearchEngine 使用（Aspiration Window 回退全窗口）
@@ -210,6 +221,7 @@ internal sealed class SearchWorker
     /// </summary>
     public int SearchSingleDepth(int depth, int alpha, int beta)
     {
+        plyZobristKeys[0] = board.ZobristKey; // 根節點種子 key
         CheckPauseOrCancellation();
         return Negamax(depth, 0, alpha, beta, false);
     }
@@ -317,9 +329,11 @@ internal sealed class SearchWorker
         }
 
         // 2. 和局早返（重覆局面 OR 無吃子超限）
-        if (ply > 0 && (board.IsDrawByRepetition(threshold: 2) || board.IsDrawByNoCapture()))
+        if (ply > 0)
         {
-            return 0;
+            if (board.IsDrawByNoCapture()) return 0;
+            if (board.IsDrawByRepetition(threshold: 3))
+                return EvaluateSearchRepetitionVerdict(ply);
         }
 
         // 3. 葉節點：進入 quiescence（或超過有效最大 ply，避免將軍延伸無限遞迴）
@@ -376,7 +390,7 @@ internal sealed class SearchWorker
         // 重複風險守衛（中國象棋特化）：
         //   若最近 8 ply 內有任何局面重複出現，代表局面正在循環。
         //   WXF 規則下，重複可能是勝/負（長將/長捉判負）而非和棋；
-        //   引擎目前尚未實作完整 WXF 長捉裁決，重複局面評估可能不準確。
+        //   重複局面已透過 EvaluateSearchRepetitionVerdict 處理（threshold:3，WXF 裁決）。
         //   此守衛確保在潛在循環路徑上禁用 ProbCut，回到完整搜尋以避免誤剪。
         //
         // 候選著法過濾（炮吃子排除）：
@@ -540,6 +554,9 @@ internal sealed class SearchWorker
             board.MakeMove(move);
 
             bool givesCheck = board.IsCheck(board.Turn);
+            plyZobristKeys[ply + 1]  = board.ZobristKey;
+            plyTurns[ply]            = movingPiece.Color;
+            plyClassifications[ply]  = ClassifyForSearch(move, movingPiece, targetPiece, givesCheck);
             bool recapturable = IsCurrentSquareRecapturable(move.To);
             bool extendCapture = ply <= 3 && ShouldExtendForCapture(movingPiece, targetPiece, recapturable);
             int extension = (givesCheck || extendCapture) ? 1 : 0;
@@ -605,6 +622,9 @@ internal sealed class SearchWorker
             board.MakeMove(move);
 
             bool givesCheck = board.IsCheck(board.Turn);
+            plyZobristKeys[ply + 1]  = board.ZobristKey;
+            plyTurns[ply]            = movingPiece.Color;
+            plyClassifications[ply]  = ClassifyForSearch(move, movingPiece, targetPiece, givesCheck);
             bool extendThreat = !givesCheck
                 && threatCandidate
                 && !hadImmediateThreat
@@ -780,6 +800,11 @@ internal sealed class SearchWorker
         return Negamax(depth, 0, -Infinity, Infinity, skipNullMove: false,
             opponentLastFrom: -1, opponentLastTo: -1, excludedMove: excludedMove);
     }
+
+    /// <summary>測試輔助：公開 ClassifyForSearch 方法。</summary>
+    internal static MoveClassification ClassifyForSearchPublic(
+        Move move, Piece movedPiece, Piece capturedPiece, bool givesCheck)
+        => ClassifyForSearch(move, movedPiece, capturedPiece, givesCheck);
 
     // 測試輔助：設定 killer 著法
     internal void SetKiller(int ply, Move move)
@@ -1086,6 +1111,64 @@ internal sealed class SearchWorker
         }
 
         return false;
+    }
+
+    // --- WXF 重複局面裁決 ---
+
+    /// <summary>
+    /// 搜尋用輕量著法分類（不含 Chase 偵測，避免 GenerateLegalMoves 開銷）。
+    /// givesCheck 由呼叫端已計算的 board.IsCheck(board.Turn) 提供。
+    /// </summary>
+    private static MoveClassification ClassifyForSearch(
+        Move move, Piece movedPiece, Piece capturedPiece, bool givesCheck)
+    {
+        if (!capturedPiece.IsNone) return MoveClassification.Cancel;
+        if (movedPiece.Type == PieceType.Pawn &&
+            MoveClassifier.IsPawnAdvance(move, movedPiece.Color))
+            return MoveClassification.Cancel;
+        return givesCheck ? MoveClassification.Check : MoveClassification.Idle;
+    }
+
+    /// <summary>
+    /// 根據搜尋路徑的 WXF 分析，回傳重複局面的正確分數。
+    /// 相對當前行棋方：+WxfRepetitionWinScore=當前方贏，-= 當前方輸，0=和或未定。
+    /// </summary>
+    private int EvaluateSearchRepetitionVerdict(int ply)
+    {
+        // 建構 WxfRepetitionJudge 所需的歷史（種子 + ply 步）
+        var history = new List<MoveRecord>(ply + 1);
+        history.Add(new MoveRecord
+        {
+            ZobristKey     = plyZobristKeys[0],
+            Turn           = board.Turn, // 種子條目，Turn 值不影響裁決
+            Move           = Move.Null,
+            Classification = MoveClassification.Cancel,
+            VictimSquare   = -1,
+            IsCapture      = false,
+        });
+        for (int i = 0; i < ply; i++)
+        {
+            history.Add(new MoveRecord
+            {
+                ZobristKey     = plyZobristKeys[i + 1],
+                Turn           = plyTurns[i],
+                Move           = Move.Null,
+                Classification = plyClassifications[i],
+                VictimSquare   = -1,
+                IsCapture      = false,
+            });
+        }
+
+        var verdict = WxfRepetitionJudge.Judge(history);
+        return verdict switch
+        {
+            RepetitionVerdict.RedWins   =>
+                board.Turn == PieceColor.Red   ?  WxfRepetitionWinScore : -WxfRepetitionWinScore,
+            RepetitionVerdict.BlackWins =>
+                board.Turn == PieceColor.Black ?  WxfRepetitionWinScore : -WxfRepetitionWinScore,
+            RepetitionVerdict.Draw      => 0,
+            _                           => 0, // None（重複鏈被打斷或不足 3 次）→ 保守和棋
+        };
     }
 
     private void CheckPauseOrCancellation()

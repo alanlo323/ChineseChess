@@ -15,7 +15,8 @@
       "Bash(cd:*)",
       "Bash(xargs grep:*)",
       "Bash(grep -h \"PackageReference\" \"/d/Git/ChineseChess\"/**/*.csproj)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(grep -r InternalsVisibleTo D:GitChineseChess --include=*.cs --include=*.csproj)"
     ]
   },
   "outputStyle": "Explanatory"
