@@ -101,6 +101,10 @@ public interface IGameService
     // Independent TT mode: whether black engine should copy red TT at game start.
     bool CopyRedTtToBlackAtStart { get; set; }
 
+    // ─── PlayerVsAi 玩家顏色 ──────────────────────────────────────────────
+    /// <summary>PlayerVsAi 模式下玩家扮演的顏色。</summary>
+    PieceColor PlayerColor { get; set; }
+
     // ─── 限時模式 ─────────────────────────────────────────────────────────
     bool IsTimedModeEnabled { get; set; }
     int TimedModeMinutesPerPlayer { get; set; }

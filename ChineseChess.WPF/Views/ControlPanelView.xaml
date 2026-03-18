@@ -126,6 +126,19 @@
                                   Style="{StaticResource InputControlStyle}"
                                   Margin="0,0,0,10" />
 
+                        <!-- 玩家持色（僅 PlayerVsAi 模式顯示）-->
+                        <StackPanel Visibility="{Binding IsPlayerVsAiMode, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    Margin="0,0,0,10">
+                            <TextBlock Text="玩家持色"
+                                       Style="{StaticResource FormLabelStyle}"
+                                       Margin="0,0,0,4" />
+                            <ComboBox ItemsSource="{Binding PlayerColorOptions}"
+                                      SelectedValue="{Binding PlayerColor}"
+                                      SelectedValuePath="Color"
+                                      DisplayMemberPath="DisplayName"
+                                      Style="{StaticResource InputControlStyle}" />
+                        </StackPanel>
+
                         <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,0,0,10" />
 
                         <!-- 思考控制 -->

@@ -51,6 +51,7 @@ public class GameService : IGameService, IDisposable
     public long LastSearchNps => Interlocked.Read(ref lastSearchNps);
     public bool UseSharedTranspositionTable { get; set; } = true;
     public bool CopyRedTtToBlackAtStart { get; set; } = true;
+    public PieceColor PlayerColor { get; set; } = PieceColor.Red;
     private long lastSearchNodes;
     private long lastSearchNps;
     private long completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
@@ -177,14 +178,14 @@ public class GameService : IGameService, IDisposable
         NotifyUpdate();
         GameMessage?.Invoke("Game Started");
 
-        if (currentMode == GameMode.AiVsAi || (currentMode == GameMode.PlayerVsAi && board.Turn == PieceColor.Black))
+        if (currentMode == GameMode.AiVsAi)
         {
-            // 若 AI 先手（例如自訂 FEN 或 AiVsAi），就觸發 AI 下棋。
-            // 一般標準局面在 PvAI 下，紅方（Player）預設先行，除非有其他設定。
-            if (currentMode == GameMode.AiVsAi)
-            {
-                await RunAiSearchAsync(applyBestMove: true);
-            }
+            await RunAiSearchAsync(applyBestMove: true);
+        }
+        else if (currentMode == GameMode.PlayerVsAi && PlayerColor == PieceColor.Black)
+        {
+            // 玩家選黑方，AI（紅方）先手
+            await RunAiSearchAsync(applyBestMove: true);
         }
     }
 

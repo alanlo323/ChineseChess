@@ -1,3 +1,5 @@
+using ChineseChess.Domain.Enums;
+
 namespace ChineseChess.Application.Configuration;
 
 /// <summary>
@@ -29,6 +31,10 @@ public class GameSettings
     // ─── 限時模式 ─────────────────────────────────────────────────────────
     public bool IsTimedModeEnabled { get; set; } = false;
     public int TimedModeMinutesPerPlayer { get; set; } = 10;
+
+    // ─── PlayerVsAi 玩家顏色 ──────────────────────────────────────────────
+    /// <summary>PlayerVsAi 模式下玩家扮演的顏色（預設紅方先攻）。</summary>
+    public PieceColor PlayerColor { get; set; } = PieceColor.Red;
 
     // ─── 提和設定 ─────────────────────────────────────────────────────────
     public int DrawOfferThreshold { get; set; } = 50;

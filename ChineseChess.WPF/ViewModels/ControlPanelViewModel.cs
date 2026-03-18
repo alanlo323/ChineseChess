@@ -37,6 +37,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private int smartHintDepth;
     private bool isTimedModeEnabled;
     private int timedModeMinutesPerPlayer;
+    private PieceColor playerColor = PieceColor.Red;
     private string redTimeDisplay = "--:--";
     private string blackTimeDisplay = "--:--";
     private readonly System.Timers.Timer clockDisplayTimer;
@@ -70,12 +71,30 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             if (SetProperty(ref selectedMode, value))
             {
                 OnPropertyChanged(nameof(IsAiVsAiMode));
+                OnPropertyChanged(nameof(IsPlayerVsAiMode));
                 OnPropertyChanged(nameof(ShowDualTTStats));
             }
         }
     }
 
     public bool IsAiVsAiMode => selectedMode == GameMode.AiVsAi;
+    public bool IsPlayerVsAiMode => selectedMode == GameMode.PlayerVsAi;
+
+    public PieceColor PlayerColor
+    {
+        get => playerColor;
+        set
+        {
+            if (SetProperty(ref playerColor, value))
+                gameService.PlayerColor = value;
+        }
+    }
+
+    public IReadOnlyList<PlayerColorOption> PlayerColorOptions { get; } = new[]
+    {
+        new PlayerColorOption(PieceColor.Red, "紅方（先攻）"),
+        new PlayerColorOption(PieceColor.Black, "黑方（後攻）")
+    };
 
     public string StatusMessage
     {
@@ -381,6 +400,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         smartHintDepth         = settings.SmartHintDepth;
         isTimedModeEnabled     = settings.IsTimedModeEnabled;
         timedModeMinutesPerPlayer = settings.TimedModeMinutesPerPlayer;
+        playerColor            = settings.PlayerColor;
 
         this.gameService.IsSmartHintEnabled = isSmartHintEnabled;
         this.gameService.SmartHintDepth     = smartHintDepth;
@@ -388,6 +408,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         this.gameService.CopyRedTtToBlackAtStart   = copyRedTtToBlackAtStart;
         this.gameService.IsTimedModeEnabled         = isTimedModeEnabled;
         this.gameService.TimedModeMinutesPerPlayer  = timedModeMinutesPerPlayer;
+        this.gameService.PlayerColor               = playerColor;
 
         RefreshTTStatsCommand = new RelayCommand(_ => RefreshTTStats());
         StartGameCommand = new RelayCommand(async _ => await gameService.StartGameAsync(SelectedMode));
@@ -1054,3 +1075,6 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         clockDisplayTimer.Dispose();
     }
 }
+
+/// <summary>玩家持色選項（供 ComboBox 顯示用）。</summary>
+public sealed record PlayerColorOption(PieceColor Color, string DisplayName);
