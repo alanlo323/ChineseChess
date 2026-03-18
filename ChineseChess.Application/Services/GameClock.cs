@@ -94,8 +94,12 @@ public sealed class GameClock : IGameClock
         timeoutFired = false;
     }
 
+    // 走棋後剩餘時間的最低保障（避免因走棋延遲而立即超時）
+    private static readonly TimeSpan MinRemainingAfterMove = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// 停止當前方計時，切換至另一方。
+    /// 若走棋後剩餘時間不足 <see cref="MinRemainingAfterMove"/>，則補回至該門檻。
     /// </summary>
     public void SwitchTurn()
     {
@@ -103,6 +107,18 @@ public sealed class GameClock : IGameClock
 
         // 記錄當前方消耗的時間
         CommitCurrentTurnTime();
+
+        // 走棋後剩餘不足 5 秒時，補回至 5 秒
+        if (activePlayer == PieceColor.Red)
+        {
+            if (redRemaining < MinRemainingAfterMove)
+                redRemaining = MinRemainingAfterMove;
+        }
+        else
+        {
+            if (blackRemaining < MinRemainingAfterMove)
+                blackRemaining = MinRemainingAfterMove;
+        }
 
         // 切換到另一方
         activePlayer = activePlayer == PieceColor.Red ? PieceColor.Black : PieceColor.Red;

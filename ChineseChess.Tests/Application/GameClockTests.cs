@@ -135,6 +135,38 @@ public class GameClockTests
         Assert.Equal(redRemainingAfterStop, clock.RedRemaining);
     }
 
+    // ─── 測試 5b：SwitchTurn() 後剩餘不足 5 秒時，補回至 5 秒 ───
+
+    [Fact]
+    public void SwitchTurn_WhenRemainingBelowFloor_ClampsToFiveSeconds()
+    {
+        var fakeNow = new FakeNowProvider(DateTime.UtcNow);
+        // 給紅方 6 秒，走棋耗掉 4 秒 → 剩 2 秒，應被補回 5 秒
+        var clock = new GameClock(TimeSpan.FromSeconds(6), fakeNow.GetNow);
+
+        clock.Start(PieceColor.Red);
+        fakeNow.Advance(TimeSpan.FromSeconds(4));
+        clock.SwitchTurn(); // 紅方剩 2 秒 → 應補到 5 秒
+
+        Assert.Equal(TimeSpan.FromSeconds(5), clock.RedRemaining);
+    }
+
+    [Fact]
+    public void SwitchTurn_WhenRemainingAboveFloor_NoChange()
+    {
+        var fakeNow = new FakeNowProvider(DateTime.UtcNow);
+        // 給紅方 60 秒，走棋耗掉 10 秒 → 剩 50 秒，不應被修改
+        var clock = new GameClock(TimeSpan.FromSeconds(60), fakeNow.GetNow);
+
+        clock.Start(PieceColor.Red);
+        fakeNow.Advance(TimeSpan.FromSeconds(10));
+        clock.SwitchTurn();
+
+        var expected = TimeSpan.FromSeconds(50);
+        Assert.True(Math.Abs((clock.RedRemaining - expected).TotalMilliseconds) < 50,
+            $"剩餘時間不應被修改，預期約 50 秒，實際 {clock.RedRemaining.TotalSeconds:F1}");
+    }
+
     // ─── 測試 6：非限時模式下 Clock 為 null，GameService 行為不變 ───
 
     [Fact]
