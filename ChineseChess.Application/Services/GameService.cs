@@ -55,6 +55,10 @@ public class GameService : IGameService, IDisposable
     private long lastSearchNps;
     private long completedGameNodes; // 歷史已完成搜尋的累計節點數（本局）
 
+    // ─── WXF 重複局面歷史 ──────────────────────────────────────────────────
+    // 首筆為種子條目（初始局面），其後每步著法追加一筆
+    private readonly List<MoveRecord> wxfHistory = new();
+
     // ─── 提和相關欄位 ──────────────────────────────────────────────────────
     private DrawOfferSettings drawOfferSettings = new DrawOfferSettings();
     private bool pendingAiDrawOffer;       // AI 已提和，等待玩家回應
@@ -130,6 +134,7 @@ public class GameService : IGameService, IDisposable
         Interlocked.Exchange(ref lastSearchNodes, 0);
         Interlocked.Exchange(ref lastSearchNps, 0);
         board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        ResetWxfHistory();
 
         // AiVsAi：依設定初始化黑方引擎
         if (currentMode == GameMode.AiVsAi)
@@ -366,7 +371,19 @@ public class GameService : IGameService, IDisposable
             return;
         }
 
+        var movedPiece    = board.GetPiece(move.From);
+        var capturedPiece = board.GetPiece(move.To);
         board.MakeMove(move);
+        var wxfCls = MoveClassifier.Classify(board, move, movedPiece, capturedPiece, out int wxfVictimSq);
+        wxfHistory.Add(new MoveRecord
+        {
+            ZobristKey     = board.ZobristKey,
+            Turn           = movedPiece.Color,
+            Move           = move,
+            Classification = wxfCls,
+            VictimSquare   = wxfVictimSq,
+            IsCapture      = !capturedPiece.IsNone,
+        });
         Clock?.SwitchTurn();
         ClearLatestHint();
         NotifyUpdate();
@@ -477,9 +494,21 @@ public class GameService : IGameService, IDisposable
             {
                 if (applyBestMove)
                 {
-                    var searchTurn   = board.Turn;
-                    var moveNotation = MoveNotation.ToNotation(result.BestMove, board);
+                    var searchTurn     = board.Turn;
+                    var moveNotation   = MoveNotation.ToNotation(result.BestMove, board);
+                    var aiMovedPiece   = board.GetPiece(result.BestMove.From);
+                    var aiCaptured     = board.GetPiece(result.BestMove.To);
                     board.MakeMove(result.BestMove);
+                    var aiWxfCls = MoveClassifier.Classify(board, result.BestMove, aiMovedPiece, aiCaptured, out int aiVictimSq);
+                    wxfHistory.Add(new MoveRecord
+                    {
+                        ZobristKey     = board.ZobristKey,
+                        Turn           = aiMovedPiece.Color,
+                        Move           = result.BestMove,
+                        Classification = aiWxfCls,
+                        VictimSquare   = aiVictimSq,
+                        IsCapture      = !aiCaptured.IsNone,
+                    });
                     Clock?.SwitchTurn();
                     ClearLatestHint();
                     NotifyUpdate();
@@ -863,13 +892,29 @@ public class GameService : IGameService, IDisposable
 
     private bool CheckGameOver()
     {
-        // 和棋優先判定（三次重覆局面）
-        if (board.IsDrawByRepetition())
+        // WXF 重複局面裁決（取代簡易三次重複和棋）
+        // 種子條目（1）+ 至少兩個完整循環（8步）= 9 筆才可能觸發
+        if (wxfHistory.Count >= 9)
         {
-            isGameOver = true;
-            StopAndDisposeClock();
-            GameMessage?.Invoke("和棋！三次重覆局面");
-            return true;
+            var verdict = WxfRepetitionJudge.Judge(wxfHistory);
+            if (verdict != RepetitionVerdict.None)
+            {
+                isGameOver = true;
+                StopAndDisposeClock();
+                switch (verdict)
+                {
+                    case RepetitionVerdict.Draw:
+                        GameMessage?.Invoke("和棋！重複局面（WXF）");
+                        break;
+                    case RepetitionVerdict.RedWins:
+                        GameMessage?.Invoke("紅方勝！黑方長將/長捉犯規");
+                        break;
+                    case RepetitionVerdict.BlackWins:
+                        GameMessage?.Invoke("黑方勝！紅方長將/長捉犯規");
+                        break;
+                }
+                return true;
+            }
         }
 
         // 和棋判定（六十步無吃子）
@@ -913,6 +958,9 @@ public class GameService : IGameService, IDisposable
             {
                 board.UndoMove();
                 didUndo = true;
+                // 移除最後一筆 wxfHistory（保留種子條目）
+                if (wxfHistory.Count > 1)
+                    wxfHistory.RemoveAt(wxfHistory.Count - 1);
             }
             catch (InvalidOperationException)
             {
@@ -954,6 +1002,7 @@ public class GameService : IGameService, IDisposable
         if (fen != null)
         {
             board.ParseFen(fen);
+            ResetWxfHistory();
             // 重設遊戲狀態，避免遊戲結束後載入書籤仍無法繼續走棋
             isGameOver = false;
             pendingAiDrawOffer = false;
@@ -1196,6 +1245,24 @@ public class GameService : IGameService, IDisposable
     }
 
     private void NotifyUpdate() => BoardUpdated?.Invoke();
+
+    /// <summary>
+    /// 清空並重置 WXF 歷史，加入初始局面的種子條目。
+    /// 種子條目使用 Cancel 分類，讓 WxfRepetitionJudge 能正確計算包含起始局面的重複次數。
+    /// </summary>
+    private void ResetWxfHistory()
+    {
+        wxfHistory.Clear();
+        wxfHistory.Add(new MoveRecord
+        {
+            ZobristKey     = board.ZobristKey,
+            Turn           = board.Turn,
+            Move           = Move.Null,
+            Classification = MoveClassification.Cancel,
+            VictimSquare   = -1,
+            IsCapture      = false,
+        });
+    }
 
     /// <summary>
     /// 超時事件處理：某方時間耗盡，判定對方獲勝。

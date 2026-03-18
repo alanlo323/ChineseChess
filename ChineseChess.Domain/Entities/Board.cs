@@ -24,6 +24,9 @@ public class Board : IBoard
     // 和棋判定用：Zobrist Key 歷史（每次 MakeMove 後紀錄）
     private readonly List<ulong> zobristHistory = new List<ulong>();
 
+    // WXF 長將偵測：記錄每步走完後對方是否被將軍（與 zobristHistory 並排）
+    private readonly List<bool> wasCheckAfterMove = new();
+
     // 無吃子半回合計數器（達 60 觸發和棋）
     private int halfMoveClock;
 
@@ -252,6 +255,7 @@ public class Board : IBoard
         zobristKey = 0;
         history.Clear();
         zobristHistory.Clear();
+        wasCheckAfterMove.Clear();
         halfMoveClock = 0;
 
         for (int r = 0; r < 10; r++)
@@ -832,6 +836,8 @@ public class Board : IBoard
         b.halfMoveClock = halfMoveClock;
         // 複製 Zobrist 歷史以便 Clone 後繼續做和棋判定
         b.zobristHistory.AddRange(zobristHistory);
+        // 複製將軍歷史以便 Clone 後繼續做 WXF 長將偵測
+        b.wasCheckAfterMove.AddRange(wasCheckAfterMove);
         // 搜尋時不複製 Undo 堆疊（僅 Clone 棋盤狀態）
         return b;
     }
@@ -880,6 +886,27 @@ public class Board : IBoard
     public bool IsDraw()
     {
         return IsDrawByRepetition() || IsDrawByNoCapture();
+    }
+
+    /// <summary>
+    /// 輕量長將模式偵測：檢查最近同一方的最後 3 步是否都是將軍且無吃子。
+    /// 用於搜尋引擎快速評分，不做完整 WXF 裁決。
+    /// 條件：wasCheckAfterMove 最後 6 筆中的奇數索引全為 true，且 halfMoveClock ≥ 6。
+    /// </summary>
+    public bool IsLikelyPerpetualCheck()
+    {
+        int count = wasCheckAfterMove.Count;
+        if (count < 6) return false;
+
+        // 同一方的最後 3 步（隔 2 步 = 同一方），從最新往前掃
+        for (int i = count - 1; i >= count - 6; i -= 2)
+        {
+            if (i < 0) return false;
+            if (!wasCheckAfterMove[i]) return false;
+        }
+
+        // 確認此段無吃子（halfMoveClock 代表最近無吃子步數）
+        return halfMoveClock >= 6;
     }
 
     /// <summary>

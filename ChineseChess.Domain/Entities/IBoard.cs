@@ -44,6 +44,12 @@ public interface IBoard
     /// </summary>
     bool IsAnyRepetitionInLastN(int n);
 
+    /// <summary>
+    /// 輕量長將模式偵測：同一方最近 3 步都是將軍且無吃子。
+    /// 用於搜尋引擎的長將懲罰評分（非完整 WXF 裁決）。
+    /// </summary>
+    bool IsLikelyPerpetualCheck();
+
     // 工具方法
     string ToFen();
     IBoard Clone();

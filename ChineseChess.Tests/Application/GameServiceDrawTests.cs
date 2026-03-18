@@ -9,6 +9,7 @@ using Xunit;
 
 namespace ChineseChess.Tests.Application;
 
+
 /// <summary>
 /// GameService 和棋判定整合測試。
 /// 驗證三次重覆局面與六十步無吃子觸發正確的 GameMessage。
@@ -39,8 +40,22 @@ public class GameServiceDrawTests
         await gameService.HumanMoveAsync(BlackAdvisorUp);
     }
 
+    // ─── 反射輔助 ─────────────────────────────────────────────────────────
+
+    private static readonly MethodInfo ResetWxfHistoryMethod =
+        typeof(GameService).GetMethod("ResetWxfHistory",
+            BindingFlags.NonPublic | BindingFlags.Instance)
+        ?? throw new System.InvalidOperationException("ResetWxfHistory method not found");
+
+    /// <summary>切換 FEN 並重置 wxfHistory，讓種子 ZobristKey 對應新局面。</summary>
+    private static void LoadFenAndResetHistory(GameService gs, string fen)
+    {
+        ((Board)gs.CurrentBoard).ParseFen(fen);
+        ResetWxfHistoryMethod.Invoke(gs, null);
+    }
+
     /// <summary>
-    /// 透過反射設定 Board 的私有 _halfMoveClock 欄位（整合測試輔助方法）。
+    /// 透過反射設定 Board 的私有 halfMoveClock 欄位（整合測試輔助方法）。
     /// </summary>
     private static void SetHalfMoveClock(Board board, int value)
     {
@@ -61,13 +76,13 @@ public class GameServiceDrawTests
         gameService.GameMessage += msg => messages.Add(msg);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         // 兩個完整循環後局面出現第三次 → 和棋
         await DoOneCycleAsync(gameService);
         await DoOneCycleAsync(gameService);
 
-        Assert.Contains(messages, msg => msg.Contains("重覆") || msg.Contains("和棋") || msg.Contains("Draw"));
+        Assert.Contains(messages, msg => msg.Contains("重覆") || msg.Contains("重複") || msg.Contains("和棋") || msg.Contains("Draw"));
     }
 
     [Fact]
@@ -79,13 +94,13 @@ public class GameServiceDrawTests
         gameService.GameMessage += msg => messages.Add(msg);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         await DoOneCycleAsync(gameService);
         await DoOneCycleAsync(gameService);
 
-        // 和棋訊息必須包含「三次重覆局面」
-        Assert.Contains(messages, msg => msg.Contains("三次重覆局面"));
+        // 和棋訊息必須包含「重複局面」（WXF 裁決訊息）
+        Assert.Contains(messages, msg => msg.Contains("重複局面") || msg.Contains("重覆局面"));
     }
 
     [Fact]
@@ -98,11 +113,11 @@ public class GameServiceDrawTests
         gameService.GameMessage += msg => messages.Add(msg);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         await DoOneCycleAsync(gameService);
 
-        Assert.DoesNotContain(messages, msg => msg.Contains("重覆") || msg.Contains("六十步"));
+        Assert.DoesNotContain(messages, msg => msg.Contains("重覆") || msg.Contains("重複") || msg.Contains("六十步"));
     }
 
     // ─── 六十步無吃子（IsDrawByNoCapture）整合測試 ───────────────────────
@@ -118,7 +133,7 @@ public class GameServiceDrawTests
         gameService.GameMessage += msg => messages.Add(msg);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         // 設定無吃子計數為 59（模擬已走了 59 步無吃子）
         SetHalfMoveClock((Board)gameService.CurrentBoard, 59);
@@ -139,7 +154,7 @@ public class GameServiceDrawTests
         gameService.GameMessage += msg => messages.Add(msg);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         // 設定無吃子計數為 59，再走一步觸發
         SetHalfMoveClock((Board)gameService.CurrentBoard, 59);
@@ -159,7 +174,7 @@ public class GameServiceDrawTests
         gameService.GameMessage += msg => messages.Add(msg);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         // 設定無吃子計數為 58，走一步後只有 59 步
         SetHalfMoveClock((Board)gameService.CurrentBoard, 58);
@@ -180,7 +195,7 @@ public class GameServiceDrawTests
         gameService.GameMessage += msg => messages.Add(msg);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         // 觸發和棋（三次重覆）
         await DoOneCycleAsync(gameService);
@@ -207,22 +222,22 @@ public class GameServiceDrawTests
 
         // 第一局：觸發和棋
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         await DoOneCycleAsync(gameService);
         await DoOneCycleAsync(gameService);
 
-        Assert.Contains(messages, msg => msg.Contains("重覆") || msg.Contains("和棋") || msg.Contains("Draw"));
+        Assert.Contains(messages, msg => msg.Contains("重覆") || msg.Contains("重複") || msg.Contains("和棋") || msg.Contains("Draw"));
         messages.Clear();
 
         // 重新開始，不應立即觸發和棋
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         // 走一步後確認未觸發和棋
         await gameService.HumanMoveAsync(RedRookDown);
 
-        Assert.DoesNotContain(messages, msg => msg.Contains("重覆") || msg.Contains("六十步"));
+        Assert.DoesNotContain(messages, msg => msg.Contains("重覆") || msg.Contains("重複") || msg.Contains("六十步"));
     }
 
     // ─── HalfMoveClock 在黑方走棋後正確更新 ──────────────────────────────
@@ -234,7 +249,7 @@ public class GameServiceDrawTests
         var gameService = new GameService(engine);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         Assert.Equal(0, gameService.CurrentBoard.HalfMoveClock);
 
@@ -258,7 +273,7 @@ public class GameServiceDrawTests
         gameService.GameMessage += msg => messages.Add(msg);
 
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
-        ((Board)gameService.CurrentBoard).ParseFen(LoopFen);
+        LoadFenAndResetHistory(gameService, LoopFen);
 
         await DoOneCycleAsync(gameService);
         await DoOneCycleAsync(gameService);
