@@ -365,46 +365,77 @@ public class Board : IBoard
     {
         var legalMoves = new List<Move>();
         var pseudoMoves = GeneratePseudoLegalMoves().ToList();
-
         int kingIndex = GetKingIndex(turn);
 
         foreach (var move in pseudoMoves)
         {
-            var movingColor = turn;
-            var movingPiece = pieces[move.From];
-
-            // 快速路徑：若走法的 from 與 to 都不在將帥的同行/列上，
-            // 則走法不可能透過車/炮/飛將或馬腳暴露將帥，直接加入合法著法。
-            // 將帥本身的移動必須完整驗證（王不能走入將軍）。
-            if (kingIndex >= 0 && movingPiece.Type != PieceType.King)
-            {
-                int kingRow = kingIndex / Width;
-                int kingCol = kingIndex % Width;
-                int fromRow = move.From / Width;
-                int fromCol = move.From % Width;
-                int toRow   = move.To / Width;
-                int toCol   = move.To % Width;
-
-                bool couldExposeKing = fromRow == kingRow || fromCol == kingCol
-                                    || toRow   == kingRow || toCol   == kingCol;
-
-                if (!couldExposeKing)
-                {
-                    legalMoves.Add(move);
-                    continue;
-                }
-            }
-
-            // 慢速路徑：完整驗證（將帥自身移動、或走法在將帥行/列上）
-            MakeMove(move);
-            if (!IsCheck(movingColor))
-            {
+            if (IsLegalMove(move, kingIndex, turn))
                 legalMoves.Add(move);
-            }
-            UnmakeMove(move);
         }
 
         return legalMoves;
+    }
+
+    public IEnumerable<Move> GenerateCaptureMoves()
+    {
+        int kingIndex = GetKingIndex(turn);
+        var result = new List<Move>();
+
+        foreach (var move in GeneratePseudoLegalMoves())
+        {
+            if (pieces[move.To].IsNone) continue;          // 只取吃子著法
+            if (IsLegalMove(move, kingIndex, turn))
+                result.Add(move);
+        }
+
+        return result;
+    }
+
+    public IEnumerable<Move> GenerateQuietMoves()
+    {
+        int kingIndex = GetKingIndex(turn);
+        var result = new List<Move>();
+
+        foreach (var move in GeneratePseudoLegalMoves())
+        {
+            if (!pieces[move.To].IsNone) continue;         // 只取安靜著法
+            if (IsLegalMove(move, kingIndex, turn))
+                result.Add(move);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 判斷一個偽合法著法是否為真正合法著法（不讓己方將帥被將軍）。
+    /// 快速路徑：若走法的 from 與 to 都不在將帥的同行/列上，
+    /// 則走法不可能透過車/炮/飛將或馬腳暴露將帥，直接回傳 true。
+    /// 將帥本身的移動必須走慢速路徑（完整驗證）。
+    /// </summary>
+    private bool IsLegalMove(Move move, int kingIndex, PieceColor movingColor)
+    {
+        var movingPiece = pieces[move.From];
+
+        if (kingIndex >= 0 && movingPiece.Type != PieceType.King)
+        {
+            int kingRow = kingIndex / Width;
+            int kingCol = kingIndex % Width;
+            int fromRow = move.From / Width;
+            int fromCol = move.From % Width;
+            int toRow   = move.To / Width;
+            int toCol   = move.To % Width;
+
+            bool couldExposeKing = fromRow == kingRow || fromCol == kingCol
+                                || toRow   == kingRow || toCol   == kingCol;
+
+            if (!couldExposeKing) return true;
+        }
+
+        // 慢速路徑：完整驗證
+        MakeMove(move);
+        bool legal = !IsCheck(movingColor);
+        UnmakeMove(move);
+        return legal;
     }
 
     public IEnumerable<Move> GeneratePseudoLegalMoves()

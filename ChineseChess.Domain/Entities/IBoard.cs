@@ -16,6 +16,12 @@ public interface IBoard
     // 走法產生
     IEnumerable<Move> GenerateLegalMoves();
 
+    /// <summary>只產生吃子著法（目標格有對方棋子），已過濾合法性。</summary>
+    IEnumerable<Move> GenerateCaptureMoves();
+
+    /// <summary>只產生安靜著法（目標格為空），已過濾合法性。</summary>
+    IEnumerable<Move> GenerateQuietMoves();
+
     // 狀態變更
     void MakeMove(Move move);
     void UnmakeMove(Move move);

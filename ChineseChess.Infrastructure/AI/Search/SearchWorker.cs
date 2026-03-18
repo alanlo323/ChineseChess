@@ -22,6 +22,7 @@ internal sealed class SearchWorker
     private readonly CancellationToken ct;         // 時間限制 + 使用者停止（合併）
     private readonly CancellationToken hardStopCt; // 僅使用者明確停止（暫停等待用）
     private readonly ManualResetEventSlim pauseSignal;
+    private readonly IProbCutDataCollector probCutCollector;
 
     private long nodesVisited;
     private Move[,] killerMoves;
@@ -67,12 +68,19 @@ internal sealed class SearchWorker
     internal bool ProbCutEnabled { get; set; } = true;
 
     /// <summary>
+    /// 是否啟用 ProbCut 回歸資料收集模式（預設 false）。
+    /// 啟用時，每次 ProbCut 的淺搜/深搜結果都會記錄至 probCutCollector。
+    /// 注意：開啟後 ProbCut 的剪枝效果暫時停用（僅收集資料），搜尋速度會下降。
+    /// </summary>
+    internal bool DataCollectionMode { get; set; } = false;
+
+    /// <summary>
     /// ProbCut 成功觸發次數（成功 beta-cutoff）。
     /// 用於調參：可比較 on/off 情境下的觸發率與節點縮減效益。
     /// </summary>
     internal int ProbCutCutCount { get; private set; }
 
-    public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, CancellationToken hardStopCt, ManualResetEventSlim pauseSignal)
+    public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, CancellationToken hardStopCt, ManualResetEventSlim pauseSignal, IProbCutDataCollector? collector = null)
     {
         this.board = board;
         this.evaluator = evaluator;
@@ -80,6 +88,7 @@ internal sealed class SearchWorker
         this.ct = ct;
         this.hardStopCt = hardStopCt;
         this.pauseSignal = pauseSignal;
+        probCutCollector = collector ?? NullProbCutDataCollector.Instance;
         killerMoves = new Move[MaxSearchPly, 2];
         historyTable = new int[90, 90];
         countermoveTable = new Move[90, 90];
@@ -379,11 +388,13 @@ internal sealed class SearchWorker
         //   步驟一：QSearch 快速預篩（廉價） → 通過才升級到 Negamax
         //   步驟二：Negamax(depth - ProbCutReduction - 1) 精確確認
         //   成功後存入 TT（下界），供後續相同局面受益
+        // DataCollectionMode：資料收集時略過 !isPvNode 限制，
+        // 允許在 PV 節點也記錄觀測（提供更完整的資料集供回歸分析）。
         if (ProbCutEnabled
             && depth >= ProbCutMinDepth
             && ply > 0
             && !inCheck
-            && !isPvNode
+            && (!isPvNode || DataCollectionMode)
             && !skipNullMove
             && Math.Abs(beta) < CheckmateThreshold
             && excludedMove.IsNull
@@ -395,9 +406,8 @@ internal sealed class SearchWorker
             int staticEvalForProb = evaluator.Evaluate(board);
 
             // 候選著法：僅高信心吃子，排除炮作為進攻方（高波動，SEE 難以精確估算）
-            var probCaptures = board.GenerateLegalMoves()
-                .Where(m => !board.GetPiece(m.To).IsNone
-                         && board.GetPiece(m.From).Type != PieceType.Cannon)
+            var probCaptures = board.GenerateCaptureMoves()
+                .Where(m => board.GetPiece(m.From).Type != PieceType.Cannon)
                 .ToList();
 
             if (probCaptures.Count > 0)
@@ -407,7 +417,9 @@ internal sealed class SearchWorker
                 foreach (var captureMove in probCaptures)
                 {
                     // SEE 篩選：靜態評估 + SEE 必須有機會達到 probBeta
-                    if (StaticExchangeEvaluator.See(board, captureMove, PieceValues) < probBeta - staticEvalForProb)
+                    // DataCollectionMode 略過此過濾，以收集所有候選著法的完整資料（包含不利吃子）
+                    if (!DataCollectionMode &&
+                        StaticExchangeEvaluator.See(board, captureMove, PieceValues) < probBeta - staticEvalForProb)
                         continue;
 
                     board.MakeMove(captureMove);
@@ -415,17 +427,33 @@ internal sealed class SearchWorker
                     // 步驟一：QSearch 預篩（廉價）——即使不做靜態著法也已達 probBeta 才繼續
                     int probScore = -Quiescence(-probBeta, -probBeta + 1, 0);
 
-                    // 步驟二：QSearch 通過後，以 Negamax 精確確認
-                    if (probScore >= probBeta)
+                    // 步驟二：DataCollectionMode 時強制執行深搜；否則只在 QSearch 通過後才搜尋
+                    int probDeepScore = int.MinValue;
+                    if (probScore >= probBeta || DataCollectionMode)
                     {
-                        probScore = -Negamax(depth - ProbCutReduction - 1, ply + 1,
+                        probDeepScore = -Negamax(depth - ProbCutReduction - 1, ply + 1,
                             -probBeta, -probBeta + 1, skipNullMove: false,
                             captureMove.From, captureMove.To);
                     }
 
                     board.UnmakeMove(captureMove);
 
-                    if (probScore >= probBeta)
+                    // 資料收集：記錄此次觀測（不影響搜尋結果）
+                    if (DataCollectionMode && probDeepScore != int.MinValue)
+                    {
+                        probCutCollector.RecordSample(new ProbCutSample(
+                            ShallowScore: probScore,
+                            DeepScore: probDeepScore,
+                            BetaUsed: probBeta,
+                            Depth: depth,
+                            Ply: ply,
+                            DepthPair: ClassifyDepthPair(depth),
+                            Phase: ClassifyPhase(board),
+                            CaptureClass: ClassifyCaptureClass(board.GetPiece(captureMove.From).Type)));
+                    }
+
+                    // 正常 ProbCut 剪枝（DataCollectionMode 時跳過，以觀察完整資料）
+                    if (!DataCollectionMode && probDeepScore >= probBeta)
                     {
                         // 存入 TT（下界）：後續相同局面可直接使用此結果
                         tt.Store(board.ZobristKey, probBeta, depth - ProbCutReduction,
@@ -489,72 +517,107 @@ internal sealed class SearchWorker
             }
         }
 
-        // 7. 產生並排序著法
-        var moves = board.GenerateLegalMoves().ToList();
+        // 7. 分段產生著法（Stage 1：吃子，Stage 2：安靜）
+        // 優化：Stage 1 產生 beta 剪枝時，Stage 2 的安靜著法完全跳過不生成。
+        var captureList = board.GenerateCaptureMoves().ToList();
+        OrderMoves(captureList, ttMove, ply, opponentLastFrom, opponentLastTo);
 
-        if (moves.Count == 0)
-        {
-            if (inCheck) return -MateScore + ply;
-            return 0;
-        }
-
-        OrderMoves(moves, ttMove, ply, opponentLastFrom, opponentLastTo);
-
+        int moveCount = 0;
         int bestScore = -Infinity;
         Move bestMove = Move.Null;
         TTFlag flag = TTFlag.UpperBound;
 
-        for (int i = 0; i < moves.Count; i++)
+        // Stage 1：吃子著法
+        foreach (var move in captureList)
         {
-            var move = moves[i];
-
-            // 排除搜尋：跳過指定的排除走法（避免重複計算 TT 走法）
+            // 排除搜尋：跳過指定的排除走法
             if (!excludedMove.IsNull && move == excludedMove) continue;
 
             var movingPiece = board.GetPiece(move.From);
             var targetPiece = board.GetPiece(move.To);
-            bool isCapture = !targetPiece.IsNone;
             bool isKiller = IsKillerMove(ply, move);
-            // M1b：威脅延伸放寬至 ply <= 2（原 ply == 0），depth >= 2，i < 8（原 i < 4）
-            bool threatCandidate = !isCapture
-                && ply <= 2
-                && depth >= 2
-                && depth <= 3
-                && i < 8;
+
+            board.MakeMove(move);
+
+            bool givesCheck = board.IsCheck(board.Turn);
+            bool recapturable = IsCurrentSquareRecapturable(move.To);
+            bool extendCapture = ply <= 3 && ShouldExtendForCapture(movingPiece, targetPiece, recapturable);
+            int extension = (givesCheck || extendCapture) ? 1 : 0;
+            if (singularExtension && move == ttMove) extension += 1;
+            if (ply >= 6) extension = 0;
+
+            int score;
+            // 吃子著法不套用 LMR（isCapture == true）
+            score = -Negamax(depth - 1 + extension, ply + 1, -beta, -alpha, false,
+                move.From, move.To);
+
+            board.UnmakeMove(move);
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestMove = move;
+
+                if (score > alpha)
+                {
+                    alpha = score;
+                    flag = TTFlag.Exact;
+                    UpdatePv(ply, move);
+
+                    if (alpha >= beta)
+                    {
+                        tt.Store(board.ZobristKey, beta, depth, TTFlag.LowerBound, move);
+                        return beta;
+                    }
+                }
+            }
+
+            moveCount++;
+        }
+
+        // Stage 2：安靜著法（只在 Stage 1 未提前返回時才生成）
+        var quietList = board.GenerateQuietMoves().ToList();
+        OrderMoves(quietList, ttMove, ply, opponentLastFrom, opponentLastTo);
+
+        int quietIdx = 0;
+        foreach (var move in quietList)
+        {
+            // 排除搜尋：跳過指定的排除走法
+            if (!excludedMove.IsNull && move == excludedMove) { quietIdx++; continue; }
+
+            // Stage 2 的 moveIndex：延續 Stage 1 的計數，維持 LMR 一致性
+            int i = captureList.Count + quietIdx;
+
+            var movingPiece = board.GetPiece(move.From);
+            var targetPiece = board.GetPiece(move.To);
+            bool isKiller = IsKillerMove(ply, move);
+            // M1b：威脅延伸（安靜著法）
+            bool threatCandidate = ply <= 2 && depth >= 2 && depth <= 3 && i < 8;
             bool hadImmediateThreat = threatCandidate && SideToMoveHasHighValueCapture();
 
-            // 7. Futility 剪枝：若無望則略過靜態著法
-            if (futilityPruning && i > 0 && !isCapture && !isKiller)
+            // Futility 剪枝：若無望則略過安靜著法（第一個著法不剪）
+            if (futilityPruning && moveCount > 0 && !isKiller)
             {
+                quietIdx++;
                 continue;
             }
 
             board.MakeMove(move);
 
-            // 8. 將軍延伸（Check Extension）
             bool givesCheck = board.IsCheck(board.Turn);
-            bool recapturable = isCapture && IsCurrentSquareRecapturable(move.To);
-            // M1a：吃子延伸放寬至 ply <= 3（原 ply <= 1）
-            bool extendCapture = isCapture
-                && ply <= 3
-                && ShouldExtendForCapture(movingPiece, targetPiece, recapturable);
-            bool extendThreat = !isCapture
-                && !givesCheck
+            bool extendThreat = !givesCheck
                 && threatCandidate
                 && !hadImmediateThreat
                 && CreatesImmediateThreatFromCurrentPosition();
-            // M1a：extensionBudget - 每條路徑最多延伸 6 次，防止指數爆炸
-            int extension = (givesCheck || extendCapture || extendThreat) ? 1 : 0;
-            // SE：若奇異延伸已觸發，且當前走法為 TT 最佳走法，再加一層延伸
+            int extension = (givesCheck || extendThreat) ? 1 : 0;
             if (singularExtension && move == ttMove) extension += 1;
             if (ply >= 6) extension = 0;
 
             int score;
-
             // 9. 後序著法減枝（H2c：基於 history 的 LMR）
             int histScore = historyTable[move.From, move.To];
             int reduction = 0;
-            if (!isCapture && !givesCheck && !isKiller && !inCheck)
+            if (!givesCheck && !isKiller && !inCheck)
             {
                 reduction = ComputeLmrReduction(i, depth, histScore);
             }
@@ -586,21 +649,16 @@ internal sealed class SearchWorker
                 {
                     alpha = score;
                     flag = TTFlag.Exact;
-
-                    // H1：alpha 更新時更新 Triangular PV Table
                     UpdatePv(ply, move);
 
                     if (alpha >= beta)
                     {
-                        if (!isCapture)
+                        UpdateKillers(ply, move);
+                        historyTable[move.From, move.To] += depth * depth;
+                        // H2b：記錄反制著法（對手上一步 → 此著法）
+                        if (opponentLastFrom >= 0 && opponentLastTo >= 0)
                         {
-                            UpdateKillers(ply, move);
-                            historyTable[move.From, move.To] += depth * depth;
-                            // H2b：記錄反制著法（對手上一步 → 此著法）
-                            if (opponentLastFrom >= 0 && opponentLastTo >= 0)
-                            {
-                                countermoveTable[opponentLastFrom, opponentLastTo] = move;
-                            }
+                            countermoveTable[opponentLastFrom, opponentLastTo] = move;
                         }
 
                         tt.Store(board.ZobristKey, beta, depth, TTFlag.LowerBound, move);
@@ -608,6 +666,19 @@ internal sealed class SearchWorker
                     }
                 }
             }
+
+            moveCount++;
+            quietIdx++;
+        }
+
+        // 空節點：將殺或逼和
+        // moveCount == 0 涵蓋兩種情況：
+        //   1. 無著法（stalemate / checkmate）
+        //   2. Singular Extension：全部著法均為 excludedMove（回傳 -Infinity 讓 SE 正確觸發）
+        if (moveCount == 0)
+        {
+            if (inCheck) return -MateScore + ply;
+            return 0;
         }
 
         tt.Store(board.ZobristKey, bestScore, depth, flag, bestMove);
@@ -625,9 +696,7 @@ internal sealed class SearchWorker
 
         if (ply >= QuiescenceMaxPly) return alpha;
 
-        var captures = board.GenerateLegalMoves()
-            .Where(m => !board.GetPiece(m.To).IsNone)
-            .ToList();
+        var captures = board.GenerateCaptureMoves().ToList();
 
         if (captures.Count == 0) return alpha;
 
@@ -747,6 +816,37 @@ internal sealed class SearchWorker
 
         return baseReduction;
     }
+
+    // --- ProbCut 資料收集 Helper ---
+
+    private static ProbCutDepthPair ClassifyDepthPair(int depth) => depth switch
+    {
+        5  => ProbCutDepthPair.D5_0,
+        6  => ProbCutDepthPair.D6_1,
+        7  => ProbCutDepthPair.D7_2,
+        8  => ProbCutDepthPair.D8_3,
+        9  => ProbCutDepthPair.D9_4,
+        _  => ProbCutDepthPair.D10Plus
+    };
+
+    private static ProbCutPhase ClassifyPhase(IBoard currentBoard)
+    {
+        int phase = Evaluators.GamePhase.Calculate(currentBoard);
+        if (phase >= 200) return ProbCutPhase.Opening;
+        if (phase >= 80)  return ProbCutPhase.Midgame;
+        return ProbCutPhase.Endgame;
+    }
+
+    private static ProbCutCaptureClass ClassifyCaptureClass(Domain.Enums.PieceType attackerType) =>
+        attackerType switch
+        {
+            Domain.Enums.PieceType.Rook    => ProbCutCaptureClass.RookCapture,
+            Domain.Enums.PieceType.Cannon  => ProbCutCaptureClass.CannonCapture,
+            Domain.Enums.PieceType.Horse   => ProbCutCaptureClass.HorseCapture,
+            Domain.Enums.PieceType.Advisor or
+            Domain.Enums.PieceType.Elephant => ProbCutCaptureClass.MinorCapture,
+            _                              => ProbCutCaptureClass.PawnCapture
+        };
 
     // --- 著法排序 ---
 
