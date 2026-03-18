@@ -2,6 +2,7 @@ using ChineseChess.Application.Interfaces;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Infrastructure.AI.Evaluators;
 using ChineseChess.Infrastructure.AI.Search;
+using System;
 using System.Linq;
 using System.Threading;
 using Xunit;
@@ -268,6 +269,86 @@ public class SearchProbCutTests
         worker.Search(5);
 
         Assert.Equal(0, worker.ProbCutCutCount);
+    }
+
+    // ─── givesCheck 守衛：吃子給將的候選應被排除 ─────────────────────────
+
+    [Fact]
+    public void ProbCut_GivesCheckCapture_DoesNotCorruptBestMove()
+    {
+        // 局面：紅車(index=76)可吃黑兵(index=13)，吃後車在 col4、黑將(index=4)亦在 col4 → 將軍
+        // givesCheck 守衛應排除此著法出 ProbCut 候選；驗證最佳著法不受影響
+        const string fen = "4k4/4p4/9/9/9/9/9/9/4R4/3K5 w - - 0 1";
+        var board = new Board(fen);
+        var workerOn  = CreateWorker(board, probCutEnabled: true);
+        var workerOff = CreateWorker(board, probCutEnabled: false);
+
+        workerOn.Search(6);
+        var bestOn = workerOn.ProbeBestMove();
+
+        workerOff.Search(6);
+        var bestOff = workerOff.ProbeBestMove();
+
+        Assert.False(bestOn.IsNull, "ProbCut 開啟時應回傳有效著法");
+        Assert.Equal(bestOff, bestOn);
+    }
+
+    // ─── ProbCutFalseCount 計數器 ─────────────────────────────────────────────
+
+    [Fact]
+    public void ProbCutFalseCount_WhenDisabled_IsZero()
+    {
+        // ProbCut 關閉時，FalseCount 應維持為 0
+        var board = new Board(InitialFen);
+        var worker = CreateWorker(board, probCutEnabled: false);
+
+        worker.Search(5);
+
+        Assert.Equal(0, worker.ProbCutFalseCount);
+    }
+
+    [Fact]
+    public void ProbCutFalseCount_AfterSearch_IsNonNegative()
+    {
+        // FalseCount 合約驗證：不應為負值
+        var board = new Board(InitialFen);
+        var worker = CreateWorker(board, probCutEnabled: true);
+
+        worker.Search(6);
+
+        Assert.True(worker.ProbCutFalseCount >= 0,
+            "ProbCutFalseCount 不應為負值");
+    }
+
+    // ─── WXF 重複裁決：ProbCut on/off 不影響裁決符號 ─────────────────────────
+
+    [Fact]
+    public void ProbCut_WxfRepetitionPosition_OnOffGiveSameScoreSign()
+    {
+        // 局面含兩次完整循環，IsAnyRepetitionInLastN(8) 為 true
+        // → ProbCut 重複守衛禁用 ProbCut，回到完整搜尋
+        // 驗證：ProbCut on/off 的搜尋分數符號一致（不因 ProbCut 誤判勝負方向）
+        const string loopFen = "4ka3/9/9/9/9/9/9/9/9/R2K5 w - - 0 1";
+        var board = new Board(loopFen);
+
+        // 製造兩次完整循環（各 4 個半步）
+        board.MakeMove(new Move(81, 72));
+        board.MakeMove(new Move(5, 13));
+        board.MakeMove(new Move(72, 81));
+        board.MakeMove(new Move(13, 5));
+        board.MakeMove(new Move(81, 72));
+        board.MakeMove(new Move(5, 13));
+        board.MakeMove(new Move(72, 81));
+        board.MakeMove(new Move(13, 5));
+
+        var workerOn  = CreateWorker(board, probCutEnabled: true);
+        var workerOff = CreateWorker(board, probCutEnabled: false);
+
+        int scoreOn  = workerOn.SearchSingleDepth(5);
+        int scoreOff = workerOff.SearchSingleDepth(5);
+
+        // 符號一致表示 WXF 裁決邏輯未被 ProbCut 污染
+        Assert.Equal(Math.Sign(scoreOff), Math.Sign(scoreOn));
     }
 
     private static SearchWorker CreateWorker(IBoard board, bool probCutEnabled = true)

@@ -91,6 +91,13 @@ internal sealed class SearchWorker
     /// </summary>
     internal int ProbCutCutCount { get; private set; }
 
+    /// <summary>
+    /// ProbCut QSearch 預篩通過但深層 Negamax 未確認的次數（false-positive 計數）。
+    /// 誤判率 = FalseCount / (CutCount + FalseCount)。
+    /// 每次 Search() 開頭重置為 0。
+    /// </summary>
+    internal int ProbCutFalseCount { get; private set; }
+
     public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, CancellationToken hardStopCt, ManualResetEventSlim pauseSignal, IProbCutDataCollector? collector = null)
     {
         this.board = board;
@@ -115,6 +122,7 @@ internal sealed class SearchWorker
     {
         nodesVisited = 0;
         ProbCutCutCount = 0;
+        ProbCutFalseCount = 0;
         Array.Clear(killerMoves, 0, killerMoves.Length);
         Array.Clear(historyTable, 0, historyTable.Length);
         Array.Clear(pvLength, 0, pvLength.Length);
@@ -438,6 +446,16 @@ internal sealed class SearchWorker
 
                     board.MakeMove(captureMove);
 
+                    // givesCheck 守衛（WXF 特化）：
+                    // MakeMove 後 board.Turn 已切換為對手方，IsCheck(board.Turn) 正確檢查
+                    // 「此吃子著法是否將軍對手」。WXF 長將判負屬於特殊語義，
+                    // ProbCut 機率邊界無法涵蓋，須排除此類候選避免誤剪。
+                    if (!DataCollectionMode && board.IsCheck(board.Turn))
+                    {
+                        board.UnmakeMove(captureMove);
+                        continue;
+                    }
+
                     // 步驟一：QSearch 預篩（廉價）——即使不做靜態著法也已達 probBeta 才繼續
                     int probScore = -Quiescence(-probBeta, -probBeta + 1, 0);
 
@@ -451,6 +469,13 @@ internal sealed class SearchWorker
                     }
 
                     board.UnmakeMove(captureMove);
+
+                    // FalseCount：QSearch 預篩通過但深搜未確認（false positive）
+                    if (!DataCollectionMode && probScore >= probBeta
+                        && probDeepScore != int.MinValue && probDeepScore < probBeta)
+                    {
+                        ProbCutFalseCount++;
+                    }
 
                     // 資料收集：記錄此次觀測（不影響搜尋結果）
                     if (DataCollectionMode && probDeepScore != int.MinValue)
