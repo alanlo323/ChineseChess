@@ -516,6 +516,46 @@ public class SearchEngine : IAiEngine
         }).ToList();
     }
 
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<MoveEvaluation>> SearchMultiPvAsync(
+        IBoard board, SearchSettings settings, int pvCount,
+        CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
+    {
+        var allMoves = board.GenerateLegalMoves().ToList();
+        if (allMoves.Count == 0) return [];
+
+        int clampedCount = Math.Clamp(pvCount, 1, allMoves.Count);
+
+        // 評估所有合法著法（共用 TT，各著法獨立搜尋後 TT 有足夠覆蓋）
+        var evaluations = await EvaluateMovesAsync(board, allMoves, settings.Depth, ct);
+
+        var result = new List<MoveEvaluation>(clampedCount);
+
+        for (int i = 0; i < Math.Min(clampedCount, evaluations.Count); i++)
+        {
+            var eval = evaluations[i];
+
+            // 從此著法出發，追蹤 TT 建立 PV 序列
+            var pvBoard = board.Clone();
+            pvBoard.MakeMove(eval.Move);
+            string firstMoveStr = MoveNotation.ToNotation(eval.Move, board);
+            string restPv = BuildPrincipalVariation(pvBoard, settings.Depth - 1);
+            string pvLine = string.IsNullOrEmpty(restPv)
+                ? firstMoveStr
+                : firstMoveStr + " " + restPv;
+
+            result.Add(new MoveEvaluation
+            {
+                Move = eval.Move,
+                Score = eval.Score,
+                IsBest = i == 0,
+                PvLine = pvLine
+            });
+        }
+
+        return result;
+    }
+
     public Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();

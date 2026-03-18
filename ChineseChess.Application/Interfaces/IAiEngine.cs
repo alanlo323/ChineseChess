@@ -68,6 +68,8 @@ public class MoveEvaluation
     public Move Move { get; set; }
     public int Score { get; set; }  // 從「做出此走法的玩家」視角，正分 = 對自己有利
     public bool IsBest { get; set; }
+    /// <summary>從此著法出發的主要變例序列（符號表示法，空格分隔）。</summary>
+    public string PvLine { get; set; } = string.Empty;
 }
 
 public enum TTFlag : byte
@@ -117,6 +119,15 @@ public interface IAiEngine
 {
     Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null);
     Task<IReadOnlyList<MoveEvaluation>> EvaluateMovesAsync(IBoard board, IEnumerable<Move> moves, int depth, CancellationToken ct = default, IProgress<string>? progress = null);
+
+    /// <summary>
+    /// 搜尋多個最佳著法（Multi-PV 模式）。
+    /// 回傳前 <paramref name="pvCount"/> 個最佳著法，每個含分數與 PV 走法序列。
+    /// 結果按分數由高到低排序，不含重複著法。
+    /// </summary>
+    Task<IReadOnlyList<MoveEvaluation>> SearchMultiPvAsync(
+        IBoard board, SearchSettings settings, int pvCount,
+        CancellationToken ct = default, IProgress<SearchProgress>? progress = null);
     Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default);
     Task ImportTranspositionTableAsync(Stream input, bool asJson, CancellationToken ct = default);
     TTStatistics GetTTStatistics();

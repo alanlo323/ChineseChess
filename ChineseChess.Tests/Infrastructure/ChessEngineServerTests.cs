@@ -41,6 +41,8 @@ public class ChessEngineServerTests : IAsyncLifetime
         public void MergeTranspositionTableFrom(IAiEngine other) { }
         public IEnumerable<TTEntry> EnumerateTTEntries() => [];
         public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6) => null;
+        public Task<IReadOnlyList<MoveEvaluation>> SearchMultiPvAsync(IBoard board, SearchSettings settings, int pvCount, CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
+            => Task.FromResult<IReadOnlyList<MoveEvaluation>>([]);
     }
 
     /// <summary>包裝 TcpClient 連線的可 Dispose 輔助型別。</summary>

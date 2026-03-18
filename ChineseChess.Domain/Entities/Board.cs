@@ -850,4 +850,29 @@ public class Board : IBoard
     {
         return IsDrawByRepetition() || IsDrawByNoCapture();
     }
+
+    /// <summary>
+    /// 檢查最近 n 個半步的 Zobrist 雜湊序列中，是否有任何局面重複出現。
+    ///
+    /// 用途：在引擎尚未實作完整 WXF 長將/長捉裁決規則前，
+    /// 作為 ProbCut 等前向剪枝的「重複風險」守衛。
+    /// 若最近局面已在循環，代入機率剪枝可能污染評估邊界（因循環可能是勝/負而非和），
+    /// 此時應禁用 ProbCut，回到完整搜尋。
+    ///
+    /// 注意：這只是啟發式近似，不等同於 WXF 正式裁決。
+    /// </summary>
+    public bool IsAnyRepetitionInLastN(int n)
+    {
+        int count = zobristHistory.Count;
+        if (count < 2) return false;
+
+        int start = Math.Max(0, count - n);
+        var seen = new HashSet<ulong>(n);
+        for (int i = start; i < count; i++)
+        {
+            if (!seen.Add(zobristHistory[i]))
+                return true;
+        }
+        return false;
+    }
 }

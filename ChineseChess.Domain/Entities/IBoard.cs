@@ -32,6 +32,12 @@ public interface IBoard
     bool IsDrawByNoCapture(int limit = 60);
     bool IsDraw();
 
+    /// <summary>
+    /// 檢查最近 n 個半步的 Zobrist 雜湊序列中，是否有任何局面重複出現。
+    /// 用於 ProbCut 等前向剪枝的重複風險守衛。
+    /// </summary>
+    bool IsAnyRepetitionInLastN(int n);
+
     // 工具方法
     string ToFen();
     IBoard Clone();

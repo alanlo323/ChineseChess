@@ -47,6 +47,8 @@ public class GameServiceOpeningBookTests
         public void MergeTranspositionTableFrom(IAiEngine other) { }
         public IEnumerable<TTEntry> EnumerateTTEntries() => [];
         public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6) => null;
+        public Task<IReadOnlyList<MoveEvaluation>> SearchMultiPvAsync(IBoard board, SearchSettings settings, int pvCount, CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
+            => Task.FromResult<IReadOnlyList<MoveEvaluation>>([]);
     }
 
     // ─── 測試 1：開局庫命中時跳過 AI 搜尋（PlayerVsAi 模式）────────────

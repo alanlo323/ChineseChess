@@ -204,6 +204,25 @@ public sealed class ExternalEngineAdapter : IAiEngine, IDisposable
 
     public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6) => null;
 
+    /// <summary>外部引擎不支援 Multi-PV；退化為單一最佳著法。</summary>
+    public async Task<IReadOnlyList<MoveEvaluation>> SearchMultiPvAsync(
+        IBoard board, SearchSettings settings, int pvCount,
+        CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
+    {
+        var result = await SearchAsync(board, settings, ct, progress);
+        if (result.BestMove.IsNull) return [];
+        return
+        [
+            new MoveEvaluation
+            {
+                Move = result.BestMove,
+                Score = result.Score,
+                IsBest = true,
+                PvLine = result.PvLine
+            }
+        ];
+    }
+
     // ─── Dispose ─────────────────────────────────────────────────────────
 
     public void Dispose()

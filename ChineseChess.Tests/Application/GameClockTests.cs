@@ -293,6 +293,13 @@ internal sealed class CapturingMockAiEngine : ChineseChess.Application.Interface
 
     public ChineseChess.Application.Interfaces.TTTreeNode? ExploreTTTree(
         ChineseChess.Domain.Entities.IBoard board, int maxDepth = 6) => null;
+
+    public Task<IReadOnlyList<ChineseChess.Application.Interfaces.MoveEvaluation>> SearchMultiPvAsync(
+        ChineseChess.Domain.Entities.IBoard board, ChineseChess.Application.Interfaces.SearchSettings settings,
+        int pvCount, CancellationToken ct = default,
+        IProgress<ChineseChess.Application.Interfaces.SearchProgress>? progress = null)
+        => Task.FromResult<IReadOnlyList<ChineseChess.Application.Interfaces.MoveEvaluation>>(
+            new List<ChineseChess.Application.Interfaces.MoveEvaluation>());
 }
 
 /// <summary>
@@ -339,4 +346,11 @@ internal sealed class MockAiEngine : ChineseChess.Application.Interfaces.IAiEngi
 
     public ChineseChess.Application.Interfaces.TTTreeNode? ExploreTTTree(
         ChineseChess.Domain.Entities.IBoard board, int maxDepth = 6) => null;
+
+    public Task<IReadOnlyList<ChineseChess.Application.Interfaces.MoveEvaluation>> SearchMultiPvAsync(
+        ChineseChess.Domain.Entities.IBoard board, ChineseChess.Application.Interfaces.SearchSettings settings,
+        int pvCount, CancellationToken ct = default,
+        IProgress<ChineseChess.Application.Interfaces.SearchProgress>? progress = null)
+        => Task.FromResult<IReadOnlyList<ChineseChess.Application.Interfaces.MoveEvaluation>>(
+            new List<ChineseChess.Application.Interfaces.MoveEvaluation>());
 }

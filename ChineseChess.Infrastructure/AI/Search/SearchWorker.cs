@@ -53,10 +53,24 @@ internal sealed class SearchWorker
     private const int SingularMargin = 2;               // 排除搜尋的分數邊際（sBeta = ttScore - SingularMargin * depth）
     private const int CheckmateThreshold = 15000;       // 將殺分數門檻：|ttScore| >= 此值時不觸發 SE
 
-    private static readonly int[] PieceValues = { 0, 10000, 120, 120, 270, 600, 285, 30 };
+    internal static readonly int[] PieceValues = { 0, 10000, 120, 120, 270, 600, 285, 30 };
     private static readonly int[] FutilityMargins = { 0, 200, 500 };
+    // ProbCut 相關常數
+    private const int ProbCutMinDepth = 5;          // 觸發 ProbCut 的最小搜尋深度
+    private const int ProbCutMargin = 120;           // probBeta = beta + ProbCutMargin
+    private const int ProbCutReduction = 4;          // ProbCut 淺層搜尋的深度縮減量
+    private const int ProbCutRepetitionLookback = 8; // 最近 8 ply 有重複即視為循環風險，禁用 ProbCut
 
     public long NodesVisited => Interlocked.Read(ref nodesVisited);
+
+    /// <summary>是否啟用 ProbCut（預設 true；可在測試中關閉以比較節點數）。</summary>
+    internal bool ProbCutEnabled { get; set; } = true;
+
+    /// <summary>
+    /// ProbCut 成功觸發次數（成功 beta-cutoff）。
+    /// 用於調參：可比較 on/off 情境下的觸發率與節點縮減效益。
+    /// </summary>
+    internal int ProbCutCutCount { get; private set; }
 
     public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, CancellationToken hardStopCt, ManualResetEventSlim pauseSignal)
     {
@@ -80,6 +94,7 @@ internal sealed class SearchWorker
     public SearchResult Search(int targetDepth)
     {
         nodesVisited = 0;
+        ProbCutCutCount = 0;
         Array.Clear(killerMoves, 0, killerMoves.Length);
         Array.Clear(historyTable, 0, historyTable.Length);
         Array.Clear(pvLength, 0, pvLength.Length);
@@ -337,7 +352,92 @@ internal sealed class SearchWorker
             if (nullScore >= beta) return beta;
         }
 
-        // 5. Futility 剪枝旗標
+        // 5. ProbCut（機率剪枝）：深度達門檻，以淺層搜尋快速排除明顯不利節點
+        //
+        // 觸發條件（全部須滿足）：
+        //   depth >= ProbCutMinDepth          — 淺層搜尋不值得此開銷
+        //   ply > 0                           — 根節點必須精確，不得提早返回
+        //   !inCheck                          — 將軍局面必須完整搜尋所有應將著法
+        //   !isPvNode                         — PV 路徑需精確展開
+        //   !skipNullMove                     — 代理「前向剪枝上下文」：null-move/SE 排除搜尋內不連鎖觸發
+        //   |beta| < CheckmateThreshold       — 不在將殺範圍，避免誤剪將殺路線
+        //   excludedMove.IsNull               — SE 排除搜尋節點必須精確
+        //   !IsAnyRepetitionInLastN(8)        — 重複風險守衛（見下方說明）
+        //
+        // 重複風險守衛（中國象棋特化）：
+        //   若最近 8 ply 內有任何局面重複出現，代表局面正在循環。
+        //   WXF 規則下，重複可能是勝/負（長將/長捉判負）而非和棋；
+        //   引擎目前尚未實作完整 WXF 長捉裁決，重複局面評估可能不準確。
+        //   此守衛確保在潛在循環路徑上禁用 ProbCut，回到完整搜尋以避免誤剪。
+        //
+        // 候選著法過濾（炮吃子排除）：
+        //   象棋炮的吃子需要炮台（跳吃規則），吃子後炮台結構改變，
+        //   後續戰術可能劇烈變化（雙炮、串打），SEE 無法精確評估此類波動。
+        //   因此排除炮作為進攻方的吃子，避免機率剪枝誤判高波動局面。
+        //
+        // 兩階段驗證：
+        //   步驟一：QSearch 快速預篩（廉價） → 通過才升級到 Negamax
+        //   步驟二：Negamax(depth - ProbCutReduction - 1) 精確確認
+        //   成功後存入 TT（下界），供後續相同局面受益
+        if (ProbCutEnabled
+            && depth >= ProbCutMinDepth
+            && ply > 0
+            && !inCheck
+            && !isPvNode
+            && !skipNullMove
+            && Math.Abs(beta) < CheckmateThreshold
+            && excludedMove.IsNull
+            && !board.IsAnyRepetitionInLastN(ProbCutRepetitionLookback))
+        {
+            int probBeta = beta + ProbCutMargin;
+            // 精確靜態評估：EvaluateFast 誤差可達 LazyMargin=200，
+            // 用於 SEE 門檻計算會讓篩選偏差；Evaluate 確保 staticEval + SEE >= probBeta 的判斷準確
+            int staticEvalForProb = evaluator.Evaluate(board);
+
+            // 候選著法：僅高信心吃子，排除炮作為進攻方（高波動，SEE 難以精確估算）
+            var probCaptures = board.GenerateLegalMoves()
+                .Where(m => !board.GetPiece(m.To).IsNone
+                         && board.GetPiece(m.From).Type != PieceType.Cannon)
+                .ToList();
+
+            if (probCaptures.Count > 0)
+            {
+                OrderMoves(probCaptures, ttMove, ply, opponentLastFrom, opponentLastTo);
+
+                foreach (var captureMove in probCaptures)
+                {
+                    // SEE 篩選：靜態評估 + SEE 必須有機會達到 probBeta
+                    if (StaticExchangeEvaluator.See(board, captureMove, PieceValues) < probBeta - staticEvalForProb)
+                        continue;
+
+                    board.MakeMove(captureMove);
+
+                    // 步驟一：QSearch 預篩（廉價）——即使不做靜態著法也已達 probBeta 才繼續
+                    int probScore = -Quiescence(-probBeta, -probBeta + 1, 0);
+
+                    // 步驟二：QSearch 通過後，以 Negamax 精確確認
+                    if (probScore >= probBeta)
+                    {
+                        probScore = -Negamax(depth - ProbCutReduction - 1, ply + 1,
+                            -probBeta, -probBeta + 1, skipNullMove: false,
+                            captureMove.From, captureMove.To);
+                    }
+
+                    board.UnmakeMove(captureMove);
+
+                    if (probScore >= probBeta)
+                    {
+                        // 存入 TT（下界）：後續相同局面可直接使用此結果
+                        tt.Store(board.ZobristKey, probBeta, depth - ProbCutReduction,
+                            TTFlag.LowerBound, captureMove);
+                        ProbCutCutCount++;
+                        return probBeta;
+                    }
+                }
+            }
+        }
+
+        // 6. Futility 剪枝旗標
         // Lazy Evaluation：先以 EvaluateFast 預篩，再視需要呼叫完整 Evaluate
         bool futilityPruning = false;
         if (depth <= 2 && !inCheck && !isPvNode)
@@ -537,6 +637,9 @@ internal sealed class SearchWorker
         {
             CheckPauseOrCancellation();
 
+            // SEE 過濾：跳過明顯不利的吃子（SEE < 0），減少靜止搜尋的爆炸性擴展
+            if (StaticExchangeEvaluator.See(board, move, PieceValues) < 0) continue;
+
             board.MakeMove(move);
             int score = -Quiescence(-beta, -alpha, ply + 1);
             board.UnmakeMove(move);
@@ -690,12 +793,10 @@ internal sealed class SearchWorker
         {
             int victimVal = PieceValues[(int)targetPiece.Type];
             int attackerVal = PieceValues[(int)movingPiece.Type];
-            int score = 100_000 + victimVal * 10 - attackerVal;
-            if (ply == 0)
-            {
-                score += EvaluateCaptureSafety(move, movingPiece, targetPiece);
-            }
-            return score;
+            int mvvLva = victimVal * 10 - attackerVal;
+            // SEE 分類：有利吃子高優先，不利吃子低優先（排在平靜著法之後）
+            int see = StaticExchangeEvaluator.See(board, move, PieceValues);
+            return see >= 0 ? 100_000 + mvvLva : -50_000 + mvvLva;
         }
 
         if (ply == 0 && MoveGivesCheck(move))
