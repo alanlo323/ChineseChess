@@ -61,6 +61,34 @@ public sealed class OpeningBook : IOpeningBook
         };
     }
 
+    /// <summary>
+    /// 增量新增走法。若同局面同走法已存在，累加權重；不同走法則附加。
+    /// 與 <see cref="SetEntry"/> 的差異在於此方法不覆寫現有記錄。
+    /// </summary>
+    public void AddMove(ulong zobristKey, Move move, int weight)
+    {
+        if (weight <= 0) return;
+
+        if (!entries.TryGetValue(zobristKey, out var existing))
+        {
+            entries[zobristKey] = new OpeningBookEntry
+            {
+                ZobristKey = zobristKey,
+                Moves = [new OpeningBookMove(move, weight)]
+            };
+            return;
+        }
+
+        var list = existing.Moves.ToList();
+        int idx = list.FindIndex(m => m.Move == move);
+        if (idx >= 0)
+            list[idx] = new OpeningBookMove(move, list[idx].Weight + weight);
+        else
+            list.Add(new OpeningBookMove(move, weight));
+
+        entries[zobristKey] = new OpeningBookEntry { ZobristKey = zobristKey, Moves = list };
+    }
+
     public void Clear() => entries.Clear();
 
     /// <summary>回傳不可變的條目視圖（供序列化使用）。</summary>

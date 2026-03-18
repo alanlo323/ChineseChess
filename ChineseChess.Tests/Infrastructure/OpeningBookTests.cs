@@ -271,10 +271,10 @@ public class OpeningBookTests
     }
 
     [Fact]
-    public void DefaultOpeningData_HasAtLeastFivePositions()
+    public void DefaultOpeningData_HasAtLeast50Positions()
     {
         var book = DefaultOpeningData.Build();
-        Assert.True(book.EntryCount >= 5, $"開局庫應含至少 5 個局面，實際：{book.EntryCount}");
+        Assert.True(book.EntryCount >= 50, $"開局庫應含至少 50 個局面，實際：{book.EntryCount}");
     }
 
     [Fact]
@@ -330,5 +330,130 @@ public class OpeningBookTests
         ms.Position = 0;
 
         Assert.Throws<InvalidDataException>(() => OpeningBookSerializer.LoadFromBinary(ms));
+    }
+
+    // ─── AddMove API ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void AddMove_NewPosition_CreatesEntry()
+    {
+        var book = new OpeningBook();
+        book.AddMove(42UL, new Move(64, 67), 10);
+
+        Assert.True(book.ContainsPosition(42UL));
+        Assert.Equal(1, book.EntryCount);
+    }
+
+    [Fact]
+    public void AddMove_SamePosition_SameMove_AccumulatesWeight()
+    {
+        var book = new OpeningBook(useRandomSelection: false);
+        var move = new Move(64, 67);
+        book.AddMove(42UL, move, 10);
+        book.AddMove(42UL, move, 20);  // 同走法再次加入，累加為 30
+
+        // 只有一個局面、一個候選走法
+        Assert.Equal(1, book.EntryCount);
+        book.TryProbe(42UL, out var best);
+        Assert.Equal(move, best);
+
+        // 驗證累加後的走法比另一個走法權重更高
+        var other = new Move(82, 65);
+        book.AddMove(42UL, other, 25);  // 權重 25 < 30（累加後）
+        book.TryProbe(42UL, out var highest);
+        Assert.Equal(move, highest);   // 應選 move（權重 30）
+    }
+
+    [Fact]
+    public void AddMove_SamePosition_DifferentMoves_AppendsEntry()
+    {
+        var book = new OpeningBook(useRandomSelection: true);
+        var move1 = new Move(64, 67);
+        var move2 = new Move(82, 65);
+        book.AddMove(99UL, move1, 10);
+        book.AddMove(99UL, move2, 10);
+
+        // 仍是 1 個局面，但候選走法有 2 個
+        Assert.Equal(1, book.EntryCount);
+        var observed = new HashSet<Move>();
+        for (int i = 0; i < 100; i++)
+        {
+            book.TryProbe(99UL, out var m);
+            observed.Add(m);
+        }
+        Assert.Contains(move1, observed);
+        Assert.Contains(move2, observed);
+    }
+
+    [Fact]
+    public void AddMove_ZeroWeight_Ignored()
+    {
+        var book = new OpeningBook();
+        book.AddMove(77UL, new Move(64, 67), 0);
+
+        Assert.False(book.ContainsPosition(77UL));
+        Assert.Equal(0, book.EntryCount);
+    }
+
+    // ─── DefaultOpeningData 深度與覆蓋測試 ───────────────────────────────
+
+    [Fact]
+    public void DefaultOpeningData_FourPlyPosition_HasResponse()
+    {
+        // 中炮對屏風馬主線走 4 步後，開局庫應有第 5 步的建議
+        var book = DefaultOpeningData.Build();
+        var board = new Board(InitialFen);
+        board.MakeMove(new Move(64, 67)); // 炮二平五
+        board.MakeMove(new Move(7,  24)); // 馬8進7
+        board.MakeMove(new Move(82, 65)); // 馬二進三
+        board.MakeMove(new Move(8,   7)); // 車9平8
+
+        Assert.True(book.ContainsPosition(board.ZobristKey),
+            "中炮對屏風馬走 4 步後，開局庫應有對應記錄");
+    }
+
+    [Theory]
+    [InlineData(87, 67)]  // 相七進五（飛相局）
+    [InlineData(70, 67)]  // 炮八平五（左炮局）
+    [InlineData(60, 51)]  // 兵七進一（仙人指路）
+    public void DefaultOpeningData_BlackResponsePositions_ExistAfterVariousOpenings(int redFrom, int redTo)
+    {
+        var book = DefaultOpeningData.Build();
+        var board = new Board(InitialFen);
+        board.MakeMove(new Move(redFrom, redTo));
+
+        Assert.True(book.ContainsPosition(board.ZobristKey),
+            $"紅方走 {redFrom}→{redTo} 後，開局庫應有黑方回應記錄");
+    }
+
+    [Fact]
+    public void DefaultOpeningData_DeepPositions_HaveLegalMoves()
+    {
+        // 走 5 步深的主線局面，確認開局庫的建議走法均合法
+        var book = DefaultOpeningData.Build();
+        var linesToCheck = new[]
+        {
+            new[] { new Move(64,67), new Move(7,24), new Move(82,65), new Move(8,7), new Move(81,82) },
+            new[] { new Move(64,67), new Move(7,24), new Move(88,69), new Move(1,20), new Move(56,47) },
+            new[] { new Move(82,65), new Move(7,24), new Move(88,69), new Move(1,20), new Move(56,47) },
+            new[] { new Move(87,67), new Move(6,22), new Move(82,65), new Move(7,24), new Move(88,69) },
+            new[] { new Move(60,51), new Move(33,42), new Move(88,69), new Move(7,24), new Move(56,47) },
+        };
+
+        foreach (var line in linesToCheck)
+        {
+            var board = new Board(InitialFen);
+            foreach (var move in line)
+                board.MakeMove(move);
+
+            if (!book.ContainsPosition(board.ZobristKey)) continue;
+
+            var legalMoves = board.GenerateLegalMoves().ToHashSet();
+            for (int i = 0; i < 50; i++)
+            {
+                if (book.TryProbe(board.ZobristKey, out var m))
+                    Assert.Contains(m, legalMoves);
+            }
+        }
     }
 }
