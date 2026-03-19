@@ -51,6 +51,19 @@ public class GameServiceOpeningBookTests
             => Task.FromResult<IReadOnlyList<MoveEvaluation>>([]);
     }
 
+    /// <summary>建立以 OpeningBookEngineDecorator 包裝 FakeEngine 的 GameService。</summary>
+    private static (GameService service, FakeAiEngine fakeEngine) BuildService(
+        IOpeningBook book,
+        Move aiDefaultMove,
+        OpeningBookSettings bookSettings)
+    {
+        var fakeEngine = new FakeAiEngine(aiDefaultMove);
+        var decorated = new OpeningBookEngineDecorator(fakeEngine, book, bookSettings);
+        var service = new GameService(decorated, null, book);
+        service.SetDifficulty(2, 3000, 1);
+        return (service, fakeEngine);
+    }
+
     // ─── 測試 1：開局庫命中時跳過 AI 搜尋（PlayerVsAi 模式）────────────
 
     [Fact]
@@ -67,10 +80,8 @@ public class GameServiceOpeningBookTests
         var book = new OpeningBook(useRandomSelection: false);
         book.SetEntry(boardAfterPlayer.ZobristKey, [(bookMoveBlack, 100)]);
 
-        var fakeEngine = new FakeAiEngine(aiDefaultMove);
         var settings = new OpeningBookSettings { IsEnabled = true, MaxPly = 20 };
-        var gameService = new GameService(fakeEngine, null, book, settings);
-        gameService.SetDifficulty(2, 3000, 1);
+        var (gameService, fakeEngine) = BuildService(book, aiDefaultMove, settings);
 
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
         await gameService.HumanMoveAsync(new Move(54, 45));  // 玩家走兵一進一
@@ -88,10 +99,8 @@ public class GameServiceOpeningBookTests
     {
         // 書庫是空的，找不到任何局面。AI fake 回傳炮二平五（合法紅方走法）。
         var emptyBook = new OpeningBook();
-        var fakeEngine = new FakeAiEngine(new Move(64, 67));  // 炮二平五（合法）
         var settings = new OpeningBookSettings { IsEnabled = true, MaxPly = 20 };
-        var gameService = new GameService(fakeEngine, null, emptyBook, settings);
-        gameService.SetDifficulty(2, 3000, 1);
+        var (gameService, fakeEngine) = BuildService(emptyBook, new Move(64, 67), settings);
 
         await gameService.StartGameAsync(GameMode.AiVsAi);
 
@@ -108,10 +117,8 @@ public class GameServiceOpeningBookTests
         var book = new OpeningBook(useRandomSelection: false);
         book.SetEntry(board.ZobristKey, [(new Move(64, 67), 100)]);  // 紅方炮二平五
 
-        var fakeEngine = new FakeAiEngine(new Move(64, 67));  // 炮二平五（合法）
         var settings = new OpeningBookSettings { IsEnabled = false, MaxPly = 20 };
-        var gameService = new GameService(fakeEngine, null, book, settings);
-        gameService.SetDifficulty(2, 3000, 1);
+        var (gameService, fakeEngine) = BuildService(book, new Move(64, 67), settings);
 
         await gameService.StartGameAsync(GameMode.AiVsAi);
 
@@ -130,10 +137,8 @@ public class GameServiceOpeningBookTests
         var book = new OpeningBook(useRandomSelection: false);
         book.SetEntry(boardAfterPlayer.ZobristKey, [(new Move(7, 24), 100)]);  // 黑方馬8進7
 
-        var fakeEngine = new FakeAiEngine(new Move(1, 20));  // 黑方馬2進3（合法）
         var settings = new OpeningBookSettings { IsEnabled = true, MaxPly = 0 };
-        var gameService = new GameService(fakeEngine, null, book, settings);
-        gameService.SetDifficulty(2, 3000, 1);
+        var (gameService, fakeEngine) = BuildService(book, new Move(1, 20), settings);
 
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
         await gameService.HumanMoveAsync(new Move(54, 45));
@@ -177,10 +182,8 @@ public class GameServiceOpeningBookTests
         var book = new OpeningBook(useRandomSelection: false);
         book.SetEntry(board.ZobristKey, [(new Move(64, 67), 100)]);  // 紅方炮二平五
 
-        var fakeEngine = new FakeAiEngine(new Move(82, 65));  // AI 本來選馬二進三
         var settings = new OpeningBookSettings { IsEnabled = true, MaxPly = 20 };
-        var gameService = new GameService(fakeEngine, null, book, settings);
-        gameService.SetDifficulty(2, 3000, 1);
+        var (gameService, _) = BuildService(book, new Move(82, 65), settings);
 
         var messages = new List<string>();
         gameService.ThinkingProgress += msg => messages.Add(msg);

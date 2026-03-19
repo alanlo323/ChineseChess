@@ -57,9 +57,16 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IOpeningBook>(_ => BuildOpeningBook(openingBookSettings));
 
         // 基礎設施（Infrastructure）
-        services.AddSingleton<IAiEngine, SearchEngine>();
+        // SearchEngine：底層引擎（不含開局庫），供 ChessEngineServer 直接使用
+        services.AddSingleton<SearchEngine>();
+        // IAiEngine：包裝開局庫的 Decorator，供 GameService / EngineProvider 使用
+        services.AddSingleton<IAiEngine>(sp =>
+            new OpeningBookEngineDecorator(
+                sp.GetRequiredService<SearchEngine>(),
+                sp.GetRequiredService<IOpeningBook>(),
+                sp.GetRequiredService<OpeningBookSettings>()));
         services.AddSingleton<IChessEngineServer>(sp =>
-            new ChessEngineServer(sp.GetRequiredService<IAiEngine>()));
+            new ChessEngineServer(sp.GetRequiredService<SearchEngine>()));
 
         // 應用層（Application）
         services.AddSingleton<IEngineProvider, EngineProvider>();
@@ -67,7 +74,6 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<IAiEngine>(),
             sp.GetService<IHintExplanationService>(),
             sp.GetService<IOpeningBook>(),
-            sp.GetService<OpeningBookSettings>(),
             sp.GetRequiredService<IEngineProvider>()));
         services.AddSingleton<IGameRecordService, GameRecordService>();
 

@@ -61,6 +61,12 @@ public class SearchSettings
     /// 取得實際硬時限（毫秒）：HardTimeLimitMs ?? TimeLimitMs（向下相容）。
     /// </summary>
     public int EffectiveHardLimitMs => HardTimeLimitMs ?? TimeLimitMs;
+
+    /// <summary>
+    /// 是否允許開局庫 Decorator 在此次搜尋中查詢開局庫。
+    /// hint 模式（GetHintAsync）由呼叫端設為 false；正式走棋預設為 true。
+    /// </summary>
+    public bool AllowOpeningBook { get; set; } = true;
 }
 
 public class MoveEvaluation

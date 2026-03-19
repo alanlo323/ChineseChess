@@ -22,7 +22,6 @@ public class GameService : IGameService, IDisposable
     private readonly IAiEngine aiEngine;          // 紅方（或共用）引擎
     private IAiEngine? aiEngineBlack;             // 黑方引擎（獨立TT模式才有值）
     private readonly IOpeningBook? openingBook;
-    private readonly OpeningBookSettings openingBookSettings;
     private readonly BookmarkManager bookmarkManager;
     private Board board;
     private GameMode currentMode;
@@ -114,13 +113,11 @@ public class GameService : IGameService, IDisposable
         IAiEngine aiEngine,
         IHintExplanationService? hintExplanationService = null,
         IOpeningBook? openingBook = null,
-        OpeningBookSettings? openingBookSettings = null,
         IEngineProvider? engineProvider = null)
     {
         this.aiEngine = aiEngine;
         this.hintExplanationService = hintExplanationService;
         this.openingBook = openingBook;
-        this.openingBookSettings = openingBookSettings ?? new OpeningBookSettings();
         this.engineProvider = engineProvider;
         bookmarkManager = new BookmarkManager();
         board = new Board(); // 初始局面
@@ -456,10 +453,11 @@ public class GameService : IGameService, IDisposable
         var activeSettings = GetCurrentSettings();
         var settings = new SearchSettings
         {
-            Depth       = activeSettings.Depth,
-            TimeLimitMs = activeSettings.TimeLimitMs,
-            ThreadCount = activeSettings.ThreadCount,
-            PauseSignal = aiPauseSignal
+            Depth             = activeSettings.Depth,
+            TimeLimitMs       = activeSettings.TimeLimitMs,
+            ThreadCount       = activeSettings.ThreadCount,
+            PauseSignal       = aiPauseSignal,
+            AllowOpeningBook  = applyBestMove   // hint 模式（applyBestMove=false）不查開局庫
         };
 
         // 限時模式：純粹根據棋鐘剩餘時間計算 Soft/Hard 時限，不受固定時限設定影響
@@ -499,24 +497,19 @@ public class GameService : IGameService, IDisposable
 
         try
         {
-            // 開局庫查詢（僅在 applyBestMove 時啟用，hint 模式跳過）
-            var bookResult = applyBestMove ? TryProbeOpeningBook() : null;
+            result = await activeEngine.SearchAsync(
+                boardSnapshot,
+                settings,
+                cts.Token,
+                progress);
 
-            if (bookResult != null)
+            if (cts.Token.IsCancellationRequested) return null;
+
+            // 開局庫命中時發出提示訊息（IsFromOpeningBook 由 Decorator 設定）
+            if (result.IsFromOpeningBook)
             {
-                result = bookResult;
                 var bookNotation = MoveNotation.ToNotation(result.BestMove, board);
                 ThinkingProgress?.Invoke($"開局庫選手：{bookNotation}");
-            }
-            else
-            {
-                result = await activeEngine.SearchAsync(
-                    boardSnapshot,
-                    settings,
-                    cts.Token,
-                    progress);
-
-                if (cts.Token.IsCancellationRequested) return null;
             }
 
             if (result.BestMove.IsNull)
@@ -832,7 +825,8 @@ public class GameService : IGameService, IDisposable
             Depth = 2,
             TimeLimitMs = 1000,
             ThreadCount = 1,
-            PauseSignal = aiPauseSignal
+            PauseSignal = aiPauseSignal,
+            AllowOpeningBook = false  // 提和評估必須用真實搜尋分數，開局庫回傳 Score=0 會造成 AI 無條件接受提和
         };
 
         int score;
@@ -1108,30 +1102,6 @@ public class GameService : IGameService, IDisposable
 
         // StoreLatestHint 已在 RunAiSearchAsync 的 else 分支呼叫，此處無需重複呼叫
         return result;
-    }
-
-    /// <summary>
-    /// 查詢開局庫。命中時回傳包含開局庫走法的 SearchResult；
-    /// 未命中或走法不合法（hash collision 防護）時回傳 null。
-    /// </summary>
-    private SearchResult? TryProbeOpeningBook()
-    {
-        if (openingBook == null || !openingBookSettings.IsEnabled) return null;
-        if (board.MoveCount >= openingBookSettings.MaxPly) return null;
-        if (!openingBook.TryProbe(board.ZobristKey, out var bookMove)) return null;
-
-        // 合法性驗證（防護 Zobrist hash collision 極罕見情形）
-        if (!board.GenerateLegalMoves().Any(m => m == bookMove)) return null;
-
-        return new SearchResult
-        {
-            BestMove = bookMove,
-            IsFromOpeningBook = true,
-            Score = 0,
-            Depth = 0,
-            Nodes = 0,
-            PvLine = string.Empty
-        };
     }
 
     private void StoreLatestHint(SearchResult hint, IBoard sourceBoard)
