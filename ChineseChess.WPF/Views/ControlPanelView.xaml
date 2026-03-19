@@ -377,6 +377,26 @@
                             </Grid>
                         </StackPanel>
 
+                        <!-- 外部引擎快速開關 -->
+                        <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />
+                        <TextBlock Text="外部引擎"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,0,0,6" />
+                        <CheckBox Content="紅方使用外部引擎"
+                                  IsChecked="{Binding IsRedExternalEngineEnabled}"
+                                  IsEnabled="{Binding HasRedEngineConfig}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,0,0,6" />
+                        <CheckBox Content="黑方使用外部引擎"
+                                  IsChecked="{Binding IsBlackExternalEngineEnabled}"
+                                  IsEnabled="{Binding HasBlackEngineConfig}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,0,0,4" />
+                        <TextBlock Text="如需使用外部引擎，請先至「外部引擎」頁完成設定"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   FontSize="10"
+                                   Foreground="#888888" />
+
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

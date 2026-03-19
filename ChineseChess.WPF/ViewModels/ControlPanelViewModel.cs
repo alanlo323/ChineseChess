@@ -383,11 +383,43 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>棋譜側邊欄 ViewModel。</summary>
     public MoveHistoryViewModel? MoveHistory { get; }
 
+    // ─── 外部引擎快速開關（設定頁 Tab 1）─────────────────────────────────
+
+    /// <summary>直接委派至 ExternalEngine，永遠與其同步。</summary>
+    public bool IsRedExternalEngineEnabled
+    {
+        get => ExternalEngine?.UseRedExternalEngine ?? false;
+        set
+        {
+            if (ExternalEngine != null && value != ExternalEngine.UseRedExternalEngine)
+                _ = ToggleExternalEngineAsync(isRed: true, value);
+        }
+    }
+
+    public bool IsBlackExternalEngineEnabled
+    {
+        get => ExternalEngine?.UseBlackExternalEngine ?? false;
+        set
+        {
+            if (ExternalEngine != null && value != ExternalEngine.UseBlackExternalEngine)
+                _ = ToggleExternalEngineAsync(isRed: false, value);
+        }
+    }
+
+    /// <summary>紅方已設定引擎路徑（決定快速開關 CheckBox 是否可用）。</summary>
+    public bool HasRedEngineConfig => ExternalEngine?.HasRedEngineConfig ?? false;
+
+    /// <summary>黑方已設定引擎路徑（決定快速開關 CheckBox 是否可用）。</summary>
+    public bool HasBlackEngineConfig => ExternalEngine?.HasBlackEngineConfig ?? false;
+
     public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null)
     {
         ExternalEngine = externalEngineViewModel;
         MoveHistory = moveHistoryViewModel;
         this.gameService = gameService;
+
+        if (ExternalEngine != null)
+            ExternalEngine.PropertyChanged += OnExternalEnginePropertyChanged;
         this.gameAnalysisService = gameAnalysisService;
         isGameAnalysisEnabled   = analysisSettings?.IsEnabled ?? true;
         gameAnalysisDisclaimer  = analysisSettings?.Disclaimer ?? "以下分析由 AI 產生，僅供參考，不代表最終結論。";
@@ -1009,6 +1041,44 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             AppendTreeNode(sb, child, indent + "  ", isRoot: false, parentBoard: boardAtNode);
     }
 
+    /// <summary>
+    /// ExternalEngine 屬性變更時，通知 UI 重新讀取本 ViewModel 的計算屬性。
+    /// </summary>
+    private void OnExternalEnginePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        string? localName = e.PropertyName switch
+        {
+            nameof(ExternalEngineViewModel.UseRedExternalEngine)   => nameof(IsRedExternalEngineEnabled),
+            nameof(ExternalEngineViewModel.UseBlackExternalEngine) => nameof(IsBlackExternalEngineEnabled),
+            nameof(ExternalEngineViewModel.HasRedEngineConfig)     => nameof(HasRedEngineConfig),
+            nameof(ExternalEngineViewModel.HasBlackEngineConfig)   => nameof(HasBlackEngineConfig),
+            _ => null
+        };
+
+        if (localName == null) return;
+
+        var app = global::System.Windows.Application.Current;
+        if (app == null) OnPropertyChanged(localName);
+        else app.Dispatcher.InvokeAsync(() => OnPropertyChanged(localName));
+    }
+
+    /// <summary>
+    /// 設定頁快速開關外部引擎：失敗時觸發計算屬性重讀（CheckBox 自動恢復）並提示。
+    /// </summary>
+    private async Task ToggleExternalEngineAsync(bool isRed, bool enable)
+    {
+        if (ExternalEngine == null) return;
+
+        bool success = await ExternalEngine.ToggleEngineAsync(isRed, enable);
+
+        if (!success)
+        {
+            // ExternalEngine 未變動，通知 UI 重讀計算屬性讓 CheckBox 恢復原狀
+            OnPropertyChanged(isRed ? nameof(IsRedExternalEngineEnabled) : nameof(IsBlackExternalEngineEnabled));
+            StatusMessage = "請先至「外部引擎」頁設定引擎路徑";
+        }
+    }
+
     private static string FormatHintScore(int score)
     {
         return score switch
@@ -1059,6 +1129,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        if (ExternalEngine != null)
+            ExternalEngine.PropertyChanged -= OnExternalEnginePropertyChanged;
+
         // 取消訂閱所有 GameService 事件，防止 ViewModel 被 Service 持有引用而無法被 GC
         gameService.GameMessage -= OnGameMessage;
         gameService.ThinkingProgress -= OnThinkingProgress;

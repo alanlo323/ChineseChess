@@ -1,3 +1,4 @@
+using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Infrastructure.AI.Protocol;
@@ -21,6 +22,7 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
 {
     private readonly IEngineProvider engineProvider;
     private readonly IChessEngineServer engineServer;
+    private readonly IUserSettingsService userSettingsService;
 
     // ─── 紅方外部引擎欄位 ─────────────────────────────────────────────────
     private bool useRedExternalEngine;
@@ -41,10 +43,11 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
 
     // ─── 建構子 ───────────────────────────────────────────────────────────
 
-    public ExternalEngineViewModel(IEngineProvider engineProvider, IChessEngineServer engineServer)
+    public ExternalEngineViewModel(IEngineProvider engineProvider, IChessEngineServer engineServer, IUserSettingsService userSettingsService)
     {
-        this.engineProvider = engineProvider ?? throw new ArgumentNullException(nameof(engineProvider));
-        this.engineServer   = engineServer   ?? throw new ArgumentNullException(nameof(engineServer));
+        this.engineProvider     = engineProvider     ?? throw new ArgumentNullException(nameof(engineProvider));
+        this.engineServer       = engineServer       ?? throw new ArgumentNullException(nameof(engineServer));
+        this.userSettingsService = userSettingsService ?? throw new ArgumentNullException(nameof(userSettingsService));
 
         this.engineServer.StatusChanged += OnServerStatusChanged;
 
@@ -54,6 +57,10 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
         ApplyBlackEngineCommand  = new RelayCommand(async _ => await ApplyEngineAsync(isRed: false));
         StartServerCommand       = new RelayCommand(async _ => await StartServerAsync(), _ => !IsServerRunning);
         StopServerCommand        = new RelayCommand(async _ => await StopServerAsync(),  _ => IsServerRunning);
+
+        _ = LoadAndAutoConnectAsync().ContinueWith(
+            t => System.Diagnostics.Trace.TraceWarning($"自動連接引擎失敗：{t.Exception?.InnerException?.Message}"),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     // ─── 紅方屬性 ─────────────────────────────────────────────────────────
@@ -67,7 +74,11 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     public string RedEnginePath
     {
         get => redEnginePath;
-        set => SetProperty(ref redEnginePath, value);
+        set
+        {
+            if (SetProperty(ref redEnginePath, value))
+                OnPropertyChanged(nameof(HasRedEngineConfig));
+        }
     }
 
     public EngineProtocol RedProtocol
@@ -93,7 +104,11 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     public string BlackEnginePath
     {
         get => blackEnginePath;
-        set => SetProperty(ref blackEnginePath, value);
+        set
+        {
+            if (SetProperty(ref blackEnginePath, value))
+                OnPropertyChanged(nameof(HasBlackEngineConfig));
+        }
     }
 
     public EngineProtocol BlackProtocol
@@ -144,6 +159,14 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     // ─── 協議選項 ─────────────────────────────────────────────────────────
 
     public IEnumerable<EngineProtocol> EngineProtocols => Enum.GetValues<EngineProtocol>();
+
+    // ─── 供設定頁快速開關使用的 API ──────────────────────────────────────
+
+    /// <summary>紅方已設定引擎路徑（供設定頁 CheckBox IsEnabled 綁定）。</summary>
+    public bool HasRedEngineConfig => !string.IsNullOrWhiteSpace(RedEnginePath);
+
+    /// <summary>黑方已設定引擎路徑（供設定頁 CheckBox IsEnabled 綁定）。</summary>
+    public bool HasBlackEngineConfig => !string.IsNullOrWhiteSpace(BlackEnginePath);
 
     // ─── 命令 ─────────────────────────────────────────────────────────────
 
@@ -220,6 +243,8 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
                 engineProvider.SetBlackExternalEngine(adapter);
                 BlackEngineStatus = $"已載入（{protocol}）";
             }
+
+            PersistCurrentSettings();
         }
         catch (Exception ex)
         {
@@ -227,6 +252,93 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
             if (isRed) RedEngineStatus   = $"初始化失敗：{ex.Message}";
             else       BlackEngineStatus = $"初始化失敗：{ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// 將目前引擎設定快照寫入持久化儲存。
+    /// </summary>
+    private void PersistCurrentSettings()
+    {
+        var snapshot = new ExternalEngineSettings
+        {
+            UseRedExternalEngine  = UseRedExternalEngine,
+            RedEnginePath         = RedEnginePath,
+            RedProtocol           = RedProtocol,
+            UseBlackExternalEngine = UseBlackExternalEngine,
+            BlackEnginePath       = BlackEnginePath,
+            BlackProtocol         = BlackProtocol,
+            ServerPort            = ServerPort
+        };
+        userSettingsService.SaveEngineSettings(snapshot);
+    }
+
+    /// <summary>
+    /// 從設定頁快速切換外部引擎（回傳 false 代表尚未設定路徑）。
+    /// </summary>
+    public async Task<bool> ToggleEngineAsync(bool isRed, bool enable)
+    {
+        var path = isRed ? RedEnginePath : BlackEnginePath;
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        if (isRed) UseRedExternalEngine   = enable;
+        else       UseBlackExternalEngine = enable;
+
+        await ApplyEngineAsync(isRed);
+        return true;
+    }
+
+    /// <summary>
+    /// 啟動時載入持久化設定，並自動連接已設定的外部引擎。
+    /// </summary>
+    private async Task LoadAndAutoConnectAsync()
+    {
+        try
+        {
+            var saved = userSettingsService.LoadEngineSettings();
+
+            // 在 UI 執行緒還原欄位，ConfigureAwait(false) 確保後續引擎初始化不佔用 UI 執行緒
+            var app = System.Windows.Application.Current;
+            if (app != null)
+                await app.Dispatcher.InvokeAsync(() => RestoreSettings(saved)).Task.ConfigureAwait(false);
+            else
+                RestoreSettings(saved);
+
+            // 自動連接（在背景執行緒執行，不阻塞 UI）
+            if (saved.UseRedExternalEngine && !string.IsNullOrWhiteSpace(saved.RedEnginePath))
+                await ApplyEngineAsync(isRed: true);
+
+            if (saved.UseBlackExternalEngine && !string.IsNullOrWhiteSpace(saved.BlackEnginePath))
+                await ApplyEngineAsync(isRed: false);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"自動載入引擎設定失敗：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 將持久化設定還原到 backing fields，並通知 UI 屬性變更（必須在 UI 執行緒呼叫）。
+    /// </summary>
+    private void RestoreSettings(ExternalEngineSettings saved)
+    {
+        redEnginePath          = saved.RedEnginePath;
+        redProtocol            = saved.RedProtocol;
+        useRedExternalEngine   = saved.UseRedExternalEngine;
+        blackEnginePath        = saved.BlackEnginePath;
+        blackProtocol          = saved.BlackProtocol;
+        useBlackExternalEngine = saved.UseBlackExternalEngine;
+        serverPort             = saved.ServerPort;
+
+        OnPropertyChanged(nameof(RedEnginePath));
+        OnPropertyChanged(nameof(RedProtocol));
+        OnPropertyChanged(nameof(UseRedExternalEngine));
+        OnPropertyChanged(nameof(BlackEnginePath));
+        OnPropertyChanged(nameof(BlackProtocol));
+        OnPropertyChanged(nameof(UseBlackExternalEngine));
+        OnPropertyChanged(nameof(ServerPort));
+        OnPropertyChanged(nameof(HasRedEngineConfig));
+        OnPropertyChanged(nameof(HasBlackEngineConfig));
     }
 
     private async Task StartServerAsync()
@@ -244,8 +356,15 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
 
     private async Task StopServerAsync()
     {
-        await engineServer.StopAsync();
-        IsServerRunning = false;
+        try
+        {
+            await engineServer.StopAsync();
+            IsServerRunning = false;
+        }
+        catch (Exception ex)
+        {
+            ServerStatus = $"停止失敗：{ex.Message}";
+        }
     }
 
     private void OnServerStatusChanged(string message)

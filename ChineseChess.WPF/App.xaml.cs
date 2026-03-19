@@ -6,6 +6,7 @@ using ChineseChess.Infrastructure.AI.Book;
 using ChineseChess.Infrastructure.AI.Hint;
 using ChineseChess.Infrastructure.AI.Protocol;
 using ChineseChess.Infrastructure.AI.Search;
+using ChineseChess.Infrastructure.Persistence;
 using ChineseChess.WPF.ViewModels;
 using MainWindowView = ChineseChess.WPF.Views.MainWindow;
 using Microsoft.Extensions.Configuration;
@@ -67,6 +68,7 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<OpeningBookSettings>()));
         services.AddSingleton<IChessEngineServer>(sp =>
             new ChessEngineServer(sp.GetRequiredService<SearchEngine>()));
+        services.AddSingleton<IUserSettingsService, JsonUserSettingsService>();
 
         // 應用層（Application）
         services.AddSingleton<IEngineProvider, EngineProvider>();
@@ -79,7 +81,11 @@ public partial class App : System.Windows.Application
         // ViewModel 層
         services.AddTransient<MainViewModel>();
         services.AddTransient<ChessBoardViewModel>();
-        services.AddTransient<ExternalEngineViewModel>();
+        services.AddSingleton<ExternalEngineViewModel>(sp =>
+            new ExternalEngineViewModel(
+                sp.GetRequiredService<IEngineProvider>(),
+                sp.GetRequiredService<IChessEngineServer>(),
+                sp.GetRequiredService<IUserSettingsService>()));
         services.AddTransient<MoveHistoryViewModel>(sp => new MoveHistoryViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<IGameRecordService>()));
