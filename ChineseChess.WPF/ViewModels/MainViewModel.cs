@@ -31,8 +31,8 @@ public class MainViewModel : ObservableObject, IDisposable
         gameService.HintReady += OnHintReady;
         gameService.ThinkingProgress += OnThinkingProgress;
 
-        // 若有提供，監聽 Service 的分析更新事件
-        // 理想上 GameService 應提供分析事件或可綁定屬性
+        // MultiPV 走法選取橋接：ControlPanel → ChessBoard
+        controlPanel.MultiPvMoveSelected += chessBoard.SelectMultiPvMove;
     }
 
     private void OnThinkingProgress(string progress)
@@ -99,5 +99,6 @@ public class MainViewModel : ObservableObject, IDisposable
         // 取消訂閱 GameService 事件，防止 ViewModel 被 Service 持有引用而無法被 GC
         gameService.HintReady -= OnHintReady;
         gameService.ThinkingProgress -= OnThinkingProgress;
+        ControlPanel.MultiPvMoveSelected -= ChessBoard.SelectMultiPvMove;
     }
 }

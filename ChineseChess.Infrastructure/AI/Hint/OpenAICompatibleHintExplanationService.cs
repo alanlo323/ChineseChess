@@ -480,7 +480,8 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
 
     private string BuildPrompt(HintExplanationRequest request)
     {
-        var prompt = string.Format(
+        var sb = new System.Text.StringBuilder();
+        sb.AppendFormat(
             CultureInfo.InvariantCulture,
             "請根據下列中國象棋局面資料，回答建議走法解釋：\n" +
             "FEN: {0}\n" +
@@ -500,7 +501,21 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             string.IsNullOrWhiteSpace(request.PrincipalVariation) ? "(未提供)" : request.PrincipalVariation,
             string.IsNullOrWhiteSpace(request.ThinkingTree) ? "(未提供)" : request.ThinkingTree);
 
-        return prompt;
+        if (request.AlternativeMoves != null && request.AlternativeMoves.Count > 0)
+        {
+            sb.Append("\n\n其他候選走法（供比較分析）：");
+            foreach (var alt in request.AlternativeMoves)
+            {
+                var pvText = string.IsNullOrWhiteSpace(alt.PvLine) ? "(未提供)" : alt.PvLine;
+                var scoreText = alt.Score > 0 ? $"+{alt.Score}" : alt.Score.ToString(CultureInfo.InvariantCulture);
+                sb.AppendFormat(CultureInfo.InvariantCulture,
+                    "\n  #{0} {1}（評分: {2}，主線: {3}）",
+                    alt.Rank, alt.Notation, scoreText, pvText);
+            }
+            sb.Append("\n請在解釋時比較各走法的優缺點，並說明為何建議走法較優。");
+        }
+
+        return sb.ToString();
     }
 
     private static string ParseResponse(string raw)

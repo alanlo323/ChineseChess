@@ -725,49 +725,56 @@
                             <ItemsControl ItemsSource="{Binding MultiPvItems}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Margin="0,0,0,4" CornerRadius="4" Padding="6,4"
-                                                BorderThickness="1">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="#F5F5F5" />
-                                                    <Setter Property="BorderBrush" Value="#DDDDDD" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsBest}" Value="True">
-                                                            <Setter Property="Background" Value="#FFF8E1" />
-                                                            <Setter Property="BorderBrush"
-                                                                    Value="{StaticResource HintFromBrush}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="22" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding Rank, StringFormat={}#{0}}"
-                                                           Style="{StaticResource FormLabelStyle}"
-                                                           FontWeight="Bold" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding Notation}"
-                                                           Style="{StaticResource StatusTextStyle}"
-                                                           FontWeight="SemiBold" Margin="6,0" />
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding PvLine}"
-                                                           Style="{StaticResource FormLabelStyle}"
-                                                           FontSize="10" Foreground="#888888"
-                                                           VerticalAlignment="Center"
-                                                           TextWrapping="NoWrap"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Grid.Column="3"
-                                                           Text="{Binding ScoreText}"
-                                                           Style="{StaticResource StatusTextStyle}"
-                                                           FontWeight="Bold" Margin="6,0,0,0" />
-                                            </Grid>
-                                        </Border>
+                                        <Button Command="{Binding SelectCommand}"
+                                                Cursor="Hand" Margin="0,0,0,4"
+                                                Focusable="False">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border CornerRadius="4" Padding="6,4"
+                                                            BorderThickness="1">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="#F5F5F5" />
+                                                                <Setter Property="BorderBrush" Value="#DDDDDD" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                        <Setter Property="Background" Value="#E8F5E9" />
+                                                                        <Setter Property="BorderBrush" Value="#388E3C" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="22" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0"
+                                                                       Text="{Binding Rank, StringFormat={}#{0}}"
+                                                                       Style="{StaticResource FormLabelStyle}"
+                                                                       FontWeight="Bold" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{Binding Notation}"
+                                                                       Style="{StaticResource StatusTextStyle}"
+                                                                       FontWeight="SemiBold" Margin="6,0" />
+                                                            <TextBlock Grid.Column="2"
+                                                                       Text="{Binding PvLine}"
+                                                                       Style="{StaticResource FormLabelStyle}"
+                                                                       FontSize="10" Foreground="#888888"
+                                                                       VerticalAlignment="Center"
+                                                                       TextWrapping="NoWrap"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Grid.Column="3"
+                                                                       Text="{Binding ScoreText}"
+                                                                       Style="{StaticResource StatusTextStyle}"
+                                                                       FontWeight="Bold" Margin="6,0,0,0" />
+                                                        </Grid>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

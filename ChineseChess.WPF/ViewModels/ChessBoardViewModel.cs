@@ -411,17 +411,9 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
     {
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
-            // 第 1 名已由 HintReady 的 IsHintFrom/IsHintTo 高亮處理
-            // 第 2~N 名：在 To 格顯示 SmartHint 評分 Badge（複用現有視覺）
+            // rank#1 高亮由 HintReady → OnHintReady 處理；
+            // rank#2~N Badge 已移除，改由使用者點選清單項目來切換高亮
             ClearSmartHintHighlights();
-            foreach (var eval in evaluations.Skip(1))
-            {
-                var toIndex = eval.Move.To;
-                if (toIndex < 0 || toIndex >= 90) continue;
-                var sq = Squares[toIndex];
-                sq.HasSmartHint = true;
-                sq.SmartHintScore = eval.Score;
-            }
         });
     }
 
@@ -506,6 +498,41 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         foreach (var move in moves)
         {
             Squares[move.To].IsValidMove = true;
+        }
+    }
+
+    /// <summary>
+    /// 由 ControlPanelViewModel 透過 MainViewModel 橋接呼叫，
+    /// 切換棋盤高亮至指定的 MultiPV 走法；傳入 null 表示清除高亮。
+    /// </summary>
+    public void SelectMultiPvMove(Move? move)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            ApplyMultiPvMoveHighlight(move));
+    }
+
+    private void ApplyMultiPvMoveHighlight(Move? move)
+    {
+        ClearHintHighlights();
+
+        if (move == null || move.Value.IsNull) return;
+
+        var from = move.Value.From;
+        var to = move.Value.To;
+        if (from < 0 || from >= 90 || to < 0 || to >= 90) return;
+
+        var currentBoard = gameService.CurrentBoard;
+        hintFrom = from;
+        hintTo = to;
+        hintBoardFen = currentBoard.ToFen();
+        ApplyHintHighlights();
+
+        // 在落點顯示虛影棋子
+        var movingPiece = currentBoard.GetPiece(from);
+        if (!movingPiece.IsNone)
+        {
+            Squares[to].HintGhostPiece = movingPiece;
+            Squares[to].HasHintGhostPiece = true;
         }
     }
 

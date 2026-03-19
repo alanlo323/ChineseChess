@@ -38,6 +38,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private bool isMultiPvHintEnabled;
     private int multiPvCount;
     private IReadOnlyList<MultiPvItemViewModel> multiPvItems = [];
+    private MultiPvItemViewModel? selectedMultiPvItem;
     private bool isTimedModeEnabled;
     private int timedModeMinutesPerPlayer;
     private PieceColor playerColor = PieceColor.Red;
@@ -63,6 +64,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private bool isAnalyzing;
     private string gameAnalysisText = "（等待 AI 走子後開始分析...）";
     private CancellationTokenSource? analysisCts;
+
+    /// <summary>使用者點選 MultiPV 清單中某走法時觸發；null 表示清除選取。</summary>
+    public event Action<Move?>? MultiPvMoveSelected;
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
@@ -783,17 +787,30 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private void OnBoardUpdated()
     {
         var app = global::System.Windows.Application.Current;
-        if (app == null)
+        void Reset()
         {
             HintExplanationText = "（尚未產生提示）";
             MultiPvItems = [];
-            return;
+            if (selectedMultiPvItem != null)
+            {
+                selectedMultiPvItem = null;
+                MultiPvMoveSelected?.Invoke(null);
+            }
         }
-        app.Dispatcher.Invoke(() =>
-        {
-            HintExplanationText = "（尚未產生提示）";
-            MultiPvItems = [];
-        });
+
+        if (app == null) Reset();
+        else app.Dispatcher.Invoke(Reset);
+    }
+
+    private void SelectMultiPvItem(MultiPvItemViewModel item)
+    {
+        // 取消舊選取
+        if (selectedMultiPvItem != null)
+            selectedMultiPvItem.IsSelected = false;
+
+        selectedMultiPvItem = item;
+        item.IsSelected = true;
+        MultiPvMoveSelected?.Invoke(item.Move);
     }
 
     private void OnMultiPvHintReady(IReadOnlyList<MoveEvaluation> evaluations)
@@ -803,8 +820,14 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         {
             var board = gameService.CurrentBoard;
             MultiPvItems = evaluations
-                .Select((e, i) => new MultiPvItemViewModel(i + 1, e, board))
+                .Select((e, i) => new MultiPvItemViewModel(i + 1, e, board, SelectMultiPvItem))
                 .ToList();
+
+            // 預設選中 rank#1
+            var rank1 = MultiPvItems.FirstOrDefault(x => x.IsBest) ?? MultiPvItems.FirstOrDefault();
+            if (rank1 != null)
+                SelectMultiPvItem(rank1);
+
             SelectedTabIndex = HintExplanationTabIndex;
         }
 
@@ -1216,22 +1239,35 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 public sealed record PlayerColorOption(PieceColor Color, string DisplayName);
 
 /// <summary>MultiPV 提示結果清單項目。</summary>
-public sealed class MultiPvItemViewModel
+public sealed class MultiPvItemViewModel : ObservableObject
 {
+    private bool isSelected;
+
     public int Rank { get; }
+    public Move Move { get; }
     public string Notation { get; }
     public string ScoreText { get; }
     public int Score { get; }
     public string PvLine { get; }
     public bool IsBest { get; }
 
-    public MultiPvItemViewModel(int rank, MoveEvaluation eval, IBoard board)
+    public bool IsSelected
+    {
+        get => isSelected;
+        set => SetProperty(ref isSelected, value);
+    }
+
+    public ICommand SelectCommand { get; }
+
+    public MultiPvItemViewModel(int rank, MoveEvaluation eval, IBoard board, Action<MultiPvItemViewModel> onSelect)
     {
         Rank = rank;
+        Move = eval.Move;
         Notation = MoveNotation.ToNotation(eval.Move, board);
         Score = eval.Score;
         ScoreText = eval.Score > 0 ? $"+{eval.Score}" : eval.Score.ToString();
         PvLine = eval.PvLine;
         IsBest = eval.IsBest;
+        SelectCommand = new RelayCommand(_ => onSelect(this));
     }
 }

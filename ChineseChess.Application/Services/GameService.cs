@@ -38,6 +38,7 @@ public class GameService : IGameService, IDisposable
     private SearchResult? latestHint;
     private string? latestHintFen;
     private int latestHintMoveCount = -1;
+    private IReadOnlyList<MoveEvaluation>? latestMultiPvEvaluations;
 
     public IBoard CurrentBoard => board;
     public GameMode CurrentMode => currentMode;
@@ -657,6 +658,20 @@ public class GameService : IGameService, IDisposable
             return "尚未設定提示解釋服務，請先補齊設定檔。";
         }
 
+        // 若此次提示來自 MultiPV 且局面未變，帶入候選走法比較資訊
+        IReadOnlyList<AlternativeMoveInfo>? alternatives = null;
+        if (latestMultiPvEvaluations != null)
+        {
+            alternatives = latestMultiPvEvaluations
+                .Where(e => !e.IsBest)
+                .Select((e, i) => new AlternativeMoveInfo(
+                    i + 2,
+                    MoveNotation.ToNotation(e.Move, board),
+                    e.Score,
+                    e.PvLine))
+                .ToList();
+        }
+
         var request = new HintExplanationRequest
         {
             Fen = latestHintFen,
@@ -666,7 +681,8 @@ public class GameService : IGameService, IDisposable
             SearchDepth = latestHint.Depth,
             Nodes = latestHint.Nodes,
             PrincipalVariation = latestHint.PvLine,
-            ThinkingTree = BuildThinkingTreeForPrompt(board.Clone())
+            ThinkingTree = BuildThinkingTreeForPrompt(board.Clone()),
+            AlternativeMoves = alternatives
         };
 
         try
@@ -1149,6 +1165,7 @@ public class GameService : IGameService, IDisposable
             };
 
             StoreLatestHint(result, board);
+            latestMultiPvEvaluations = evaluations;
             isHintSearchingFlag = false;
             HintReady?.Invoke(result);
             MultiPvHintReady?.Invoke(evaluations);
@@ -1198,6 +1215,7 @@ public class GameService : IGameService, IDisposable
         latestHint = null;
         latestHintFen = null;
         latestHintMoveCount = -1;
+        latestMultiPvEvaluations = null;
     }
 
     public TTStatistics GetTTStatistics() => aiEngine.GetTTStatistics();
