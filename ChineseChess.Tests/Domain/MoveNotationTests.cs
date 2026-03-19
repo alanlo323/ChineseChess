@@ -53,7 +53,7 @@ public class MoveNotationTests
         // 進到 (7,0)=index 63（row 7 < row 8，對紅方是「進」）
         var move = new Move(72, 63);
         var notation = MoveNotation.ToNotation(move, board);
-        Assert.Equal("俥9進1", notation);
+        Assert.Equal("俥九進一", notation);
     }
 
     [Fact]

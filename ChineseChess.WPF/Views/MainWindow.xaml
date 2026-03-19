@@ -64,18 +64,18 @@
                             <RowDefinition Height="24"/>
                         </Grid.RowDefinitions>
 
-                        <!-- 頂部：黑方座標（阿拉伯數字，由左至右 = 黑方右為１路）
+                        <!-- 頂部：黑方座標（阿拉伯數字半形，由左至右 = 黑方右為1路）
                              Canvas.Left = 22 + k*60（欄中心 x = 30 + k*60，偏移8px置中16px文字） -->
                         <Canvas Grid.Row="0" IsHitTestVisible="False">
-                            <TextBlock Text="１" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="22"  Canvas.Top="4" />
-                            <TextBlock Text="２" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="82"  Canvas.Top="4" />
-                            <TextBlock Text="３" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="142" Canvas.Top="4" />
-                            <TextBlock Text="４" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="202" Canvas.Top="4" />
-                            <TextBlock Text="５" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="262" Canvas.Top="4" />
-                            <TextBlock Text="６" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="322" Canvas.Top="4" />
-                            <TextBlock Text="７" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="382" Canvas.Top="4" />
-                            <TextBlock Text="８" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="442" Canvas.Top="4" />
-                            <TextBlock Text="９" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="502" Canvas.Top="4" />
+                            <TextBlock Text="1" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="22"  Canvas.Top="4" />
+                            <TextBlock Text="2" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="82"  Canvas.Top="4" />
+                            <TextBlock Text="3" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="142" Canvas.Top="4" />
+                            <TextBlock Text="4" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="202" Canvas.Top="4" />
+                            <TextBlock Text="5" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="262" Canvas.Top="4" />
+                            <TextBlock Text="6" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="322" Canvas.Top="4" />
+                            <TextBlock Text="7" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="382" Canvas.Top="4" />
+                            <TextBlock Text="8" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="442" Canvas.Top="4" />
+                            <TextBlock Text="9" FontFamily="{StaticResource ChineseClassicFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource WoodMidBrush}" Opacity="1.0" Width="18" TextAlignment="Center" Canvas.Left="502" Canvas.Top="4" />
                         </Canvas>
 
                         <views:ChessBoardView Grid.Row="1" DataContext="{Binding ChessBoard}" />

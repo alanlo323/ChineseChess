@@ -16,7 +16,10 @@
       "Bash(xargs grep:*)",
       "Bash(grep -h \"PackageReference\" \"/d/Git/ChineseChess\"/**/*.csproj)",
       "Bash(wc:*)",
-      "Bash(grep -r InternalsVisibleTo D:GitChineseChess --include=*.cs --include=*.csproj)"
+      "Bash(grep -r InternalsVisibleTo D:GitChineseChess --include=*.cs --include=*.csproj)",
+      "Bash(grep -r \"Column\\\\|Row.*Label\\\\|座標\\\\|coordinate\" /d/Git/ChineseChess --include=*.xaml)",
+      "Bash(python3:*)",
+      "Bash(bash /c/Users/alanlo/.claude/statusline-command.sh)"
     ]
   },
   "outputStyle": "Explanatory"

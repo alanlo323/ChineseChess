@@ -15,6 +15,9 @@ public static class MoveNotation
     private static readonly string[] RedNames   = { "?", "帥", "仕", "相", "傌", "俥", "炮", "兵" };
     private static readonly string[] BlackNames = { "?", "將", "士", "象", "馬", "車", "砲", "卒" };
 
+    // 紅方列號與目標格一律使用漢字數字（正式中式記譜規範）
+    private static readonly string[] ChineseDigits = { "?", "一", "二", "三", "四", "五", "六", "七", "八", "九" };
+
     /// <summary>
     /// 將走法轉換為標準象棋記譜法。
     /// <paramref name="board"/> 必須是走法執行前的棋盤狀態。
@@ -61,10 +64,13 @@ public static class MoveNotation
                 : toColNum;
         }
 
-        // 有前後前綴時省略起始列號（如「前馬進7」而非「前馬8進7」）
+        // 有前後前綴時省略起始列號（如「前馬進七」而非「前馬八進七」）
+        // 紅方：列號與目標格均轉漢字；黑方：保持阿拉伯數字
+        string colLabel  = isRed ? ChineseDigits[fromColNum] : fromColNum.ToString();
+        string destLabel = isRed ? ChineseDigits[destination] : destination.ToString();
         return string.IsNullOrEmpty(prefix)
-            ? $"{pieceName}{fromColNum}{direction}{destination}"
-            : $"{prefix}{pieceName}{direction}{destination}";
+            ? $"{pieceName}{colLabel}{direction}{destLabel}"
+            : $"{prefix}{pieceName}{direction}{destLabel}";
     }
 
     // 直線走棋：目標用步數；斜向走棋：目標用列號
