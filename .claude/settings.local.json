@@ -21,7 +21,9 @@
       "Bash(python3:*)",
       "Bash(bash /c/Users/alanlo/.claude/statusline-command.sh)",
       "Bash(grep -rn \"ScrollIntoView\\\\|BringIntoView\\\\|Scroll\\\\|scroll\" D:/Git/ChineseChess/ChineseChess.WPF --include=*.cs --include=*.xaml)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(grep -E \"\\\\.cs$\")",
+      "Bash(grep -r setoption /d/Git/ChineseChess --include=*.cs)"
     ]
   },
   "outputStyle": "Explanatory"

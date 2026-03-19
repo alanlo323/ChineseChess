@@ -347,6 +347,33 @@
 
                         <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />
 
+                        <!-- MultiPV 提示 -->
+                        <CheckBox Content="MultiPV 提示（提示多個最佳著法）"
+                                  IsChecked="{Binding IsMultiPvHintEnabled}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,6,0,6" />
+                        <Grid Margin="0,0,0,2"
+                              IsEnabled="{Binding IsMultiPvHintEnabled}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="52" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="28" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="著法數"
+                                       Style="{StaticResource FormLabelStyle}"
+                                       VerticalAlignment="Center" />
+                            <Slider Grid.Column="1" Minimum="2" Maximum="5"
+                                    Value="{Binding MultiPvCount}"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    Style="{StaticResource DifficultySliderStyle}"
+                                    Margin="6,0" Height="20" />
+                            <TextBlock Grid.Column="2" Text="{Binding MultiPvCount}"
+                                       Style="{StaticResource FormLabelStyle}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />
+
                         <!-- 限時模式 -->
                         <TextBlock Text="限時模式"
                                    Style="{StaticResource SectionTitleStyle}"
@@ -684,10 +711,71 @@
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="提示解釋">
+            <TabItem Header="提示">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="0,6">
+
+                        <!-- MultiPV 結果列表（啟用 MultiPV 時顯示）-->
+                        <StackPanel Visibility="{Binding IsMultiPvHintEnabled,
+                            Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="多著法分析"
+                                       Style="{StaticResource FormLabelStyle}"
+                                       Margin="0,0,0,6" />
+                            <ItemsControl ItemsSource="{Binding MultiPvItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,4" CornerRadius="4" Padding="6,4"
+                                                BorderThickness="1">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#F5F5F5" />
+                                                    <Setter Property="BorderBrush" Value="#DDDDDD" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsBest}" Value="True">
+                                                            <Setter Property="Background" Value="#FFF8E1" />
+                                                            <Setter Property="BorderBrush"
+                                                                    Value="{StaticResource HintFromBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="22" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Rank, StringFormat={}#{0}}"
+                                                           Style="{StaticResource FormLabelStyle}"
+                                                           FontWeight="Bold" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Notation}"
+                                                           Style="{StaticResource StatusTextStyle}"
+                                                           FontWeight="SemiBold" Margin="6,0" />
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding PvLine}"
+                                                           Style="{StaticResource FormLabelStyle}"
+                                                           FontSize="10" Foreground="#888888"
+                                                           VerticalAlignment="Center"
+                                                           TextWrapping="NoWrap"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="3"
+                                                           Text="{Binding ScoreText}"
+                                                           Style="{StaticResource StatusTextStyle}"
+                                                           FontWeight="Bold" Margin="6,0,0,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Height="1" Background="{StaticResource WoodDarkBrush}"
+                                    Opacity="0.20" Margin="0,8,0,8" />
+                        </StackPanel>
+
+                        <!-- 提示解釋（原有內容保留）-->
                         <TextBlock Text="提示解釋"
                                    Style="{StaticResource FormLabelStyle}"
                                    Margin="0,0,0,6" />

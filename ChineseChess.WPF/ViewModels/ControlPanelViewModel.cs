@@ -35,6 +35,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private bool copyRedTtToBlackAtStart;
     private bool isSmartHintEnabled;
     private int smartHintDepth;
+    private bool isMultiPvHintEnabled;
+    private int multiPvCount;
+    private IReadOnlyList<MultiPvItemViewModel> multiPvItems = [];
     private bool isTimedModeEnabled;
     private int timedModeMinutesPerPlayer;
     private PieceColor playerColor = PieceColor.Red;
@@ -242,6 +245,34 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ─── MultiPV 提示 ─────────────────────────────────────────────────────
+
+    public bool IsMultiPvHintEnabled
+    {
+        get => isMultiPvHintEnabled;
+        set
+        {
+            if (SetProperty(ref isMultiPvHintEnabled, value))
+                gameService.IsMultiPvHintEnabled = value;
+        }
+    }
+
+    public int MultiPvCount
+    {
+        get => multiPvCount;
+        set
+        {
+            if (SetProperty(ref multiPvCount, value))
+                gameService.MultiPvCount = value;
+        }
+    }
+
+    public IReadOnlyList<MultiPvItemViewModel> MultiPvItems
+    {
+        get => multiPvItems;
+        private set => SetProperty(ref multiPvItems, value);
+    }
+
     // ─── 限時模式 ─────────────────────────────────────────────────────────
 
     public bool IsTimedModeEnabled
@@ -434,12 +465,16 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         copyRedTtToBlackAtStart = settings.CopyRedTtToBlackAtStart;
         isSmartHintEnabled     = settings.IsSmartHintEnabled;
         smartHintDepth         = settings.SmartHintDepth;
+        isMultiPvHintEnabled   = settings.IsMultiPvHintEnabled;
+        multiPvCount           = settings.MultiPvCount;
         isTimedModeEnabled     = settings.IsTimedModeEnabled;
         timedModeMinutesPerPlayer = settings.TimedModeMinutesPerPlayer;
         playerColor            = settings.PlayerColor;
 
-        this.gameService.IsSmartHintEnabled = isSmartHintEnabled;
-        this.gameService.SmartHintDepth     = smartHintDepth;
+        this.gameService.IsSmartHintEnabled    = isSmartHintEnabled;
+        this.gameService.SmartHintDepth        = smartHintDepth;
+        this.gameService.IsMultiPvHintEnabled  = isMultiPvHintEnabled;
+        this.gameService.MultiPvCount          = multiPvCount;
         this.gameService.UseSharedTranspositionTable = useSharedTT;
         this.gameService.CopyRedTtToBlackAtStart   = copyRedTtToBlackAtStart;
         this.gameService.IsTimedModeEnabled         = isTimedModeEnabled;
@@ -693,6 +728,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.DrawOffered += OnDrawOffered;
         gameService.DrawOfferResolved += OnDrawOfferResolved;
         gameService.MoveCompleted += OnMoveCompleted;
+        gameService.MultiPvHintReady += OnMultiPvHintReady;
 
         RefreshTTStats();
     }
@@ -750,9 +786,30 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         if (app == null)
         {
             HintExplanationText = "（尚未產生提示）";
+            MultiPvItems = [];
             return;
         }
-        app.Dispatcher.Invoke(() => HintExplanationText = "（尚未產生提示）");
+        app.Dispatcher.Invoke(() =>
+        {
+            HintExplanationText = "（尚未產生提示）";
+            MultiPvItems = [];
+        });
+    }
+
+    private void OnMultiPvHintReady(IReadOnlyList<MoveEvaluation> evaluations)
+    {
+        var app = global::System.Windows.Application.Current;
+        void Update()
+        {
+            var board = gameService.CurrentBoard;
+            MultiPvItems = evaluations
+                .Select((e, i) => new MultiPvItemViewModel(i + 1, e, board))
+                .ToList();
+            SelectedTabIndex = HintExplanationTabIndex;
+        }
+
+        if (app == null) Update();
+        else app.Dispatcher.Invoke(Update);
     }
 
     private void OnMoveCompleted(MoveCompletedEventArgs args)
@@ -1141,6 +1198,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.DrawOffered -= OnDrawOffered;
         gameService.DrawOfferResolved -= OnDrawOfferResolved;
         gameService.MoveCompleted -= OnMoveCompleted;
+        gameService.MultiPvHintReady -= OnMultiPvHintReady;
 
         analysisCts?.Cancel();
         analysisCts?.Dispose();
@@ -1156,3 +1214,24 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
 /// <summary>玩家持色選項（供 ComboBox 顯示用）。</summary>
 public sealed record PlayerColorOption(PieceColor Color, string DisplayName);
+
+/// <summary>MultiPV 提示結果清單項目。</summary>
+public sealed class MultiPvItemViewModel
+{
+    public int Rank { get; }
+    public string Notation { get; }
+    public string ScoreText { get; }
+    public int Score { get; }
+    public string PvLine { get; }
+    public bool IsBest { get; }
+
+    public MultiPvItemViewModel(int rank, MoveEvaluation eval, IBoard board)
+    {
+        Rank = rank;
+        Notation = MoveNotation.ToNotation(eval.Move, board);
+        Score = eval.Score;
+        ScoreText = eval.Score > 0 ? $"+{eval.Score}" : eval.Score.ToString();
+        PvLine = eval.PvLine;
+        IsBest = eval.IsBest;
+    }
+}

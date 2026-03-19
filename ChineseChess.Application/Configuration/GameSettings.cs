@@ -28,6 +28,10 @@ public class GameSettings
     public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
 
+    // ─── MultiPV 提示 ─────────────────────────────────────────────────────
+    public bool IsMultiPvHintEnabled { get; set; } = false;
+    public int MultiPvCount { get; set; } = 3;
+
     // ─── 限時模式 ─────────────────────────────────────────────────────────
     public bool IsTimedModeEnabled { get; set; } = false;
     public int TimedModeMinutesPerPlayer { get; set; } = 10;

@@ -180,6 +180,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         this.gameService.HintReady += OnHintReady;
         this.gameService.HintUpdated += OnHintUpdated;
         this.gameService.SmartHintReady += OnSmartHintReady;
+        this.gameService.MultiPvHintReady += OnMultiPvHintReady;
         SquareClickCommand = new RelayCommand(OnSquareClick);
 
         InitializeBoard();
@@ -406,6 +407,24 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         });
     }
 
+    private void OnMultiPvHintReady(IReadOnlyList<MoveEvaluation> evaluations)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            // 第 1 名已由 HintReady 的 IsHintFrom/IsHintTo 高亮處理
+            // 第 2~N 名：在 To 格顯示 SmartHint 評分 Badge（複用現有視覺）
+            ClearSmartHintHighlights();
+            foreach (var eval in evaluations.Skip(1))
+            {
+                var toIndex = eval.Move.To;
+                if (toIndex < 0 || toIndex >= 90) continue;
+                var sq = Squares[toIndex];
+                sq.HasSmartHint = true;
+                sq.SmartHintScore = eval.Score;
+            }
+        });
+    }
+
     private void ClearMoveHighlights()
     {
         foreach (var s in Squares)
@@ -497,5 +516,6 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         gameService.HintReady -= OnHintReady;
         gameService.HintUpdated -= OnHintUpdated;
         gameService.SmartHintReady -= OnSmartHintReady;
+        gameService.MultiPvHintReady -= OnMultiPvHintReady;
     }
 }

@@ -31,6 +31,8 @@ public interface IGameService
     Move? LastMove { get; }
     bool IsSmartHintEnabled { get; set; }
     int SmartHintDepth { get; set; }
+    bool IsMultiPvHintEnabled { get; set; }
+    int MultiPvCount { get; set; }
     long LastSearchNodes { get; }
     long LastSearchNps { get; }
 
@@ -43,6 +45,7 @@ public interface IGameService
     event Action<SearchResult>? HintUpdated; // 提示搜尋進行中的即時最佳著法更新
     event Action<string>? ThinkingProgress;
     event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady; // 智能提示結果
+    event Action<IReadOnlyList<MoveEvaluation>>? MultiPvHintReady; // MultiPV 提示結果
     /// <summary>AI 每步棋走完後觸發（applyBestMove=true 路徑），供局面分析使用。</summary>
     event Action<MoveCompletedEventArgs>? MoveCompleted;
 

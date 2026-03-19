@@ -46,6 +46,8 @@ public class GameService : IGameService, IDisposable
     public Move? LastMove => board.TryGetLastMove(out var lastMove) ? lastMove : null;
     public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
+    public bool IsMultiPvHintEnabled { get; set; } = false;
+    public int MultiPvCount { get; set; } = 3;
     public long LastSearchNodes => Interlocked.Read(ref lastSearchNodes);
     public long LastSearchNps => Interlocked.Read(ref lastSearchNps);
     public bool UseSharedTranspositionTable { get; set; } = true;
@@ -102,6 +104,7 @@ public class GameService : IGameService, IDisposable
     public event Action<SearchResult>? HintUpdated;
     public event Action<string>? ThinkingProgress;
     public event Action<IReadOnlyList<MoveEvaluation>>? SmartHintReady;
+    public event Action<IReadOnlyList<MoveEvaluation>>? MultiPvHintReady;
     public event Action<DrawOfferResult>? DrawOffered;
     public event Action<DrawOfferResult>? DrawOfferResolved;
     public event Action<MoveCompletedEventArgs>? MoveCompleted;
@@ -1090,6 +1093,9 @@ public class GameService : IGameService, IDisposable
 
     public async Task<SearchResult> GetHintAsync()
     {
+        if (IsMultiPvHintEnabled)
+            return await GetMultiPvHintInternalAsync();
+
         var result = await RunAiSearchAsync(applyBestMove: false);
         if (result == null || result.BestMove.IsNull)
         {
@@ -1099,6 +1105,70 @@ public class GameService : IGameService, IDisposable
 
         // StoreLatestHint 已在 RunAiSearchAsync 的 else 分支呼叫，此處無需重複呼叫
         return result;
+    }
+
+    private async Task<SearchResult> GetMultiPvHintInternalAsync()
+    {
+        if (Interlocked.CompareExchange(ref isThinkingFlag, 1, 0) != 0)
+            return new SearchResult { BestMove = Move.Null };
+
+        isHintSearchingFlag = true;
+        var cts = new CancellationTokenSource();
+        aiCts = cts;
+        var boardSnapshot = board.Clone();
+        var activeEngine = GetCurrentEngine();
+        var activeSettings = GetCurrentSettings();
+        var settings = new SearchSettings
+        {
+            Depth = activeSettings.Depth,
+            TimeLimitMs = activeSettings.TimeLimitMs,
+            ThreadCount = activeSettings.ThreadCount,
+            PauseSignal = aiPauseSignal,
+            AllowOpeningBook = false
+        };
+
+        try
+        {
+            ThinkingProgress?.Invoke("MultiPV 提示搜尋中...");
+
+            var evaluations = await activeEngine.SearchMultiPvAsync(
+                boardSnapshot, settings, MultiPvCount, cts.Token);
+
+            if (cts.Token.IsCancellationRequested)
+                return new SearchResult { BestMove = Move.Null };
+
+            var best = evaluations.FirstOrDefault(e => e.IsBest) ?? evaluations.FirstOrDefault();
+            var result = new SearchResult
+            {
+                BestMove = best?.Move ?? Move.Null,
+                Score = best?.Score ?? 0,
+                Depth = settings.Depth,
+                PvLine = best?.PvLine ?? string.Empty
+            };
+
+            StoreLatestHint(result, board);
+            isHintSearchingFlag = false;
+            HintReady?.Invoke(result);
+            MultiPvHintReady?.Invoke(evaluations);
+
+            var notation = !result.BestMove.IsNull
+                ? MoveNotation.ToNotation(result.BestMove, board) : "（無）";
+            ThinkingProgress?.Invoke($"MultiPV 提示完成：最佳 {notation}，共 {evaluations.Count} 個著法");
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            ThinkingProgress?.Invoke("MultiPV 提示已取消");
+            return new SearchResult { BestMove = Move.Null };
+        }
+        finally
+        {
+            Interlocked.Exchange(ref isThinkingFlag, 0);
+            isHintSearchingFlag = false;
+            if (ReferenceEquals(aiCts, cts)) aiCts = null;
+            cts.Dispose();
+        }
     }
 
     private void StoreLatestHint(SearchResult hint, IBoard sourceBoard)
