@@ -73,7 +73,6 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IGameService>(sp => new GameService(
             sp.GetRequiredService<IAiEngine>(),
             sp.GetService<IHintExplanationService>(),
-            sp.GetService<IOpeningBook>(),
             sp.GetRequiredService<IEngineProvider>()));
         services.AddSingleton<IGameRecordService, GameRecordService>();
 

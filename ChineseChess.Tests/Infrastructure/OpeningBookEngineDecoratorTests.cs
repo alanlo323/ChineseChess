@@ -227,4 +227,61 @@ public class OpeningBookEngineDecoratorTests
         Assert.True(result.IsFromOpeningBook);
         Assert.Equal(bookMove, result.BestMove);
     }
+
+    // ─── 測試 9：MergeTranspositionTableFrom 穿透 inner 的 spy 測試 ───
+
+    /// <summary>spy inner engine：記錄 MergeTranspositionTableFrom 收到的 other 參考。</summary>
+    private class SpyInnerEngine : IAiEngine
+    {
+        public IAiEngine? MergeCalledWithOther;
+
+        public Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
+            => Task.FromResult(new SearchResult { BestMove = new Move(64, 67), Score = 0, Depth = 1, Nodes = 1 });
+
+        public Task<IReadOnlyList<MoveEvaluation>> EvaluateMovesAsync(IBoard board, IEnumerable<Move> moves, int depth, CancellationToken ct = default, IProgress<string>? progress = null)
+            => Task.FromResult<IReadOnlyList<MoveEvaluation>>([]);
+
+        public Task ExportTranspositionTableAsync(Stream output, bool asJson, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ImportTranspositionTableAsync(Stream input, bool asJson, CancellationToken ct = default) => Task.CompletedTask;
+        public TTStatistics GetTTStatistics() => new TTStatistics();
+        public IAiEngine CloneWithCopiedTT() => this;
+        public IAiEngine CloneWithEmptyTT() => this;
+        public void MergeTranspositionTableFrom(IAiEngine other) { MergeCalledWithOther = other; }
+        public IEnumerable<TTEntry> EnumerateTTEntries() => [];
+        public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6) => null;
+        public Task<IReadOnlyList<MoveEvaluation>> SearchMultiPvAsync(IBoard board, SearchSettings settings, int pvCount, CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
+            => Task.FromResult<IReadOnlyList<MoveEvaluation>>([]);
+    }
+
+    [Fact]
+    public void MergeTranspositionTableFrom_WithDecorator_PenetratesInner()
+    {
+        var book = new OpeningBook();
+        var spyA = new SpyInnerEngine();
+        var spyB = new SpyInnerEngine();
+        var bookSettings = new OpeningBookSettings { IsEnabled = true, MaxPly = 20 };
+
+        var decoratorA = new OpeningBookEngineDecorator(spyA, book, bookSettings);
+        var decoratorB = new OpeningBookEngineDecorator(spyB, book, bookSettings);
+
+        // decoratorA.MergeFrom(decoratorB) → 應呼叫 spyA.MergeFrom(spyB.inner)
+        decoratorA.MergeTranspositionTableFrom(decoratorB);
+
+        // spy 驗證：inner 收到的 other 是 spyB（非外層 Decorator）
+        Assert.Same(spyB, spyA.MergeCalledWithOther);
+    }
+
+    [Fact]
+    public void MergeTranspositionTableFrom_WithSelf_DoesNothing()
+    {
+        var book = new OpeningBook();
+        var spy = new SpyInnerEngine();
+        var bookSettings = new OpeningBookSettings { IsEnabled = true, MaxPly = 20 };
+        var decorator = new OpeningBookEngineDecorator(spy, book, bookSettings);
+
+        // 自我合併不應拋例外，也不應呼叫 inner
+        decorator.MergeTranspositionTableFrom(decorator);
+
+        Assert.Null(spy.MergeCalledWithOther);
+    }
 }

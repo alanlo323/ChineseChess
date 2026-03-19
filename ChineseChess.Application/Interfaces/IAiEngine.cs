@@ -123,6 +123,12 @@ public class TTTreeNode
 
 public interface IAiEngine
 {
+    /// <summary>開局庫是否已載入。非 Decorator 引擎預設回傳 false。</summary>
+    bool IsOpeningBookLoaded => false;
+
+    /// <summary>開局庫中的局面總數。非 Decorator 引擎預設回傳 0。</summary>
+    int OpeningBookEntryCount => 0;
+
     Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null);
     Task<IReadOnlyList<MoveEvaluation>> EvaluateMovesAsync(IBoard board, IEnumerable<Move> moves, int depth, CancellationToken ct = default, IProgress<string>? progress = null);
 

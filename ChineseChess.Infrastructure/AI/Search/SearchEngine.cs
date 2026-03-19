@@ -595,7 +595,7 @@ public class SearchEngine : IAiEngine
     /// <inheritdoc/>
     public void MergeTranspositionTableFrom(IAiEngine other)
     {
-        if (other is SearchEngine otherEngine)
+        if (other is SearchEngine otherEngine && !ReferenceEquals(this, otherEngine))
         {
             tt.MergeFrom(otherEngine.tt);
         }

@@ -21,7 +21,6 @@ public class GameService : IGameService, IDisposable
     private const int HintExplanationThinkingTreeDepth = 6;
     private readonly IAiEngine aiEngine;          // 紅方（或共用）引擎
     private IAiEngine? aiEngineBlack;             // 黑方引擎（獨立TT模式才有值）
-    private readonly IOpeningBook? openingBook;
     private readonly BookmarkManager bookmarkManager;
     private Board board;
     private GameMode currentMode;
@@ -82,8 +81,8 @@ public class GameService : IGameService, IDisposable
     private bool inCooldown;               // 是否在提和冷卻期中
 
     public bool IsDrawOfferProcessed => isDrawOfferProcessed;
-    public bool IsOpeningBookLoaded => openingBook?.IsLoaded ?? false;
-    public int OpeningBookEntryCount => openingBook?.EntryCount ?? 0;
+    public bool IsOpeningBookLoaded => aiEngine.IsOpeningBookLoaded;
+    public int OpeningBookEntryCount => aiEngine.OpeningBookEntryCount;
 
     // ─── 棋鐘（限時模式） ──────────────────────────────────────────────────
     /// <summary>
@@ -112,12 +111,10 @@ public class GameService : IGameService, IDisposable
     public GameService(
         IAiEngine aiEngine,
         IHintExplanationService? hintExplanationService = null,
-        IOpeningBook? openingBook = null,
         IEngineProvider? engineProvider = null)
     {
         this.aiEngine = aiEngine;
         this.hintExplanationService = hintExplanationService;
-        this.openingBook = openingBook;
         this.engineProvider = engineProvider;
         bookmarkManager = new BookmarkManager();
         board = new Board(); // 初始局面
@@ -832,7 +829,7 @@ public class GameService : IGameService, IDisposable
         int score;
         try
         {
-            var evalResult = await aiEngine.SearchAsync(boardSnapshot, evalSettings, CancellationToken.None);
+            var evalResult = await GetCurrentEngine().SearchAsync(boardSnapshot, evalSettings, CancellationToken.None);
             // 從黑方（AI）視角評估：正分表示黑方佔優
             // SearchAsync 回傳的分數是從搜尋方角度，黑方回合則取負值轉換為黑方優勢
             score = board.Turn == Domain.Enums.PieceColor.Black ? evalResult.Score : -evalResult.Score;

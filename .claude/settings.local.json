@@ -20,7 +20,8 @@
       "Bash(grep -r \"Column\\\\|Row.*Label\\\\|座標\\\\|coordinate\" /d/Git/ChineseChess --include=*.xaml)",
       "Bash(python3:*)",
       "Bash(bash /c/Users/alanlo/.claude/statusline-command.sh)",
-      "Bash(grep -rn \"ScrollIntoView\\\\|BringIntoView\\\\|Scroll\\\\|scroll\" D:/Git/ChineseChess/ChineseChess.WPF --include=*.cs --include=*.xaml)"
+      "Bash(grep -rn \"ScrollIntoView\\\\|BringIntoView\\\\|Scroll\\\\|scroll\" D:/Git/ChineseChess/ChineseChess.WPF --include=*.cs --include=*.xaml)",
+      "Bash(git stash:*)"
     ]
   },
   "outputStyle": "Explanatory"

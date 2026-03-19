@@ -98,12 +98,16 @@ public class OpeningBookEngineDecorator : IAiEngine
 
     public void MergeTranspositionTableFrom(IAiEngine other)
     {
-        // 若 other 也是 Decorator，應操作其 inner；否則直接操作
+        if (ReferenceEquals(this, other)) return;
+        // 若 other 也是 Decorator，穿透至 inner 以避免 Decorator 包裝干擾
         if (other is OpeningBookEngineDecorator otherDecorator)
             inner.MergeTranspositionTableFrom(otherDecorator.inner);
         else
             inner.MergeTranspositionTableFrom(other);
     }
+
+    public bool IsOpeningBookLoaded => openingBook.IsLoaded;
+    public int OpeningBookEntryCount => openingBook.EntryCount;
 
     public IEnumerable<TTEntry> EnumerateTTEntries()
         => inner.EnumerateTTEntries();

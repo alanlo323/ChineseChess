@@ -59,7 +59,7 @@ public class GameServiceOpeningBookTests
     {
         var fakeEngine = new FakeAiEngine(aiDefaultMove);
         var decorated = new OpeningBookEngineDecorator(fakeEngine, book, bookSettings);
-        var service = new GameService(decorated, null, book);
+        var service = new GameService(decorated);
         service.SetDifficulty(2, 3000, 1);
         return (service, fakeEngine);
     }
@@ -152,9 +152,9 @@ public class GameServiceOpeningBookTests
     [Fact]
     public void IsOpeningBookLoaded_WhenBookIsEmpty_ReturnsFalse()
     {
-        var emptyBook = new OpeningBook();
+        // FakeAiEngine 未實作 IsOpeningBookLoaded，使用 IAiEngine default 實作（false/0）
         var fakeEngine = new FakeAiEngine(new Move(64, 67));
-        var gameService = new GameService(fakeEngine, null, emptyBook);
+        var gameService = new GameService(fakeEngine);
 
         Assert.False(gameService.IsOpeningBookLoaded);
         Assert.Equal(0, gameService.OpeningBookEntryCount);
@@ -163,10 +163,12 @@ public class GameServiceOpeningBookTests
     [Fact]
     public void IsOpeningBookLoaded_WhenBookHasEntries_ReturnsTrue()
     {
+        // 使用 Decorator 包裝引擎，讓 IsOpeningBookLoaded 從 Decorator 回傳
         var book = new OpeningBook();
         book.SetEntry(1UL, [(new Move(1, 2), 5)]);
         var fakeEngine = new FakeAiEngine(new Move(64, 67));
-        var gameService = new GameService(fakeEngine, null, book);
+        var decorated = new OpeningBookEngineDecorator(fakeEngine, book, new OpeningBookSettings { IsEnabled = true, MaxPly = 20 });
+        var gameService = new GameService(decorated);
 
         Assert.True(gameService.IsOpeningBookLoaded);
         Assert.Equal(1, gameService.OpeningBookEntryCount);
