@@ -781,10 +781,11 @@ public class GameService : IGameService, IDisposable
     // 根據目前輪次選擇引擎（AiVsAi 獨立TT 時，黑方用 aiEngineBlack）
     private IAiEngine GetCurrentEngine()
     {
-        // 若有 engineProvider，優先由它決定紅黑方引擎
+        // 若有 engineProvider，依目前輪次顏色選擇對應引擎
+        // 不限 AiVsAi 模式：PlayerVsAi 中 AI 以黑方出手時同樣需要黑方引擎
         if (engineProvider != null)
         {
-            return (currentMode == GameMode.AiVsAi && board.Turn == PieceColor.Black)
+            return board.Turn == PieceColor.Black
                 ? engineProvider.GetBlackEngine()
                 : engineProvider.GetRedEngine();
         }
