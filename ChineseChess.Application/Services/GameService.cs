@@ -1114,10 +1114,15 @@ public class GameService : IGameService, IDisposable
 
         isHintSearchingFlag = true;
         var cts = new CancellationTokenSource();
-        aiCts = cts;
         var boardSnapshot = board.Clone();
         var activeEngine = GetCurrentEngine();
         var activeSettings = GetCurrentSettings();
+
+        // 套用 UI 設定的思考時間限制，與普通 AI 搜尋的時間控制語意一致
+        if (activeSettings.TimeLimitMs > 0)
+            cts.CancelAfter(activeSettings.TimeLimitMs);
+
+        aiCts = cts;
         var settings = new SearchSettings
         {
             Depth = activeSettings.Depth,
@@ -1133,9 +1138,6 @@ public class GameService : IGameService, IDisposable
 
             var evaluations = await activeEngine.SearchMultiPvAsync(
                 boardSnapshot, settings, MultiPvCount, cts.Token);
-
-            if (cts.Token.IsCancellationRequested)
-                return new SearchResult { BestMove = Move.Null };
 
             var best = evaluations.FirstOrDefault(e => e.IsBest) ?? evaluations.FirstOrDefault();
             var result = new SearchResult
