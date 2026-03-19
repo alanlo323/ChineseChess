@@ -214,6 +214,7 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
                 engineProvider.SetBlackExternalEngine(null);
                 BlackEngineStatus = "已恢復內建引擎";
             }
+            PersistCurrentSettings();
             return;
         }
 
