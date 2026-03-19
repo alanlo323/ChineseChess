@@ -87,7 +87,8 @@
 
         <!-- 步法列表 -->
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <ListBox ItemsSource="{Binding Steps}"
+            <ListBox x:Name="moveListBox"
+                     ItemsSource="{Binding Steps}"
                      BorderThickness="0"
                      SelectionMode="Single"
                      Background="Transparent">

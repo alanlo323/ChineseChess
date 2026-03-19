@@ -23,6 +23,9 @@ public class MoveHistoryViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<MoveStepViewModel> Steps { get; } = new();
 
+    /// <summary>當前步改變時觸發，View 訂閱後執行滾動。</summary>
+    public event Action? ScrollToCurrent;
+
     public string StepIndicator
     {
         get => stepIndicator;
@@ -150,6 +153,7 @@ public class MoveHistoryViewModel : ObservableObject, IDisposable
         }
 
         StepIndicator = $"{currentStep} / {history.Count}";
+        ScrollToCurrent?.Invoke();
 
         // 通知 CanExecute 重新評估
         RefreshCommandState();
@@ -165,6 +169,7 @@ public class MoveHistoryViewModel : ObservableObject, IDisposable
             Steps[i].IsCurrent = (i + 1) == currentStep;
 
         StepIndicator = $"{currentStep} / {gameService.MoveHistory.Count}";
+        ScrollToCurrent?.Invoke();
         RefreshCommandState();
     }
 
