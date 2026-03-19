@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -59,6 +60,20 @@ public class GameService : IGameService, IDisposable
     // ─── WXF 重複局面歷史 ──────────────────────────────────────────────────
     // 首筆為種子條目（初始局面），其後每步著法追加一筆
     private readonly List<MoveRecord> wxfHistory = new();
+
+    // ─── 走法歷史與重播 ────────────────────────────────────────────────────
+    private readonly List<MoveHistoryEntry> moveHistory = new();
+    private string initialFen = string.Empty;
+    private ReplayState replayState = ReplayState.Live;
+    private int replayCurrentStep;
+
+    public IReadOnlyList<MoveHistoryEntry> MoveHistory => moveHistory;
+    public string InitialFen => initialFen;
+    public ReplayState ReplayState => replayState;
+    public int ReplayCurrentStep => replayCurrentStep;
+
+    public event Action? MoveHistoryChanged;
+    public event Action? ReplayStateChanged;
 
     // ─── 提和相關欄位 ──────────────────────────────────────────────────────
     private DrawOfferSettings drawOfferSettings = new DrawOfferSettings();
@@ -135,7 +150,13 @@ public class GameService : IGameService, IDisposable
         Interlocked.Exchange(ref lastSearchNodes, 0);
         Interlocked.Exchange(ref lastSearchNps, 0);
         board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        initialFen = board.ToFen();
+        moveHistory.Clear();
+        replayState = ReplayState.Live;
+        replayCurrentStep = 0;
         ResetWxfHistory();
+        MoveHistoryChanged?.Invoke();
+        ReplayStateChanged?.Invoke();
 
         // AiVsAi：依設定初始化黑方引擎
         if (currentMode == GameMode.AiVsAi)
@@ -358,6 +379,7 @@ public class GameService : IGameService, IDisposable
     {
         if (isThinking) return;
         if (isGameOver) return;
+        if (replayState == ReplayState.Replaying) return;
         if (currentMode == GameMode.AiVsAi) return;
         if (move.From >= Board.BoardSize || move.To >= Board.BoardSize || move.From == move.To)
         {
@@ -374,6 +396,7 @@ public class GameService : IGameService, IDisposable
 
         var movedPiece    = board.GetPiece(move.From);
         var capturedPiece = board.GetPiece(move.To);
+        var notation      = MoveNotation.ToNotation(move, board); // 必須在 MakeMove 前取得
         board.MakeMove(move);
         var wxfCls = MoveClassifier.Classify(board, move, movedPiece, capturedPiece, out int wxfVictimSq);
         wxfHistory.Add(new MoveRecord
@@ -385,8 +408,18 @@ public class GameService : IGameService, IDisposable
             VictimSquare   = wxfVictimSq,
             IsCapture      = !capturedPiece.IsNone,
         });
+        moveHistory.Add(new MoveHistoryEntry
+        {
+            StepNumber = moveHistory.Count + 1,
+            Move       = move,
+            Notation   = notation,
+            Turn       = movedPiece.Color,
+            IsCapture  = !capturedPiece.IsNone,
+        });
+        replayCurrentStep = moveHistory.Count;
         Clock?.SwitchTurn();
         ClearLatestHint();
+        MoveHistoryChanged?.Invoke();
         NotifyUpdate();
 
         if (CheckGameOver()) return;
@@ -399,6 +432,9 @@ public class GameService : IGameService, IDisposable
 
     private async Task<SearchResult?> RunAiSearchAsync(bool applyBestMove)
     {
+        // 重播模式下禁止套用走法
+        if (applyBestMove && replayState == ReplayState.Replaying) return null;
+
         // 原子地將 isThinkingFlag 從 0 設為 1；若已是 1 表示另一搜尋進行中，直接返回
         if (Interlocked.CompareExchange(ref isThinkingFlag, 1, 0) != 0) return null;
         ThinkingProgress?.Invoke("AI 思考中...");
@@ -510,8 +546,18 @@ public class GameService : IGameService, IDisposable
                         VictimSquare   = aiVictimSq,
                         IsCapture      = !aiCaptured.IsNone,
                     });
+                    moveHistory.Add(new MoveHistoryEntry
+                    {
+                        StepNumber = moveHistory.Count + 1,
+                        Move       = result.BestMove,
+                        Notation   = moveNotation,
+                        Turn       = aiMovedPiece.Color,
+                        IsCapture  = !aiCaptured.IsNone,
+                    });
+                    replayCurrentStep = moveHistory.Count;
                     Clock?.SwitchTurn();
                     ClearLatestHint();
+                    MoveHistoryChanged?.Invoke();
                     NotifyUpdate();
                     var moveSource = result.IsFromOpeningBook ? "開局庫" : "AI";
                     var scoreStr = result.IsFromOpeningBook ? "定式" : FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方");
@@ -944,6 +990,7 @@ public class GameService : IGameService, IDisposable
     public void Undo()
     {
         if (isThinking) return;
+        if (replayState == ReplayState.Replaying) return;
 
         bool didUndo = false;
 
@@ -962,6 +1009,10 @@ public class GameService : IGameService, IDisposable
                 // 移除最後一筆 wxfHistory（保留種子條目）
                 if (wxfHistory.Count > 1)
                     wxfHistory.RemoveAt(wxfHistory.Count - 1);
+                // 移除最後一筆 moveHistory
+                if (moveHistory.Count > 0)
+                    moveHistory.RemoveAt(moveHistory.Count - 1);
+                replayCurrentStep = moveHistory.Count;
             }
             catch (InvalidOperationException)
             {
@@ -986,6 +1037,7 @@ public class GameService : IGameService, IDisposable
         {
             // 悔棋後允許繼續走棋，重設遊戲結束旗標
             isGameOver = false;
+            MoveHistoryChanged?.Invoke();
             NotifyUpdate();
         }
     }
@@ -1246,6 +1298,260 @@ public class GameService : IGameService, IDisposable
     }
 
     private void NotifyUpdate() => BoardUpdated?.Invoke();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 棋局歷史與重播方法
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>進入重播模式：等待 AI 完全停止後切換狀態。</summary>
+    public async Task EnterReplayModeAsync()
+    {
+        if (replayState == ReplayState.Replaying) return;
+
+        // 停止 AI 並等待完成
+        aiCts?.Cancel();
+        aiPauseSignal.Set();
+        var waited = 0;
+        while (isThinking && waited < 500)
+        {
+            await Task.Delay(10);
+            waited++;
+        }
+
+        replayState = ReplayState.Replaying;
+        // replayCurrentStep 維持當前步號（指向最新局面）
+        ReplayStateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// 跳躍至第 step 步後局面（0 = 初始局面）。
+    /// 從頭重建棋盤與 wxfHistory。
+    /// </summary>
+    public async Task NavigateToAsync(int step)
+    {
+        if (replayState != ReplayState.Replaying) await EnterReplayModeAsync();
+
+        step = Math.Clamp(step, 0, moveHistory.Count);
+
+        // 建立全新棋盤，從初始 FEN 開始重播
+        var replayBoard = new Board();
+        replayBoard.ParseFen(initialFen);
+
+        // 重建 wxfHistory（從頭開始）
+        wxfHistory.Clear();
+        wxfHistory.Add(new MoveRecord
+        {
+            ZobristKey     = replayBoard.ZobristKey,
+            Turn           = replayBoard.Turn,
+            Move           = Move.Null,
+            Classification = MoveClassification.Cancel,
+            VictimSquare   = -1,
+            IsCapture      = false,
+        });
+
+        // 依序重播至目標步
+        for (int i = 0; i < step; i++)
+        {
+            var entry        = moveHistory[i];
+            var movedPiece   = replayBoard.GetPiece(entry.Move.From);
+            var capturedPiece = replayBoard.GetPiece(entry.Move.To);
+            replayBoard.MakeMove(entry.Move);
+            var cls = MoveClassifier.Classify(replayBoard, entry.Move, movedPiece, capturedPiece, out int victimSq);
+            wxfHistory.Add(new MoveRecord
+            {
+                ZobristKey     = replayBoard.ZobristKey,
+                Turn           = movedPiece.Color,
+                Move           = entry.Move,
+                Classification = cls,
+                VictimSquare   = victimSq,
+                IsCapture      = !capturedPiece.IsNone,
+            });
+        }
+
+        board = replayBoard;
+        replayCurrentStep = step;
+        // 到達最新步時恢復 Live 模式
+        replayState = (step >= moveHistory.Count) ? ReplayState.Live : ReplayState.Replaying;
+
+        ReplayStateChanged?.Invoke();
+        NotifyUpdate();
+    }
+
+    public async Task StepForwardAsync()
+    {
+        if (replayState != ReplayState.Replaying) return;
+        if (replayCurrentStep >= moveHistory.Count) return;
+        await NavigateToAsync(replayCurrentStep + 1);
+    }
+
+    public async Task StepBackAsync()
+    {
+        if (replayState != ReplayState.Replaying) return;
+        if (replayCurrentStep <= 0) return;
+        await NavigateToAsync(replayCurrentStep - 1);
+    }
+
+    public async Task GoToStartAsync()
+    {
+        if (replayState != ReplayState.Replaying) return;
+        await NavigateToAsync(0);
+    }
+
+    public async Task GoToEndAsync()
+    {
+        await NavigateToAsync(moveHistory.Count);
+        // NavigateToAsync 在 step == Count 時會自動恢復 Live
+    }
+
+    /// <summary>
+    /// 從目前重播局面繼續對弈（中途換手）。
+    /// 截斷 MoveHistory 至目前步，切換模式為 mode。
+    /// </summary>
+    public async Task ContinueFromCurrentPositionAsync(GameMode mode)
+    {
+        if (replayState != ReplayState.Replaying) return;
+
+        // 截斷歷史至目前步
+        if (replayCurrentStep < moveHistory.Count)
+            moveHistory.RemoveRange(replayCurrentStep, moveHistory.Count - replayCurrentStep);
+
+        // 重設對局狀態
+        currentMode = mode;
+        isGameOver = false;
+        pendingAiDrawOffer = false;
+        isDrawOfferProcessed = false;
+        Interlocked.Exchange(ref completedGameNodes, 0);
+        ClearLatestHint();
+
+        // 重建棋鐘（若限時模式）
+        StopAndDisposeClock();
+        if (IsTimedModeEnabled)
+        {
+            var newClock = new GameClock(TimeSpan.FromMinutes(TimedModeMinutesPerPlayer));
+            newClock.OnTimeout += OnClockTimeout;
+            Clock = newClock;
+            Clock.Start(board.Turn);
+            clockTickTimer = new System.Threading.Timer(
+                _ => Clock?.Tick(),
+                null,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(1));
+        }
+
+        // 重建 wxfHistory（以當前棋盤狀態為新起點）
+        ResetWxfHistory();
+
+        // AiVsAi：依設定初始化黑方引擎
+        if (mode == GameMode.AiVsAi && engineProvider == null)
+        {
+            aiEngineBlack = UseSharedTranspositionTable
+                ? null
+                : (CopyRedTtToBlackAtStart
+                    ? aiEngine.CloneWithCopiedTT()
+                    : aiEngine.CloneWithEmptyTT());
+        }
+        else if (mode != GameMode.AiVsAi)
+        {
+            aiEngineBlack = null;
+        }
+
+        replayState = ReplayState.Live;
+        ReplayStateChanged?.Invoke();
+        MoveHistoryChanged?.Invoke();
+        NotifyUpdate();
+
+        // 若新模式 AI 先手，啟動搜尋
+        bool aiFirstMove = (mode == GameMode.AiVsAi) ||
+                           (mode == GameMode.PlayerVsAi && PlayerColor != board.Turn);
+        if (aiFirstMove)
+        {
+            await RunAiSearchAsync(applyBestMove: true);
+        }
+    }
+
+    /// <summary>載入外部 GameRecord，進入重播模式。</summary>
+    public async Task LoadGameRecordAsync(GameRecord record)
+    {
+        // 停止當前 AI
+        aiCts?.Cancel();
+        aiPauseSignal.Set();
+        var waited = 0;
+        while (isThinking && waited < 500)
+        {
+            await Task.Delay(10);
+            waited++;
+        }
+
+        // 驗證 FEN
+        var loadedBoard = new Board();
+        loadedBoard.ParseFen(record.InitialFen);
+
+        // 重建 moveHistory
+        initialFen = record.InitialFen;
+        moveHistory.Clear();
+        foreach (var step in record.Steps)
+        {
+            moveHistory.Add(new MoveHistoryEntry
+            {
+                StepNumber = step.StepNumber,
+                Move       = new Move(step.From, step.To),
+                Notation   = step.Notation,
+                Turn       = step.Turn == "Red" ? PieceColor.Red : PieceColor.Black,
+                IsCapture  = step.IsCapture,
+            });
+        }
+
+        isGameOver = false;
+        pendingAiDrawOffer = false;
+        isDrawOfferProcessed = false;
+        ClearLatestHint();
+        StopAndDisposeClock();
+
+        // 進入重播模式，先設為 Replaying 以免 NavigateToAsync 進入 Live
+        replayState = ReplayState.Replaying;
+        replayCurrentStep = moveHistory.Count;
+
+        // 跳至最後一步（同時重建棋盤）
+        // 注意：NavigateToAsync 在 step == Count 時預設轉為 Live，此處需強制保持 Replaying
+        await NavigateToAsync(moveHistory.Count);
+
+        // NavigateToAsync 可能在最後一步設 Live，載入棋局時應保持 Replaying
+        if (moveHistory.Count > 0)
+        {
+            replayState = ReplayState.Replaying;
+        }
+
+        MoveHistoryChanged?.Invoke();
+        ReplayStateChanged?.Invoke();
+    }
+
+    /// <summary>將目前棋局匯出為 GameRecord。</summary>
+    public GameRecord ExportGameRecord(string redPlayer = "玩家", string blackPlayer = "AI")
+    {
+        var steps = moveHistory.Select(e => new GameRecordStep
+        {
+            StepNumber = e.StepNumber,
+            From       = (byte)e.Move.From,
+            To         = (byte)e.Move.To,
+            Notation   = e.Notation,
+            Turn       = e.Turn == PieceColor.Red ? "Red" : "Black",
+            IsCapture  = e.IsCapture,
+        }).ToList();
+
+        return new GameRecord
+        {
+            Metadata = new GameRecordMetadata
+            {
+                RedPlayer   = redPlayer,
+                BlackPlayer = blackPlayer,
+                Date        = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                Result      = isGameOver ? "已結束" : "進行中",
+                GameMode    = currentMode,
+            },
+            InitialFen = initialFen,
+            Steps      = steps,
+        };
+    }
 
     /// <summary>
     /// 清空並重置 WXF 歷史，加入初始局面的種子條目。

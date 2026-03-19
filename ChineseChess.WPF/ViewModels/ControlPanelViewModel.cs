@@ -380,9 +380,13 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>外部引擎 / 伺服器設定的 ViewModel（供 ExternalEngineView 綁定）。</summary>
     public ExternalEngineViewModel? ExternalEngine { get; }
 
-    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null)
+    /// <summary>棋譜側邊欄 ViewModel。</summary>
+    public MoveHistoryViewModel? MoveHistory { get; }
+
+    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null)
     {
         ExternalEngine = externalEngineViewModel;
+        MoveHistory = moveHistoryViewModel;
         this.gameService = gameService;
         this.gameAnalysisService = gameAnalysisService;
         isGameAnalysisEnabled   = analysisSettings?.IsEnabled ?? true;
@@ -1073,6 +1077,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         ttExplorerTimer.Dispose();
         clockDisplayTimer.Stop();
         clockDisplayTimer.Dispose();
+        MoveHistory?.Dispose();
     }
 }
 

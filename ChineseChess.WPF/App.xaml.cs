@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Diagnostics;
 using System.Windows;
+using ChineseChess.Application.Enums;
 
 namespace ChineseChess.WPF;
 
@@ -68,17 +69,22 @@ public partial class App : System.Windows.Application
             sp.GetService<IOpeningBook>(),
             sp.GetService<OpeningBookSettings>(),
             sp.GetRequiredService<IEngineProvider>()));
+        services.AddSingleton<IGameRecordService, GameRecordService>();
 
         // ViewModel 層
         services.AddTransient<MainViewModel>();
         services.AddTransient<ChessBoardViewModel>();
         services.AddTransient<ExternalEngineViewModel>();
+        services.AddTransient<MoveHistoryViewModel>(sp => new MoveHistoryViewModel(
+            sp.GetRequiredService<IGameService>(),
+            sp.GetRequiredService<IGameRecordService>()));
         services.AddTransient<ControlPanelViewModel>(sp => new ControlPanelViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<GameSettings>(),
             sp.GetService<IGameAnalysisService>(),
             sp.GetService<GameAnalysisSettings>(),
-            sp.GetRequiredService<ExternalEngineViewModel>()));
+            sp.GetRequiredService<ExternalEngineViewModel>(),
+            sp.GetRequiredService<MoveHistoryViewModel>()));
 
         // 視圖層（Views）
         services.AddTransient<MainWindowView>();

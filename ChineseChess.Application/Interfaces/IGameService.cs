@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.ObjectModel;
 
 namespace ChineseChess.Application.Interfaces;
 
@@ -110,6 +111,56 @@ public interface IGameService
     int TimedModeMinutesPerPlayer { get; set; }
     /// <summary>棋鐘實例。僅限時模式開局後有值，否則為 null。</summary>
     IGameClock? Clock { get; }
+
+    // ─── 棋局歷史與重播 ──────────────────────────────────────────────────────
+
+    /// <summary>本局完整走法歷史（Live 模式下為最新局面；重播中為重播前的完整歷史）。</summary>
+    IReadOnlyList<MoveHistoryEntry> MoveHistory { get; }
+
+    /// <summary>初始局面 FEN（StartGameAsync 時記錄）。</summary>
+    string InitialFen { get; }
+
+    /// <summary>目前重播狀態。</summary>
+    ReplayState ReplayState { get; }
+
+    /// <summary>重播模式下目前定格的步號（0 = 初始局面，= MoveHistory.Count 時等同最新）。</summary>
+    int ReplayCurrentStep { get; }
+
+    /// <summary>走法歷史變更時觸發（追加、移除、載入棋局）。</summary>
+    event Action? MoveHistoryChanged;
+
+    /// <summary>重播狀態切換時觸發（Live ↔ Replaying ↔ Branching）。</summary>
+    event Action? ReplayStateChanged;
+
+    /// <summary>進入重播模式（等待 AI 完全停止後再切換）。</summary>
+    Task EnterReplayModeAsync();
+
+    /// <summary>跳躍至第 step 步後狀態（0 = 初始局面，重建棋盤與 wxfHistory）。</summary>
+    Task NavigateToAsync(int step);
+
+    /// <summary>前進一步（重播模式中）。</summary>
+    Task StepForwardAsync();
+
+    /// <summary>後退一步（重播模式中）。</summary>
+    Task StepBackAsync();
+
+    /// <summary>跳至初始局面（重播模式中）。</summary>
+    Task GoToStartAsync();
+
+    /// <summary>跳至最新局面並恢復 Live 模式。</summary>
+    Task GoToEndAsync();
+
+    /// <summary>
+    /// 從目前重播局面繼續對弈（中途換手）。
+    /// 截斷 MoveHistory 至目前步，切換對局模式為 mode。
+    /// </summary>
+    Task ContinueFromCurrentPositionAsync(GameMode mode);
+
+    /// <summary>載入外部 GameRecord 進入重播模式。</summary>
+    Task LoadGameRecordAsync(GameRecord record);
+
+    /// <summary>將目前棋局匯出為 GameRecord。</summary>
+    GameRecord ExportGameRecord(string redPlayer = "玩家", string blackPlayer = "AI");
 
     Task<SearchResult> GetHintAsync(); // 取得目前局面的分析結果
     Task<string> ExplainLatestHintAsync(IProgress<string>? progress = null, CancellationToken ct = default); // 解釋最新提示

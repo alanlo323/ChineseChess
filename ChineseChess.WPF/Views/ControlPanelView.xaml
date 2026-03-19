@@ -717,6 +717,11 @@
                 <views:ExternalEngineView DataContext="{Binding ExternalEngine}" />
             </TabItem>
 
+            <!-- 棋譜頁 -->
+            <TabItem Header="棋譜">
+                <views:MoveHistoryView DataContext="{Binding MoveHistory}" />
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </UserControl>
