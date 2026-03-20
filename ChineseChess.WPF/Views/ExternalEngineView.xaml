@@ -76,6 +76,153 @@
                            TextWrapping="Wrap" />
             </Grid>
 
+            <!-- ─── 紅方 Pikafish 進階設定 ──────────────────────── -->
+            <GroupBox Header="Pikafish 進階設定"
+                      Visibility="{Binding RedIsPikafish, Converter={StaticResource BooleanToVisibilityConverter}}"
+                      Margin="0,6,0,0">
+                <StackPanel Margin="4,4,4,4">
+                    <!-- Clear Hash -->
+                    <Button Content="清除哈希（Clear Hash）"
+                            Command="{Binding ClearRedHashCommand}"
+                            Style="{StaticResource CompactButtonStyle}"
+                            HorizontalAlignment="Left"
+                            Margin="0,0,0,6" />
+
+                    <!-- MultiPV -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="MultiPV（1-500）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding RedMultiPv, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+
+                    <!-- Skill Level -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="技能等級（0-20）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding RedSkillLevel, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+
+                    <!-- UCI_LimitStrength -->
+                    <CheckBox Content="限制強度（UCI_LimitStrength）"
+                              IsChecked="{Binding RedUciLimitStrength}"
+                              Foreground="{StaticResource InkBrush}"
+                              Margin="0,0,0,4" />
+
+                    <!-- UCI_Elo -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="ELO（1280-3133）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding RedUciElo, UpdateSourceTrigger=LostFocus}"
+                                 IsEnabled="{Binding RedUciEloEnabled}" />
+                    </Grid>
+
+                    <!-- Sixty Move Rule -->
+                    <CheckBox Content="六十步和棋規則"
+                              IsChecked="{Binding RedSixtyMoveRule}"
+                              Foreground="{StaticResource InkBrush}"
+                              Margin="0,0,0,4" />
+
+                    <!-- Rule60MaxPly -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="六十步最大半步（1-150）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding RedRule60MaxPly, UpdateSourceTrigger=LostFocus}"
+                                 IsEnabled="{Binding RedRule60MaxPlyEnabled}" />
+                    </Grid>
+
+                    <!-- MateThreatDepth -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="將殺威脅深度（0-10）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding RedMateThreatDepth, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+
+                    <!-- ScoreType -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="評分顯示方式："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding ScoreTypes}"
+                                  SelectedItem="{Binding RedScoreType}"
+                                  Style="{StaticResource InputControlStyle}" />
+                    </Grid>
+
+                    <!-- LU_Output -->
+                    <CheckBox Content="LU 輸出格式（LU_Output）"
+                              IsChecked="{Binding RedLuOutput}"
+                              Foreground="{StaticResource InkBrush}"
+                              Margin="0,0,0,4" />
+
+                    <!-- DrawRule -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="和棋規則："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding DrawRules}"
+                                  SelectedItem="{Binding RedDrawRule}"
+                                  Style="{StaticResource InputControlStyle}" />
+                    </Grid>
+
+                    <!-- EvalFile -->
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="EvalFile："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding RedEvalFile, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,6,0" />
+                        <Button Grid.Column="2"
+                                Content="瀏覽..."
+                                Command="{Binding BrowseRedEvalFileCommand}"
+                                Style="{StaticResource CompactButtonStyle}"
+                                Width="50" />
+                    </Grid>
+
+                    <!-- 套用 Pikafish 設定 -->
+                    <Button Content="套用 Pikafish 設定"
+                            Command="{Binding ApplyRedPikafishCommand}"
+                            Style="{StaticResource CompactButtonStyle}"
+                            HorizontalAlignment="Left" />
+                </StackPanel>
+            </GroupBox>
+
             <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />
 
             <!-- ─── 黑方外部引擎 ────────────────────────────────── -->
@@ -142,6 +289,153 @@
                            VerticalAlignment="Center"
                            TextWrapping="Wrap" />
             </Grid>
+
+            <!-- ─── 黑方 Pikafish 進階設定 ──────────────────────── -->
+            <GroupBox Header="Pikafish 進階設定"
+                      Visibility="{Binding BlackIsPikafish, Converter={StaticResource BooleanToVisibilityConverter}}"
+                      Margin="0,6,0,0">
+                <StackPanel Margin="4,4,4,4">
+                    <!-- Clear Hash -->
+                    <Button Content="清除哈希（Clear Hash）"
+                            Command="{Binding ClearBlackHashCommand}"
+                            Style="{StaticResource CompactButtonStyle}"
+                            HorizontalAlignment="Left"
+                            Margin="0,0,0,6" />
+
+                    <!-- MultiPV -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="MultiPV（1-500）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding BlackMultiPv, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+
+                    <!-- Skill Level -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="技能等級（0-20）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding BlackSkillLevel, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+
+                    <!-- UCI_LimitStrength -->
+                    <CheckBox Content="限制強度（UCI_LimitStrength）"
+                              IsChecked="{Binding BlackUciLimitStrength}"
+                              Foreground="{StaticResource InkBrush}"
+                              Margin="0,0,0,4" />
+
+                    <!-- UCI_Elo -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="ELO（1280-3133）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding BlackUciElo, UpdateSourceTrigger=LostFocus}"
+                                 IsEnabled="{Binding BlackUciEloEnabled}" />
+                    </Grid>
+
+                    <!-- Sixty Move Rule -->
+                    <CheckBox Content="六十步和棋規則"
+                              IsChecked="{Binding BlackSixtyMoveRule}"
+                              Foreground="{StaticResource InkBrush}"
+                              Margin="0,0,0,4" />
+
+                    <!-- Rule60MaxPly -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="六十步最大半步（1-150）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding BlackRule60MaxPly, UpdateSourceTrigger=LostFocus}"
+                                 IsEnabled="{Binding BlackRule60MaxPlyEnabled}" />
+                    </Grid>
+
+                    <!-- MateThreatDepth -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="將殺威脅深度（0-10）："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding BlackMateThreatDepth, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+
+                    <!-- ScoreType -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="評分顯示方式："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding ScoreTypes}"
+                                  SelectedItem="{Binding BlackScoreType}"
+                                  Style="{StaticResource InputControlStyle}" />
+                    </Grid>
+
+                    <!-- LU_Output -->
+                    <CheckBox Content="LU 輸出格式（LU_Output）"
+                              IsChecked="{Binding BlackLuOutput}"
+                              Foreground="{StaticResource InkBrush}"
+                              Margin="0,0,0,4" />
+
+                    <!-- DrawRule -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="和棋規則："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding DrawRules}"
+                                  SelectedItem="{Binding BlackDrawRule}"
+                                  Style="{StaticResource InputControlStyle}" />
+                    </Grid>
+
+                    <!-- EvalFile -->
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="EvalFile："
+                                   Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding BlackEvalFile, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,6,0" />
+                        <Button Grid.Column="2"
+                                Content="瀏覽..."
+                                Command="{Binding BrowseBlackEvalFileCommand}"
+                                Style="{StaticResource CompactButtonStyle}"
+                                Width="50" />
+                    </Grid>
+
+                    <!-- 套用 Pikafish 設定 -->
+                    <Button Content="套用 Pikafish 設定"
+                            Command="{Binding ApplyBlackPikafishCommand}"
+                            Style="{StaticResource CompactButtonStyle}"
+                            HorizontalAlignment="Left" />
+                </StackPanel>
+            </GroupBox>
 
             <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,10,0,10" />
 

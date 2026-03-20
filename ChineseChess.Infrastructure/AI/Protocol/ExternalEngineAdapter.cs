@@ -33,6 +33,13 @@ public sealed class ExternalEngineAdapter : IAiEngine, IDisposable
     private readonly SemaphoreSlim initLock = new SemaphoreSlim(1, 1);
     private bool initialized;
     private bool disposed;
+    private string engineName = string.Empty;
+
+    /// <summary>握手後解析到的引擎名稱（如 "Pikafish 2026-01-02"）。</summary>
+    public string EngineName => engineName;
+
+    /// <summary>引擎是否為 Pikafish（大小寫不敏感）。</summary>
+    public bool IsPikafish => engineName.Contains("Pikafish", StringComparison.OrdinalIgnoreCase);
 
     // ─── 建構子 ───────────────────────────────────────────────────────────
 
@@ -88,13 +95,13 @@ public sealed class ExternalEngineAdapter : IAiEngine, IDisposable
         {
             // UCCI 握手：ucci → 等待 ucciresp 或 ucciok
             await SendLineAsync("ucci");
-            await WaitForLineAsync(line => line == "ucciresp" || line == "ucciok", ct);
+            await WaitForHandshakeCompletionAsync(line => line == "ucciresp" || line == "ucciok", ct);
         }
         else
         {
             // UCI 握手：uci → 等待 uciok → 設定象棋變體
             await SendLineAsync("uci");
-            await WaitForLineAsync(line => line == "uciok", ct);
+            await WaitForHandshakeCompletionAsync(line => line == "uciok", ct);
             await SendLineAsync("setoption name UCI_Variant value xiangqi");
         }
 
@@ -256,8 +263,30 @@ public sealed class ExternalEngineAdapter : IAiEngine, IDisposable
         return Task.CompletedTask;
     }
 
-    /// <summary>持續讀取引擎 stdout，直到找到符合 <paramref name="predicate"/> 的行。</summary>
-    private async Task WaitForLineAsync(Func<string, bool> predicate, CancellationToken ct)
+    /// <summary>
+    /// 讀取握手期間的所有行，直到符合完成條件，
+    /// 同時擷取 "id name ..." 行以偵測引擎身份。
+    /// </summary>
+    private Task WaitForHandshakeCompletionAsync(Func<string, bool> doneCondition, CancellationToken ct)
+        => WaitForLineAsync(doneCondition, ct, line =>
+        {
+            if (line.StartsWith("id name ", StringComparison.Ordinal))
+                engineName = line["id name ".Length..].Trim();
+        });
+
+    /// <summary>向引擎發送 setoption name X value Y 命令。</summary>
+    public Task SendOptionAsync(string name, string value)
+        => SendLineAsync($"setoption name {name} value {value}");
+
+    /// <summary>向引擎發送無值選項（如 Clear Hash）。</summary>
+    public Task SendButtonOptionAsync(string name)
+        => SendLineAsync($"setoption name {name}");
+
+    /// <summary>
+    /// 持續讀取引擎 stdout，直到找到符合 <paramref name="predicate"/> 的行。
+    /// 可選 <paramref name="onEachLine"/> 回呼在判斷前對每行進行副作用處理（如擷取引擎名稱）。
+    /// </summary>
+    private async Task WaitForLineAsync(Func<string, bool> predicate, CancellationToken ct, Action<string>? onEachLine = null)
     {
         if (process == null) throw new InvalidOperationException("引擎尚未啟動");
 
@@ -265,7 +294,9 @@ public sealed class ExternalEngineAdapter : IAiEngine, IDisposable
         {
             var line = await process.StandardOutput.ReadLineAsync(ct);
             if (line == null) throw new EndOfStreamException("引擎 process 已結束（stdout 已關閉）");
-            if (predicate(line.Trim())) return;
+            line = line.Trim();
+            onEachLine?.Invoke(line);
+            if (predicate(line)) return;
         }
         ct.ThrowIfCancellationRequested();
     }

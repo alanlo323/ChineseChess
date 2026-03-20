@@ -22,6 +22,22 @@ namespace ChineseChess.Tests.Infrastructure;
 /// </summary>
 public class ExternalEngineAdapterTests
 {
+    // ─── IsPikafish / EngineName 預設值測試（不依賴外部 process） ────────
+
+    [Fact]
+    public void IsPikafish_DefaultInstance_IsFalse()
+    {
+        using var adapter = new ExternalEngineAdapter("fake.exe", EngineProtocol.Uci);
+        Assert.False(adapter.IsPikafish);
+    }
+
+    [Fact]
+    public void EngineName_DefaultInstance_IsEmpty()
+    {
+        using var adapter = new ExternalEngineAdapter("fake.exe", EngineProtocol.Uci);
+        Assert.Equal(string.Empty, adapter.EngineName);
+    }
+
     // ─── TT stub 方法測試（不依賴外部 process） ───────────────────────────
 
     [Fact]

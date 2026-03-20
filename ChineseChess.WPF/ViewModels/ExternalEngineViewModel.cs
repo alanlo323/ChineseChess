@@ -36,6 +36,36 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     private EngineProtocol blackProtocol = EngineProtocol.Ucci;
     private string blackEngineStatus = "未啟用";
 
+    // ─── Pikafish adapter 參照（不持有所有權，Dispose 由 EngineProvider 負責） ─
+    private ExternalEngineAdapter? redAdapter;
+    private ExternalEngineAdapter? blackAdapter;
+
+    // ─── 紅方 Pikafish 設定欄位 ──────────────────────────────────────────
+    private int redMultiPv = 1;
+    private int redSkillLevel = 20;
+    private bool redUciLimitStrength = false;
+    private int redUciElo = 2850;
+    private bool redSixtyMoveRule = true;
+    private int redRule60MaxPly = 120;
+    private int redMateThreatDepth = 0;
+    private PikafishScoreType redScoreType = PikafishScoreType.Elo;
+    private bool redLuOutput = true;
+    private PikafishDrawRule redDrawRule = PikafishDrawRule.None;
+    private string redEvalFile = string.Empty;
+
+    // ─── 黑方 Pikafish 設定欄位 ──────────────────────────────────────────
+    private int blackMultiPv = 1;
+    private int blackSkillLevel = 20;
+    private bool blackUciLimitStrength = false;
+    private int blackUciElo = 2850;
+    private bool blackSixtyMoveRule = true;
+    private int blackRule60MaxPly = 120;
+    private int blackMateThreatDepth = 0;
+    private PikafishScoreType blackScoreType = PikafishScoreType.Elo;
+    private bool blackLuOutput = true;
+    private PikafishDrawRule blackDrawRule = PikafishDrawRule.None;
+    private string blackEvalFile = string.Empty;
+
     // ─── 伺服器欄位 ───────────────────────────────────────────────────────
     private bool isServerRunning;
     private int serverPort = 23333;
@@ -57,6 +87,13 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
         ApplyBlackEngineCommand  = new RelayCommand(async _ => await ApplyEngineAsync(isRed: false));
         StartServerCommand       = new RelayCommand(async _ => await StartServerAsync(), _ => !IsServerRunning);
         StopServerCommand        = new RelayCommand(async _ => await StopServerAsync(),  _ => IsServerRunning);
+
+        ClearRedHashCommand      = new RelayCommand(async _ => await ClearHashAsync(isRed: true));
+        ApplyRedPikafishCommand  = new RelayCommand(async _ => { await ApplyPikafishSettingsAsync(isRed: true); PersistCurrentSettings(); });
+        BrowseRedEvalFileCommand = new RelayCommand(_ => BrowseEvalFile(isRed: true));
+        ClearBlackHashCommand      = new RelayCommand(async _ => await ClearHashAsync(isRed: false));
+        ApplyBlackPikafishCommand  = new RelayCommand(async _ => { await ApplyPikafishSettingsAsync(isRed: false); PersistCurrentSettings(); });
+        BrowseBlackEvalFileCommand = new RelayCommand(_ => BrowseEvalFile(isRed: false));
 
         _ = LoadAndAutoConnectAsync().ContinueWith(
             t => System.Diagnostics.Trace.TraceWarning($"自動連接引擎失敗：{t.Exception?.InnerException?.Message}"),
@@ -160,6 +197,174 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
 
     public IEnumerable<EngineProtocol> EngineProtocols => Enum.GetValues<EngineProtocol>();
 
+    // ─── Pikafish 偵測屬性（從 adapter 直接推導，無冗餘狀態） ───────────────
+
+    public bool RedIsPikafish => redAdapter?.IsPikafish ?? false;
+    public bool BlackIsPikafish => blackAdapter?.IsPikafish ?? false;
+
+    // ─── 紅方 Pikafish 設定屬性 ───────────────────────────────────────────
+
+    public int RedMultiPv
+    {
+        get => redMultiPv;
+        set => SetProperty(ref redMultiPv, Math.Clamp(value, 1, 500));
+    }
+
+    public int RedSkillLevel
+    {
+        get => redSkillLevel;
+        set => SetProperty(ref redSkillLevel, Math.Clamp(value, 0, 20));
+    }
+
+    public bool RedUciLimitStrength
+    {
+        get => redUciLimitStrength;
+        set
+        {
+            if (SetProperty(ref redUciLimitStrength, value))
+                OnPropertyChanged(nameof(RedUciEloEnabled));
+        }
+    }
+
+    public int RedUciElo
+    {
+        get => redUciElo;
+        set => SetProperty(ref redUciElo, Math.Clamp(value, 1280, 3133));
+    }
+
+    public bool RedSixtyMoveRule
+    {
+        get => redSixtyMoveRule;
+        set
+        {
+            if (SetProperty(ref redSixtyMoveRule, value))
+                OnPropertyChanged(nameof(RedRule60MaxPlyEnabled));
+        }
+    }
+
+    public int RedRule60MaxPly
+    {
+        get => redRule60MaxPly;
+        set => SetProperty(ref redRule60MaxPly, Math.Clamp(value, 1, 150));
+    }
+
+    public int RedMateThreatDepth
+    {
+        get => redMateThreatDepth;
+        set => SetProperty(ref redMateThreatDepth, Math.Clamp(value, 0, 10));
+    }
+
+    public PikafishScoreType RedScoreType
+    {
+        get => redScoreType;
+        set => SetProperty(ref redScoreType, value);
+    }
+
+    public bool RedLuOutput
+    {
+        get => redLuOutput;
+        set => SetProperty(ref redLuOutput, value);
+    }
+
+    public PikafishDrawRule RedDrawRule
+    {
+        get => redDrawRule;
+        set => SetProperty(ref redDrawRule, value);
+    }
+
+    public string RedEvalFile
+    {
+        get => redEvalFile;
+        set => SetProperty(ref redEvalFile, value);
+    }
+
+    public bool RedUciEloEnabled => RedIsPikafish && RedUciLimitStrength;
+    public bool RedRule60MaxPlyEnabled => RedIsPikafish && RedSixtyMoveRule;
+
+    // ─── 黑方 Pikafish 設定屬性 ───────────────────────────────────────────
+
+    public int BlackMultiPv
+    {
+        get => blackMultiPv;
+        set => SetProperty(ref blackMultiPv, Math.Clamp(value, 1, 500));
+    }
+
+    public int BlackSkillLevel
+    {
+        get => blackSkillLevel;
+        set => SetProperty(ref blackSkillLevel, Math.Clamp(value, 0, 20));
+    }
+
+    public bool BlackUciLimitStrength
+    {
+        get => blackUciLimitStrength;
+        set
+        {
+            if (SetProperty(ref blackUciLimitStrength, value))
+                OnPropertyChanged(nameof(BlackUciEloEnabled));
+        }
+    }
+
+    public int BlackUciElo
+    {
+        get => blackUciElo;
+        set => SetProperty(ref blackUciElo, Math.Clamp(value, 1280, 3133));
+    }
+
+    public bool BlackSixtyMoveRule
+    {
+        get => blackSixtyMoveRule;
+        set
+        {
+            if (SetProperty(ref blackSixtyMoveRule, value))
+                OnPropertyChanged(nameof(BlackRule60MaxPlyEnabled));
+        }
+    }
+
+    public int BlackRule60MaxPly
+    {
+        get => blackRule60MaxPly;
+        set => SetProperty(ref blackRule60MaxPly, Math.Clamp(value, 1, 150));
+    }
+
+    public int BlackMateThreatDepth
+    {
+        get => blackMateThreatDepth;
+        set => SetProperty(ref blackMateThreatDepth, Math.Clamp(value, 0, 10));
+    }
+
+    public PikafishScoreType BlackScoreType
+    {
+        get => blackScoreType;
+        set => SetProperty(ref blackScoreType, value);
+    }
+
+    public bool BlackLuOutput
+    {
+        get => blackLuOutput;
+        set => SetProperty(ref blackLuOutput, value);
+    }
+
+    public PikafishDrawRule BlackDrawRule
+    {
+        get => blackDrawRule;
+        set => SetProperty(ref blackDrawRule, value);
+    }
+
+    public string BlackEvalFile
+    {
+        get => blackEvalFile;
+        set => SetProperty(ref blackEvalFile, value);
+    }
+
+    public bool BlackUciEloEnabled => BlackIsPikafish && BlackUciLimitStrength;
+    public bool BlackRule60MaxPlyEnabled => BlackIsPikafish && BlackSixtyMoveRule;
+
+    // ─── Pikafish ComboBox 來源 ───────────────────────────────────────────
+
+    public IEnumerable<PikafishScoreType> ScoreTypes => Enum.GetValues<PikafishScoreType>();
+    public IEnumerable<PikafishDrawRule> DrawRules => Enum.GetValues<PikafishDrawRule>();
+
     // ─── 供設定頁快速開關使用的 API ──────────────────────────────────────
 
     /// <summary>紅方已設定引擎路徑（供設定頁 CheckBox IsEnabled 綁定）。</summary>
@@ -176,6 +381,15 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     public ICommand ApplyBlackEngineCommand  { get; }
     public ICommand StartServerCommand       { get; }
     public ICommand StopServerCommand        { get; }
+
+    // ─── Pikafish 命令 ────────────────────────────────────────────────────
+
+    public ICommand ClearRedHashCommand        { get; }
+    public ICommand ApplyRedPikafishCommand    { get; }
+    public ICommand BrowseRedEvalFileCommand   { get; }
+    public ICommand ClearBlackHashCommand      { get; }
+    public ICommand ApplyBlackPikafishCommand  { get; }
+    public ICommand BrowseBlackEvalFileCommand { get; }
 
     // ─── 私有命令實作 ─────────────────────────────────────────────────────
 
@@ -208,11 +422,19 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
             {
                 engineProvider.SetRedExternalEngine(null);
                 RedEngineStatus = "已恢復內建引擎";
+                redAdapter = null;
+                OnPropertyChanged(nameof(RedIsPikafish));
+                OnPropertyChanged(nameof(RedUciEloEnabled));
+                OnPropertyChanged(nameof(RedRule60MaxPlyEnabled));
             }
             else
             {
                 engineProvider.SetBlackExternalEngine(null);
                 BlackEngineStatus = "已恢復內建引擎";
+                blackAdapter = null;
+                OnPropertyChanged(nameof(BlackIsPikafish));
+                OnPropertyChanged(nameof(BlackUciEloEnabled));
+                OnPropertyChanged(nameof(BlackRule60MaxPlyEnabled));
             }
             PersistCurrentSettings();
             return;
@@ -237,12 +459,26 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
             if (isRed)
             {
                 engineProvider.SetRedExternalEngine(adapter);
-                RedEngineStatus = $"已載入（{protocol}）";
+                redAdapter = adapter;
+                OnPropertyChanged(nameof(RedIsPikafish));
+                OnPropertyChanged(nameof(RedUciEloEnabled));
+                OnPropertyChanged(nameof(RedRule60MaxPlyEnabled));
+                RedEngineStatus = adapter.IsPikafish
+                    ? $"已載入（{adapter.EngineName}）"
+                    : $"已載入（{protocol}）";
+                if (adapter.IsPikafish) await ApplyPikafishSettingsAsync(isRed: true);
             }
             else
             {
                 engineProvider.SetBlackExternalEngine(adapter);
-                BlackEngineStatus = $"已載入（{protocol}）";
+                blackAdapter = adapter;
+                OnPropertyChanged(nameof(BlackIsPikafish));
+                OnPropertyChanged(nameof(BlackUciEloEnabled));
+                OnPropertyChanged(nameof(BlackRule60MaxPlyEnabled));
+                BlackEngineStatus = adapter.IsPikafish
+                    ? $"已載入（{adapter.EngineName}）"
+                    : $"已載入（{protocol}）";
+                if (adapter.IsPikafish) await ApplyPikafishSettingsAsync(isRed: false);
             }
 
             PersistCurrentSettings();
@@ -262,13 +498,15 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     {
         var snapshot = new ExternalEngineSettings
         {
-            UseRedExternalEngine  = UseRedExternalEngine,
-            RedEnginePath         = RedEnginePath,
-            RedProtocol           = RedProtocol,
+            UseRedExternalEngine   = UseRedExternalEngine,
+            RedEnginePath          = RedEnginePath,
+            RedProtocol            = RedProtocol,
             UseBlackExternalEngine = UseBlackExternalEngine,
-            BlackEnginePath       = BlackEnginePath,
-            BlackProtocol         = BlackProtocol,
-            ServerPort            = ServerPort
+            BlackEnginePath        = BlackEnginePath,
+            BlackProtocol          = BlackProtocol,
+            ServerPort             = ServerPort,
+            RedPikafish   = CapturePikafishSettings(isRed: true),
+            BlackPikafish = CapturePikafishSettings(isRed: false)
         };
         userSettingsService.SaveEngineSettings(snapshot);
     }
@@ -331,6 +569,34 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
         useBlackExternalEngine = saved.UseBlackExternalEngine;
         serverPort             = saved.ServerPort;
 
+        // 還原紅方 Pikafish 設定
+        var rp = saved.RedPikafish;
+        redMultiPv          = rp.MultiPv;
+        redSkillLevel       = rp.SkillLevel;
+        redUciLimitStrength = rp.UciLimitStrength;
+        redUciElo           = rp.UciElo;
+        redSixtyMoveRule    = rp.SixtyMoveRule;
+        redRule60MaxPly     = rp.Rule60MaxPly;
+        redMateThreatDepth  = rp.MateThreatDepth;
+        redScoreType        = rp.ScoreType;
+        redLuOutput         = rp.LuOutput;
+        redDrawRule         = rp.DrawRule;
+        redEvalFile         = rp.EvalFile;
+
+        // 還原黑方 Pikafish 設定
+        var bp = saved.BlackPikafish;
+        blackMultiPv          = bp.MultiPv;
+        blackSkillLevel       = bp.SkillLevel;
+        blackUciLimitStrength = bp.UciLimitStrength;
+        blackUciElo           = bp.UciElo;
+        blackSixtyMoveRule    = bp.SixtyMoveRule;
+        blackRule60MaxPly     = bp.Rule60MaxPly;
+        blackMateThreatDepth  = bp.MateThreatDepth;
+        blackScoreType        = bp.ScoreType;
+        blackLuOutput         = bp.LuOutput;
+        blackDrawRule         = bp.DrawRule;
+        blackEvalFile         = bp.EvalFile;
+
         OnPropertyChanged(nameof(RedEnginePath));
         OnPropertyChanged(nameof(RedProtocol));
         OnPropertyChanged(nameof(UseRedExternalEngine));
@@ -340,6 +606,114 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ServerPort));
         OnPropertyChanged(nameof(HasRedEngineConfig));
         OnPropertyChanged(nameof(HasBlackEngineConfig));
+
+        // 通知 Pikafish 設定屬性變更
+        OnPropertyChanged(nameof(RedMultiPv));
+        OnPropertyChanged(nameof(RedSkillLevel));
+        OnPropertyChanged(nameof(RedUciLimitStrength));
+        OnPropertyChanged(nameof(RedUciElo));
+        OnPropertyChanged(nameof(RedSixtyMoveRule));
+        OnPropertyChanged(nameof(RedRule60MaxPly));
+        OnPropertyChanged(nameof(RedMateThreatDepth));
+        OnPropertyChanged(nameof(RedScoreType));
+        OnPropertyChanged(nameof(RedLuOutput));
+        OnPropertyChanged(nameof(RedDrawRule));
+        OnPropertyChanged(nameof(RedEvalFile));
+        OnPropertyChanged(nameof(BlackMultiPv));
+        OnPropertyChanged(nameof(BlackSkillLevel));
+        OnPropertyChanged(nameof(BlackUciLimitStrength));
+        OnPropertyChanged(nameof(BlackUciElo));
+        OnPropertyChanged(nameof(BlackSixtyMoveRule));
+        OnPropertyChanged(nameof(BlackRule60MaxPly));
+        OnPropertyChanged(nameof(BlackMateThreatDepth));
+        OnPropertyChanged(nameof(BlackScoreType));
+        OnPropertyChanged(nameof(BlackLuOutput));
+        OnPropertyChanged(nameof(BlackDrawRule));
+        OnPropertyChanged(nameof(BlackEvalFile));
+    }
+
+    // ─── Pikafish 私有方法 ────────────────────────────────────────────────
+
+    /// <summary>
+    /// 將目前 UI 上的 Pikafish 設定發送至引擎（依序 setoption）。
+    /// 呼叫端負責在需要時呼叫 PersistCurrentSettings()。
+    /// </summary>
+    private async Task ApplyPikafishSettingsAsync(bool isRed)
+    {
+        var adapter = isRed ? redAdapter : blackAdapter;
+        if (adapter == null) return;
+        await SendPikafishOptionsToAdapterAsync(adapter, CapturePikafishSettings(isRed));
+    }
+
+    /// <summary>依序向引擎發送 11 個 Pikafish setoption 命令。</summary>
+    private static async Task SendPikafishOptionsToAdapterAsync(ExternalEngineAdapter adapter, PikafishSettings s)
+    {
+        await adapter.SendOptionAsync("MultiPV", s.MultiPv.ToString());
+        await adapter.SendOptionAsync("Skill Level", s.SkillLevel.ToString());
+        await adapter.SendOptionAsync("UCI_LimitStrength", s.UciLimitStrength ? "true" : "false");
+        await adapter.SendOptionAsync("UCI_Elo", s.UciElo.ToString());
+        await adapter.SendOptionAsync("Sixty Move Rule", s.SixtyMoveRule ? "true" : "false");
+        await adapter.SendOptionAsync("Rule60MaxPly", s.Rule60MaxPly.ToString());
+        await adapter.SendOptionAsync("MateThreatDepth", s.MateThreatDepth.ToString());
+        await adapter.SendOptionAsync("ScoreType", s.ScoreType.ToString());
+        await adapter.SendOptionAsync("LU_Output", s.LuOutput ? "true" : "false");
+        await adapter.SendOptionAsync("DrawRule", s.DrawRule.ToString());
+        if (!string.IsNullOrWhiteSpace(s.EvalFile))
+            await adapter.SendOptionAsync("EvalFile", s.EvalFile);
+    }
+
+    /// <summary>從目前 ViewModel 屬性建立 PikafishSettings 快照。</summary>
+    private PikafishSettings CapturePikafishSettings(bool isRed) => isRed
+        ? new PikafishSettings
+        {
+            MultiPv          = RedMultiPv,
+            SkillLevel       = RedSkillLevel,
+            UciLimitStrength = RedUciLimitStrength,
+            UciElo           = RedUciElo,
+            SixtyMoveRule    = RedSixtyMoveRule,
+            Rule60MaxPly     = RedRule60MaxPly,
+            MateThreatDepth  = RedMateThreatDepth,
+            ScoreType        = RedScoreType,
+            LuOutput         = RedLuOutput,
+            DrawRule         = RedDrawRule,
+            EvalFile         = RedEvalFile
+        }
+        : new PikafishSettings
+        {
+            MultiPv          = BlackMultiPv,
+            SkillLevel       = BlackSkillLevel,
+            UciLimitStrength = BlackUciLimitStrength,
+            UciElo           = BlackUciElo,
+            SixtyMoveRule    = BlackSixtyMoveRule,
+            Rule60MaxPly     = BlackRule60MaxPly,
+            MateThreatDepth  = BlackMateThreatDepth,
+            ScoreType        = BlackScoreType,
+            LuOutput         = BlackLuOutput,
+            DrawRule         = BlackDrawRule,
+            EvalFile         = BlackEvalFile
+        };
+
+    private async Task ClearHashAsync(bool isRed)
+    {
+        var adapter = isRed ? redAdapter : blackAdapter;
+        if (adapter == null) return;
+        await adapter.SendButtonOptionAsync("Clear Hash");
+    }
+
+    private void BrowseEvalFile(bool isRed)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title  = isRed ? "選擇紅方 EvalFile" : "選擇黑方 EvalFile",
+            Filter = "NNUE 評估檔|*.nnue|所有檔案|*.*"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        if (isRed)
+            RedEvalFile = dialog.FileName;
+        else
+            BlackEvalFile = dialog.FileName;
     }
 
     private async Task StartServerAsync()
