@@ -180,6 +180,9 @@ public class TranspositionTable
             if (storedKey == 0)
             {
                 // 空槽：直接寫入
+                // 已知限制：data 與 keys 為兩次獨立 Volatile.Write，Lazy SMP 下存在極小機率的
+                // 撕裂讀視窗（false positive TT hit）。此為 lock-free XOR 方案的已知限制，
+                // 對棋力影響極低（錯誤命中率 < 1/2^32），與 Stockfish 早期設計一致。
                 Interlocked.Increment(ref occupiedCount);
                 Volatile.Write(ref data[index], packed);
                 Volatile.Write(ref keys[index], key ^ packed);

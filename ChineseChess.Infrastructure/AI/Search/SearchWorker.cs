@@ -303,8 +303,8 @@ internal sealed class SearchWorker
         int opponentLastFrom = -1, int opponentLastTo = -1, Move excludedMove = default)
     {
         CheckPauseOrCancellation();
-        Interlocked.Increment(ref nodesVisited);
-        if (nodesVisited % 2000 == 0)
+        long visited = Interlocked.Increment(ref nodesVisited);
+        if (visited % 2000 == 0)
             CheckPauseOrCancellation();
 
         bool isPvNode = (beta - alpha) > 1;

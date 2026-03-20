@@ -161,7 +161,7 @@ public class SquareViewModel : ObservableObject
 
 public class ChessBoardViewModel : ObservableObject, IDisposable
 {
-    private readonly IGameService gameService;
+    private readonly ICoreGameService gameService;
     private SquareViewModel? selectedSquare;
     private int? hintFrom;
     private int? hintTo;
@@ -173,7 +173,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
 
     public ICommand SquareClickCommand { get; }
 
-    public ChessBoardViewModel(IGameService gameService)
+    public ChessBoardViewModel(ICoreGameService gameService)
     {
         this.gameService = gameService;
         this.gameService.BoardUpdated += OnBoardUpdated;

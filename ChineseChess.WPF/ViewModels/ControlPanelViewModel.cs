@@ -44,13 +44,13 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private PieceColor playerColor = PieceColor.Red;
     private string redTimeDisplay = "--:--";
     private string blackTimeDisplay = "--:--";
-    private readonly System.Timers.Timer clockDisplayTimer;
+    private System.Timers.Timer clockDisplayTimer = null!;
     private string hintExplanationText = "（尚未產生提示）";
     private TTStatistics ttStats = new TTStatistics();
     private TTStatistics? blackTtStats = null;
     private const int TTExploreMaxDepth = 20;   // 固定最大深度（TT 搜尋深度通常 ≤ 10，此值足以顯示全樹）
     private string ttExplorerText = "（初始化中...）";
-    private readonly System.Timers.Timer ttExplorerTimer;
+    private System.Timers.Timer ttExplorerTimer = null!;
     private int ttExplorerBusy;   // Interlocked 防止重疊執行（0 = 閒置，1 = 執行中）
     private int selectedTabIndex;
     private const int HintExplanationTabIndex = 3;
@@ -59,11 +59,13 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     // ─── 局面分析（AI 走子後進行）────────────────────────────
     private readonly IGameAnalysisService? gameAnalysisService;
-    private readonly string gameAnalysisDisclaimer;
+    private string gameAnalysisDisclaimer = string.Empty;
     private bool isGameAnalysisEnabled;
     private bool isAnalyzing;
     private string gameAnalysisText = "（等待 AI 走子後開始分析...）";
     private CancellationTokenSource? analysisCts;
+    // Dispose 後防止 Task.Run 背景執行緒繼續更新 UI
+    private volatile bool disposed;
 
     /// <summary>使用者點選 MultiPV 清單中某走法時觸發；null 表示清除選取。</summary>
     public event Action<Move?>? MultiPvMoveSelected;
@@ -397,20 +399,20 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     // ─── 指令 ─────────────────────────────────────────────────────────────
 
-    public ICommand StartGameCommand { get; }
-    public ICommand UndoCommand { get; }
-    public ICommand HintCommand { get; }
-    public ICommand ExplainHintCommand { get; }
-    public ICommand StopThinkingCommand { get; }
-    public ICommand PauseThinkingCommand { get; }
-    public ICommand ResumeThinkingCommand { get; }
-    public ICommand RequestDrawCommand { get; }
-    public ICommand ExportTranspositionTableCommand { get; }
-    public ICommand ImportTranspositionTableCommand { get; }
-    public ICommand ExportBlackTranspositionTableCommand { get; }
-    public ICommand ImportBlackTranspositionTableCommand { get; }
-    public ICommand RefreshTTStatsCommand { get; }
-    public ICommand MergeTranspositionTablesCommand { get; }
+    public ICommand StartGameCommand { get; private set; } = null!;
+    public ICommand UndoCommand { get; private set; } = null!;
+    public ICommand HintCommand { get; private set; } = null!;
+    public ICommand ExplainHintCommand { get; private set; } = null!;
+    public ICommand StopThinkingCommand { get; private set; } = null!;
+    public ICommand PauseThinkingCommand { get; private set; } = null!;
+    public ICommand ResumeThinkingCommand { get; private set; } = null!;
+    public ICommand RequestDrawCommand { get; private set; } = null!;
+    public ICommand ExportTranspositionTableCommand { get; private set; } = null!;
+    public ICommand ImportTranspositionTableCommand { get; private set; } = null!;
+    public ICommand ExportBlackTranspositionTableCommand { get; private set; } = null!;
+    public ICommand ImportBlackTranspositionTableCommand { get; private set; } = null!;
+    public ICommand RefreshTTStatsCommand { get; private set; } = null!;
+    public ICommand MergeTranspositionTablesCommand { get; private set; } = null!;
 
     /// <summary>外部引擎 / 伺服器設定的 ViewModel（供 ExternalEngineView 綁定）。</summary>
     public ExternalEngineViewModel? ExternalEngine { get; }
@@ -452,10 +454,17 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         ExternalEngine = externalEngineViewModel;
         MoveHistory = moveHistoryViewModel;
         this.gameService = gameService;
-
-        if (ExternalEngine != null)
-            ExternalEngine.PropertyChanged += OnExternalEnginePropertyChanged;
         this.gameAnalysisService = gameAnalysisService;
+
+        InitializeSettings(settings, analysisSettings);
+        InitializeCommands();
+        SubscribeToEvents();
+    }
+
+    // ─── 建構子輔助方法 ────────────────────────────────────────────────────────
+
+    private void InitializeSettings(GameSettings settings, GameAnalysisSettings? analysisSettings)
+    {
         isGameAnalysisEnabled   = analysisSettings?.IsEnabled ?? true;
         gameAnalysisDisclaimer  = analysisSettings?.Disclaimer ?? "以下分析由 AI 產生，僅供參考，不代表最終結論。";
 
@@ -475,21 +484,28 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         timedModeMinutesPerPlayer = settings.TimedModeMinutesPerPlayer;
         playerColor            = settings.PlayerColor;
 
-        this.gameService.IsSmartHintEnabled    = isSmartHintEnabled;
-        this.gameService.SmartHintDepth        = smartHintDepth;
-        this.gameService.IsMultiPvHintEnabled  = isMultiPvHintEnabled;
-        this.gameService.MultiPvCount          = multiPvCount;
-        this.gameService.UseSharedTranspositionTable = useSharedTT;
-        this.gameService.CopyRedTtToBlackAtStart   = copyRedTtToBlackAtStart;
-        this.gameService.IsTimedModeEnabled         = isTimedModeEnabled;
-        this.gameService.TimedModeMinutesPerPlayer  = timedModeMinutesPerPlayer;
-        this.gameService.PlayerColor               = playerColor;
+        gameService.IsSmartHintEnabled    = isSmartHintEnabled;
+        gameService.SmartHintDepth        = smartHintDepth;
+        gameService.IsMultiPvHintEnabled  = isMultiPvHintEnabled;
+        gameService.MultiPvCount          = multiPvCount;
+        gameService.UseSharedTranspositionTable = useSharedTT;
+        gameService.CopyRedTtToBlackAtStart   = copyRedTtToBlackAtStart;
+        gameService.IsTimedModeEnabled         = isTimedModeEnabled;
+        gameService.TimedModeMinutesPerPlayer  = timedModeMinutesPerPlayer;
+        gameService.PlayerColor               = playerColor;
+    }
 
+    private void InitializeCommands()
+    {
         RefreshTTStatsCommand = new RelayCommand(_ => RefreshTTStats());
-        StartGameCommand = new RelayCommand(async _ => await gameService.StartGameAsync(SelectedMode));
+        StartGameCommand = new AsyncRelayCommand(async _ =>
+        {
+            try { await gameService.StartGameAsync(SelectedMode); }
+            catch (Exception ex) { StatusMessage = $"開始遊戲失敗：{ex.Message}"; }
+        });
         UndoCommand = new RelayCommand(_ => gameService.Undo());
 
-        RequestDrawCommand = new RelayCommand(async _ =>
+        RequestDrawCommand = new AsyncRelayCommand(async _ =>
         {
             try
             {
@@ -502,24 +518,36 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             }
         });
 
-        StopThinkingCommand = new RelayCommand(async _ =>
+        StopThinkingCommand = new AsyncRelayCommand(async _ =>
         {
-            StatusMessage = "停止思考中...";
-            await gameService.StopGameAsync();
-            StatusMessage = "AI 思考已停止";
+            try
+            {
+                StatusMessage = "停止思考中...";
+                await gameService.StopGameAsync();
+                StatusMessage = "AI 思考已停止";
+            }
+            catch (Exception ex) { StatusMessage = $"停止思考失敗：{ex.Message}"; }
         });
-        PauseThinkingCommand = new RelayCommand(async _ =>
+        PauseThinkingCommand = new AsyncRelayCommand(async _ =>
         {
-            StatusMessage = "正在暫停思考...";
-            await gameService.PauseThinkingAsync();
+            try
+            {
+                StatusMessage = "正在暫停思考...";
+                await gameService.PauseThinkingAsync();
+            }
+            catch (Exception ex) { StatusMessage = $"暫停思考失敗：{ex.Message}"; }
         });
-        ResumeThinkingCommand = new RelayCommand(async _ =>
+        ResumeThinkingCommand = new AsyncRelayCommand(async _ =>
         {
-            StatusMessage = "繼續思考中...";
-            await gameService.ResumeThinkingAsync();
+            try
+            {
+                StatusMessage = "繼續思考中...";
+                await gameService.ResumeThinkingAsync();
+            }
+            catch (Exception ex) { StatusMessage = $"繼續思考失敗：{ex.Message}"; }
         });
 
-        ExportTranspositionTableCommand = new RelayCommand(async _ =>
+        ExportTranspositionTableCommand = new AsyncRelayCommand(async _ =>
         {
             try
             {
@@ -547,7 +575,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             }
         });
 
-        ImportTranspositionTableCommand = new RelayCommand(async _ =>
+        ImportTranspositionTableCommand = new AsyncRelayCommand(async _ =>
         {
             try
             {
@@ -575,7 +603,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             }
         });
 
-        ExportBlackTranspositionTableCommand = new RelayCommand(async _ =>
+        ExportBlackTranspositionTableCommand = new AsyncRelayCommand(async _ =>
         {
             try
             {
@@ -603,7 +631,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             }
         });
 
-        ImportBlackTranspositionTableCommand = new RelayCommand(async _ =>
+        ImportBlackTranspositionTableCommand = new AsyncRelayCommand(async _ =>
         {
             try
             {
@@ -631,7 +659,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             }
         });
 
-        MergeTranspositionTablesCommand = new RelayCommand(async _ =>
+        MergeTranspositionTablesCommand = new AsyncRelayCommand(async _ =>
         {
             try
             {
@@ -646,7 +674,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             }
         });
 
-        HintCommand = new RelayCommand(async _ =>
+        HintCommand = new AsyncRelayCommand(async _ =>
         {
             try
             {
@@ -670,7 +698,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             }
         });
 
-        ExplainHintCommand = new RelayCommand(async _ =>
+        ExplainHintCommand = new AsyncRelayCommand(async _ =>
         {
             try
             {
@@ -723,6 +751,13 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         clockDisplayTimer.Start();
 
         gameService.SetDifficulty(searchDepth, searchThinkingTime * 1000);
+        RefreshTTStats();
+    }
+
+    private void SubscribeToEvents()
+    {
+        if (ExternalEngine != null)
+            ExternalEngine.PropertyChanged += OnExternalEnginePropertyChanged;
 
         gameService.GameMessage += OnGameMessage;
         gameService.ThinkingProgress += OnThinkingProgress;
@@ -733,8 +768,6 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.DrawOfferResolved += OnDrawOfferResolved;
         gameService.MoveCompleted += OnMoveCompleted;
         gameService.MultiPvHintReady += OnMultiPvHintReady;
-
-        RefreshTTStats();
     }
 
     // ─── GameService 事件處理（具名方法，供建構子訂閱及 Dispose 取消訂閱）──────
@@ -861,8 +894,10 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         var app = global::System.Windows.Application.Current;
 
         // 設定 loading 狀態（切換回 UI 執行緒）
+        // disposed guard 防止 Dispose 後 Task.Run 背景執行緒繼續更新 UI
         void SetUiState(Action action)
         {
+            if (disposed) return;
             if (app == null) action();
             else app.Dispatcher.Invoke(action);
         }
@@ -1209,6 +1244,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        disposed = true; // 先設定 guard，防止背景執行緒繼續更新 UI
         if (ExternalEngine != null)
             ExternalEngine.PropertyChanged -= OnExternalEnginePropertyChanged;
 

@@ -7,7 +7,7 @@ namespace ChineseChess.Application.Services;
 /// IEngineProvider 實作。
 /// 持有內建引擎參照，並允許為紅方 / 黑方分別設定外部引擎替代內建引擎。
 /// </summary>
-public sealed class EngineProvider : IEngineProvider
+public sealed class EngineProvider : IEngineProvider, IDisposable
 {
     private readonly IAiEngine builtinEngine;
     private IAiEngine? redExternal;
@@ -41,6 +41,15 @@ public sealed class EngineProvider : IEngineProvider
     }
 
     // ─── 私有輔助 ────────────────────────────────────────────────────────
+
+    // ─── IDisposable ─────────────────────────────────────────────────────────
+
+    /// <summary>釋放外部引擎資源（builtinEngine 由 DI 容器管理，不在此 Dispose）。</summary>
+    public void Dispose()
+    {
+        (redExternal as IDisposable)?.Dispose();
+        (blackExternal as IDisposable)?.Dispose();
+    }
 
     /// <summary>若新引擎與舊引擎不同（且舊引擎實作 IDisposable），先 Dispose 舊引擎。</summary>
     private static void DisposeIfDifferent(IAiEngine? old, IAiEngine? next)

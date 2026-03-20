@@ -277,12 +277,14 @@ public class SearchEngine : IAiEngine
                         int beta = prevScore + delta;
                         int retries = 0;
                         score = prevScore; // 預設保留上一層結果
+                        int lastCandidate = prevScore; // 記錄最後一次完成的搜尋結果
 
                         while (true)
                         {
-                            if (token.IsCancellationRequested) break;
+                            if (token.IsCancellationRequested) { score = lastCandidate; break; }
 
                             int candidate = mainWorker.SearchSingleDepth(depth, alpha, beta);
+                            lastCandidate = candidate;
 
                             if (candidate <= alpha)
                             {

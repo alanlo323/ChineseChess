@@ -51,6 +51,12 @@ public interface IBoard
     /// </summary>
     bool IsLikelyPerpetualCheck();
 
+    /// <summary>
+    /// 覆寫 MakeMove 放入的預設值，記錄當前對手是否被將軍。
+    /// 應在真實走棋（非搜尋路徑）後呼叫，以支援長將偵測。
+    /// </summary>
+    void RecordCheckAfterMove();
+
     // 工具方法
     string ToFen();
     IBoard Clone();

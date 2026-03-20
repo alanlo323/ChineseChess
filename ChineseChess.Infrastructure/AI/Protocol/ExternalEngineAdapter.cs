@@ -23,7 +23,7 @@ namespace ChineseChess.Infrastructure.AI.Protocol;
 ///
 /// TT 相關方法均為 stub（外部引擎自行管理 TT）。
 /// </summary>
-public sealed class ExternalEngineAdapter : IAiEngine, IDisposable
+public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
 {
     private readonly string executablePath;
     private readonly EngineProtocol protocol;

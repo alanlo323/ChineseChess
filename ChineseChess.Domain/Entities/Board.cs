@@ -147,6 +147,20 @@ public class Board : IBoard
 
         // 記錄走完後的 Zobrist Key 到歷史列表（和棋判定用）
         zobristHistory.Add(zobristKey);
+
+        // wasCheckAfterMove 不在此熱路徑中填寫（IsCheck 為 O(90+) 開銷）。
+        // 需要長將偵測時，由呼叫端在真實走棋後呼叫 RecordCheckAfterMove()。
+        wasCheckAfterMove.Add(false);
+    }
+
+    /// <summary>
+    /// 更新最後一步的長將記錄（覆寫 MakeMove 放入的預設值 false）。
+    /// 由呼叫端在真實走棋後呼叫，以避免在搜尋熱路徑中執行 IsCheck。
+    /// </summary>
+    public void RecordCheckAfterMove()
+    {
+        if (wasCheckAfterMove.Count == 0) return;
+        wasCheckAfterMove[wasCheckAfterMove.Count - 1] = IsCheck(turn);
     }
 
     public void UnmakeMove(Move move)
@@ -164,6 +178,12 @@ public class Board : IBoard
         if (!state.IsNullMove && zobristHistory.Count > 0)
         {
             zobristHistory.RemoveAt(zobristHistory.Count - 1);
+        }
+
+        // 同步還原 wasCheckAfterMove（與 zobristHistory 並排對齊）
+        if (!state.IsNullMove && wasCheckAfterMove.Count > 0)
+        {
+            wasCheckAfterMove.RemoveAt(wasCheckAfterMove.Count - 1);
         }
 
         // 還原無吃子計數
@@ -223,6 +243,12 @@ public class Board : IBoard
         return false;
     }
 
+    /// <remarks>
+    /// 空著不記錄 zobristHistory 和 wasCheckAfterMove，
+    /// 因此 UnmakeNullMove 時亦不需還原這兩個列表。
+    /// IsDrawByRepetition 和 IsLikelyPerpetualCheck 應在含空著的路徑中避免呼叫，
+    /// 因為這兩個方法依賴 zobristHistory / wasCheckAfterMove 與實際步數對齊。
+    /// </remarks>
     public void MakeNullMove()
     {
         zobristKey ^= ZobristHash.SideToMoveKey;
@@ -271,6 +297,15 @@ public class Board : IBoard
             throw new ArgumentException("Invalid FEN rows.");
         }
 
+        // 備份現有狀態：解析失敗時還原，確保棋盤不處於不一致狀態
+        var backupPieces = (Piece[])pieces.Clone();
+        var backupTurn = turn;
+        var backupZobristKey = zobristKey;
+        var backupHalfMoveClock = halfMoveClock;
+        var backupMajorPieceCount = majorPieceCount;
+        var backupZobristHistory = new List<ulong>(zobristHistory);
+        var backupWasCheckAfterMove = new List<bool>(wasCheckAfterMove);
+
         // 清空棋盤
         for (int i = 0; i < BoardSize; i++) pieces[i] = Piece.None;
         zobristKey = 0;
@@ -278,6 +313,9 @@ public class Board : IBoard
         zobristHistory.Clear();
         wasCheckAfterMove.Clear();
         halfMoveClock = 0;
+
+        try
+        {
 
         for (int r = 0; r < 10; r++)
         {
@@ -339,6 +377,22 @@ public class Board : IBoard
             if (t == PieceType.Horse || t == PieceType.Rook ||
                 t == PieceType.Cannon || t == PieceType.Pawn)
                 majorPieceCount++;
+        }
+
+        } // end try
+        catch
+        {
+            // 解析失敗：還原備份狀態，確保棋盤不處於不一致狀態
+            Array.Copy(backupPieces, pieces, pieces.Length);
+            turn = backupTurn;
+            zobristKey = backupZobristKey;
+            halfMoveClock = backupHalfMoveClock;
+            majorPieceCount = backupMajorPieceCount;
+            zobristHistory.Clear();
+            zobristHistory.AddRange(backupZobristHistory);
+            wasCheckAfterMove.Clear();
+            wasCheckAfterMove.AddRange(backupWasCheckAfterMove);
+            throw;
         }
     }
 
@@ -684,7 +738,8 @@ public class Board : IBoard
     public bool IsCheckmate(PieceColor color)
     {
         if (!IsCheck(color)) return false;
-
+        // GenerateLegalMoves() 只產生當前 turn 的著法；若 color != turn，結果會是對手的著法
+        Debug.Assert(color == turn, "IsCheckmate 必須在目標方輪次時呼叫");
         return !GenerateLegalMoves().Any();
     }
 

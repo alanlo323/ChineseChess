@@ -32,8 +32,9 @@ public interface IGameClock
     void Stop();
 
     /// <summary>
-    /// 手動觸發計時器檢查（測試用）。
-    /// 檢查剩餘時間是否耗盡，若是則觸發 OnTimeout。
+    /// 觸發計時器檢查，檢查剩餘時間是否耗盡，若是則觸發 OnTimeout。
+    /// Production code：由 GameService 的 System.Threading.Timer 每秒呼叫一次。
+    /// 測試中亦可手動呼叫以模擬時間流逝。
     /// </summary>
     void Tick();
 }

@@ -37,8 +37,8 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     private string blackEngineStatus = "未啟用";
 
     // ─── Pikafish adapter 參照（不持有所有權，Dispose 由 EngineProvider 負責） ─
-    private ExternalEngineAdapter? redAdapter;
-    private ExternalEngineAdapter? blackAdapter;
+    private IExternalEngineAdapter? redAdapter;
+    private IExternalEngineAdapter? blackAdapter;
 
     // ─── 紅方 Pikafish 設定欄位 ──────────────────────────────────────────
     private int redMultiPv = 1;
@@ -646,7 +646,7 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>依序向引擎發送 11 個 Pikafish setoption 命令。</summary>
-    private static async Task SendPikafishOptionsToAdapterAsync(ExternalEngineAdapter adapter, PikafishSettings s)
+    private static async Task SendPikafishOptionsToAdapterAsync(IExternalEngineAdapter adapter, PikafishSettings s)
     {
         await adapter.SendOptionAsync("MultiPV", s.MultiPv.ToString());
         await adapter.SendOptionAsync("Skill Level", s.SkillLevel.ToString());

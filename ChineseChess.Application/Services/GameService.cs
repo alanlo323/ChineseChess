@@ -34,6 +34,8 @@ public class GameService : IGameService, IDisposable
     private CancellationTokenSource? aiCts;
     private CancellationTokenSource? smartHintCts;
     private readonly ManualResetEventSlim aiPauseSignal = new ManualResetEventSlim(true);
+    // 用於 StartGameAsync 等待 AI 搜尋完全結束（取代忙碌輪詢）
+    private readonly SemaphoreSlim thinkingCompletedSignal = new SemaphoreSlim(1, 1);
     private readonly IHintExplanationService? hintExplanationService;
     private SearchResult? latestHint;
     private string? latestHintFen;
@@ -130,13 +132,10 @@ public class GameService : IGameService, IDisposable
         aiCts?.Cancel();
         aiPauseSignal.Set();
         // 等待舊的 AI 搜尋任務完全結束後再重置棋盤，避免新舊任務並存的競爭條件
-        // 最多等待 5 秒（500 × 10ms），防止異常情況下的無限等待
-        var waitCount = 0;
-        while (isThinking && waitCount < 500)
-        {
-            await Task.Delay(10);
-            waitCount++;
-        }
+        // 使用 SemaphoreSlim 取代忙碌輪詢，消除 isThinking 讀取的競態條件
+        // WaitAsync 返回 false 表示超時（未取得信號），此時不可 Release，避免計數溢出
+        if (await thinkingCompletedSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            thinkingCompletedSignal.Release(); // 立即歸還，讓下次仍可等待
         board = new Board(); // 重置為標準初始局
         ClearLatestHint();
         isGameOver = false;
@@ -435,6 +434,8 @@ public class GameService : IGameService, IDisposable
 
         // 原子地將 isThinkingFlag 從 0 設為 1；若已是 1 表示另一搜尋進行中，直接返回
         if (Interlocked.CompareExchange(ref isThinkingFlag, 1, 0) != 0) return null;
+        // 佔用信號量，通知等待者（如 StartGameAsync）搜尋正在進行
+        await thinkingCompletedSignal.WaitAsync();
         ThinkingProgress?.Invoke("AI 思考中...");
 
         // 提示搜尋開始時設旗標
@@ -607,6 +608,7 @@ public class GameService : IGameService, IDisposable
         finally
         {
             Interlocked.Exchange(ref isThinkingFlag, 0);
+            thinkingCompletedSignal.Release(); // 通知 StartGameAsync 等待者搜尋已結束
             // 確保提示搜尋旗標在任何情況下都會清除（含異常路徑）
             if (!applyBestMove)
             {
@@ -853,9 +855,10 @@ public class GameService : IGameService, IDisposable
             // SearchAsync 回傳的分數是從搜尋方角度，黑方回合則取負值轉換為黑方優勢
             score = board.Turn == Domain.Enums.PieceColor.Black ? evalResult.Score : -evalResult.Score;
         }
-        catch
+        catch (Exception ex)
         {
             score = 0;
+            GameMessage?.Invoke($"評估提和分數失敗：{ex.Message}");
         }
 
         // AI 分數 > DrawRefuseThreshold 時（AI 佔優），拒絕提和
@@ -1187,6 +1190,7 @@ public class GameService : IGameService, IDisposable
         }
         catch (OperationCanceledException)
         {
+            ClearLatestHint(); // 取消時清除舊提示，避免殘留過期著法
             ThinkingProgress?.Invoke("MultiPV 提示已取消");
             return new SearchResult { BestMove = Move.Null };
         }
