@@ -167,4 +167,27 @@ public class WxfRepetitionJudgeTests
         var history = BuildTwoCycleHistory(MoveClassification.Check, MoveClassification.Idle);
         Assert.Equal(RepetitionVerdict.BlackWins, WxfRepetitionJudge.Judge(history));
     }
+
+    // ─── 捉與將軍互斥（皮卡魚規則）─────────────────────────────────────────
+
+    [Fact]
+    public void Judge_RedChases_BlackNonPerpetualCheck_ShouldBeDraw()
+    {
+        // 紅方每步 Chase，黑方序列中有 Check（但非長將）→ 因序列有 Check，Chase 不定義 → Draw
+        // 皮卡魚規則：「捉：僅在該循環序列中沒有任何一步將軍時才定義」
+        var history = new System.Collections.Generic.List<MoveRecord>
+        {
+            Rec(KeyA, PieceColor.Red,   MoveClassification.Cancel), // 種子
+            Rec(KeyB, PieceColor.Red,   MoveClassification.Chase),  // 紅：Chase（cycle1）
+            Rec(KeyC, PieceColor.Black, MoveClassification.Check),  // 黑：Check（序列中有將）
+            Rec(KeyD, PieceColor.Red,   MoveClassification.Chase),  // 紅：Chase
+            Rec(KeyA, PieceColor.Black, MoveClassification.Idle),   // 黑：Idle（第 2 次 A）
+            Rec(KeyB, PieceColor.Red,   MoveClassification.Chase),  // 紅：Chase（cycle2）
+            Rec(KeyC, PieceColor.Black, MoveClassification.Idle),   // 黑：Idle
+            Rec(KeyD, PieceColor.Red,   MoveClassification.Chase),  // 紅：Chase
+            Rec(KeyA, PieceColor.Black, MoveClassification.Idle),   // 黑：Idle（第 3 次 A）
+        };
+        // 序列中有 Check → 紅方 Chase 不定義 → 雙方均 Idle → Draw
+        Assert.Equal(RepetitionVerdict.Draw, WxfRepetitionJudge.Judge(history));
+    }
 }

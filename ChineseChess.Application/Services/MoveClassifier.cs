@@ -114,9 +114,22 @@ public static class MoveClassifier
             if (targetPiece.Type == PieceType.Advisor ||
                 targetPiece.Type == PieceType.Elephant) continue;
 
-            // 若目標已受保護（防守方有足夠棋子守護），跳過
+            // 若目標已受保護，依皮卡魚規則檢查例外：以弱換強仍算捉
             if (IsVictimProtected(board, attackerSquare, attackerValue, targetSquare))
-                continue;
+            {
+                // 皮卡魚例外1：馬/炮（中等子）攻擊車（大子）→ 以弱換強仍算捉
+                bool horseOrCannonAttacksRook =
+                        (movedPiece.Type == PieceType.Horse || movedPiece.Type == PieceType.Cannon)
+                        && targetPiece.Type == PieceType.Rook;
+                // 皮卡魚例外2：士/象（小子）攻擊馬/炮/車（中大子）→ 以弱換強仍算捉
+                bool advisorOrElephantAttacksMajor =
+                        (movedPiece.Type == PieceType.Advisor || movedPiece.Type == PieceType.Elephant)
+                        && (targetPiece.Type == PieceType.Horse ||
+                            targetPiece.Type == PieceType.Cannon ||
+                            targetPiece.Type == PieceType.Rook);
+                if (!horseOrCannonAttacksRook && !advisorOrElephantAttacksMajor)
+                    continue;
+            }
 
             candidates.Add(targetSquare);
         }

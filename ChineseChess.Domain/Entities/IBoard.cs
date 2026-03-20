@@ -35,7 +35,8 @@ public interface IBoard
 
     // 和棋判定
     bool IsDrawByRepetition(int threshold = 3);
-    bool IsDrawByNoCapture(int limit = 60);
+    bool IsDrawByNoCapture(int limit = 120);
+    bool IsDrawByInsufficientMaterial();
     bool IsDraw();
 
     /// <summary>

@@ -190,9 +190,11 @@ public class GameServiceDrawOfferTests
 
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
 
-        // 設定只有雙將的均勢殘局（AI 搜尋分數接近 0）
-        // 雙將同列（col=4），飛將狀態，紅帥可橫移至 (9,3)=84 解圍
-        ((Board)gameService.CurrentBoard).ParseFen("4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1");
+        // 設定均勢殘局（各一炮，評分接近 0）
+        // 注意：不能用雙王殘局，否則觸發「棋子不足和棋」（皮卡魚規則）
+        // FEN：黑將(0,4)=4、黑炮(1,4)=13，紅炮(8,4)=76、紅帥(9,4)=85
+        // 兩炮擋住飛將，均勢局面 AI 評分 ≈ 0
+        ((Board)gameService.CurrentBoard).ParseFen("4k4/4c4/9/9/9/9/9/9/4C4/4K4 w - - 0 1");
 
         // 紅方（玩家）走帥橫移，觸發 AI（黑方）進行搜尋
         await gameService.HumanMoveAsync(new Move(85, 84));

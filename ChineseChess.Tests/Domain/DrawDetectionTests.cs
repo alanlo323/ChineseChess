@@ -172,12 +172,12 @@ public class DrawDetectionTests
     }
 
     [Fact]
-    public void IsDrawByNoCapture_AfterSixtyNonCaptureMoves_ReturnsTrue()
+    public void IsDrawByNoCapture_AfterOneHundredTwentyNonCaptureMoves_ReturnsTrue()
     {
         var board = new Board(LoopFen);
 
-        // 15 個完整循環 = 60 步無吃子
-        for (int i = 0; i < 15; i++)
+        // 30 個完整循環 = 120 步無吃子（皮卡魚規則閾值）
+        for (int i = 0; i < 30; i++)
         {
             board.MakeMove(RedRookDown);
             board.MakeMove(BlackAdvisorDown);
@@ -185,8 +185,8 @@ public class DrawDetectionTests
             board.MakeMove(BlackAdvisorUp);
         }
 
-        Assert.Equal(60, board.HalfMoveClock);
-        Assert.True(board.IsDrawByNoCapture(), "60 步無吃子應觸發和棋");
+        Assert.Equal(120, board.HalfMoveClock);
+        Assert.True(board.IsDrawByNoCapture(), "120 步無吃子應觸發和棋（皮卡魚規則）");
     }
 
     [Fact]
@@ -254,7 +254,9 @@ public class DrawDetectionTests
     [Fact]
     public void IsDraw_ReturnsFalse_WhenNoDrawConditionMet()
     {
-        var board = new Board(MinimalFen);
+        // 使用含有車的局面：有棋子 → 不觸發棋子不足和棋；
+        // halfMoveClock=0 → 不觸發一百二十步；無重覆 → 不觸發重覆局面
+        var board = new Board(LoopFen);
         Assert.False(board.IsDraw());
     }
 
@@ -271,15 +273,15 @@ public class DrawDetectionTests
     public void IsDraw_ReturnsTrueOnNoCaptureDraw()
     {
         var board = new Board(LoopFen);
-        for (int i = 0; i < 15; i++)
+        for (int i = 0; i < 30; i++)
         {
             board.MakeMove(RedRookDown);
             board.MakeMove(BlackAdvisorDown);
             board.MakeMove(RedRookUp);
             board.MakeMove(BlackAdvisorUp);
         }
-        // 60 步到達，雖然也有重覆，IsDraw 應為 true（任一條件成立）
-        Assert.True(board.IsDraw(), "60 步無吃子應觸發和棋");
+        // 120 步到達（皮卡魚規則閾值），IsDraw 應為 true（任一條件成立）
+        Assert.True(board.IsDraw(), "120 步無吃子應觸發和棋（皮卡魚規則）");
     }
 
     // ─── Clone：歷史複製 ─────────────────────────────────────────────────
@@ -447,5 +449,32 @@ public class DrawDetectionTests
         var boardBlack = new Board("3aka3/9/9/9/9/9/9/9/9/R3K4 b - - 0 1");
 
         Assert.NotEqual(boardRed.ZobristKey, boardBlack.ZobristKey);
+    }
+
+    // ─── IsDrawByInsufficientMaterial：棋子不足和棋 ──────────────────────
+
+    [Fact]
+    public void IsDrawByInsufficientMaterial_WithOnlyKingAdvisorElephant_ReturnsTrue()
+    {
+        // 雙方只剩將/帥、士/仕、象/相，符合棋子不足和棋條件
+        // FEN：黑方將(4)+仕(3)+象(2,6)，紅方帥(85)+仕(84)+相(83,87)
+        var board = new Board("4k4/9/b3a3b/9/9/9/B3A3B/9/9/4K4 w - - 0 1");
+        Assert.True(board.IsDrawByInsufficientMaterial(), "雙方只剩將帥仕士象相應觸發棋子不足和棋");
+    }
+
+    [Fact]
+    public void IsDrawByInsufficientMaterial_WithOnePawn_ReturnsFalse()
+    {
+        // 任一方有兵/卒，不構成棋子不足
+        var board = new Board("4k4/9/9/9/9/9/9/9/9/4KP3 w - - 0 1");
+        Assert.False(board.IsDrawByInsufficientMaterial(), "有兵時不應觸發棋子不足和棋");
+    }
+
+    [Fact]
+    public void IsDrawByInsufficientMaterial_AllPiecesOnBoard_ReturnsFalse()
+    {
+        // 初始局面（所有棋子）絕不構成棋子不足
+        var board = new Board("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        Assert.False(board.IsDrawByInsufficientMaterial(), "初始局面不應觸發棋子不足和棋");
     }
 }

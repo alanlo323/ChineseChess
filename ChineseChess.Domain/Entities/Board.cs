@@ -27,8 +27,11 @@ public class Board : IBoard
     // WXF 長將偵測：記錄每步走完後對方是否被將軍（與 zobristHistory 並排）
     private readonly List<bool> wasCheckAfterMove = new();
 
-    // 無吃子半回合計數器（達 60 觸發和棋）
+    // 無吃子半回合計數器（達 120 觸發和棋，皮卡魚規則）
     private int halfMoveClock;
+
+    // 重要子計數器：車/馬/炮/兵（卒）的總數；歸零時觸發棋子不足和棋（皮卡魚規則）
+    private int majorPieceCount;
 
     private struct GameState
     {
@@ -125,6 +128,15 @@ public class Board : IBoard
         int previousHalfMoveClock = halfMoveClock;
         halfMoveClock = isCapture ? 0 : halfMoveClock + 1;
 
+        // 維護重要子計數
+        if (isCapture)
+        {
+            var t = target.Type;
+            if (t == PieceType.Horse || t == PieceType.Rook ||
+                t == PieceType.Cannon || t == PieceType.Pawn)
+                majorPieceCount--;
+        }
+
         // 推入歷史紀錄
         history.Push(new GameState
         {
@@ -170,6 +182,15 @@ public class Board : IBoard
 
         pieces[state.Move.From] = movedPiece;
         pieces[state.Move.To] = capturedPiece;
+
+        // 還原重要子計數
+        if (!capturedPiece.IsNone)
+        {
+            var t = capturedPiece.Type;
+            if (t == PieceType.Horse || t == PieceType.Rook ||
+                t == PieceType.Cannon || t == PieceType.Pawn)
+                majorPieceCount++;
+        }
 
         // 還原 Zobrist（Re-XOR 可逆）
         zobristKey ^= ZobristHash.GetPieceKey(state.Move.To, movedPiece.Color, movedPiece.Type);
@@ -308,6 +329,16 @@ public class Board : IBoard
         if (parts.Length >= 5 && int.TryParse(parts[4], out int parsedHalfMove) && parsedHalfMove >= 0)
         {
             halfMoveClock = parsedHalfMove;
+        }
+
+        // 重新計算重要子計數器
+        majorPieceCount = 0;
+        for (int i = 0; i < BoardSize; i++)
+        {
+            var t = pieces[i].Type;
+            if (t == PieceType.Horse || t == PieceType.Rook ||
+                t == PieceType.Cannon || t == PieceType.Pawn)
+                majorPieceCount++;
         }
     }
 
@@ -834,6 +865,7 @@ public class Board : IBoard
         b.turn = turn;
         b.zobristKey = zobristKey;
         b.halfMoveClock = halfMoveClock;
+        b.majorPieceCount = majorPieceCount;
         // 複製 Zobrist 歷史以便 Clone 後繼續做和棋判定
         b.zobristHistory.AddRange(zobristHistory);
         // 複製將軍歷史以便 Clone 後繼續做 WXF 長將偵測
@@ -872,20 +904,25 @@ public class Board : IBoard
     }
 
     /// <summary>
-    /// 判定是否達到無吃子步數和棋條件（六十步）。
-    /// halfMoveClock 計算半步（每方走一步 +1），閾值 60 = 30 全回合。
+    /// 判定是否達到無吃子步數和棋條件（一百二十步，皮卡魚規則）。
+    /// halfMoveClock 計算半步（每方走一步 +1），閾值 120 = 60 全回合。
     /// </summary>
-    public bool IsDrawByNoCapture(int limit = 60)
+    public bool IsDrawByNoCapture(int limit = 120)
     {
         return halfMoveClock >= limit;
     }
 
     /// <summary>
-    /// 判定是否達到任一和棋條件（三次重覆局面或六十步無吃子）。
+    /// 判定棋盤上是否已無車、馬、炮、兵（卒），雙方只剩將帥士象，構成棋子不足和棋（皮卡魚規則）。
+    /// </summary>
+    public bool IsDrawByInsufficientMaterial() => majorPieceCount == 0;
+
+    /// <summary>
+    /// 判定是否達到任一和棋條件（三次重覆局面、一百二十步無吃子或棋子不足）。
     /// </summary>
     public bool IsDraw()
     {
-        return IsDrawByRepetition() || IsDrawByNoCapture();
+        return IsDrawByRepetition() || IsDrawByNoCapture() || IsDrawByInsufficientMaterial();
     }
 
     /// <summary>

@@ -14,6 +14,6 @@ public enum GameResult
     /// <summary>黑方獲勝（將死或困斃紅方）。</summary>
     BlackWin,
 
-    /// <summary>和棋（三次重覆局面或六十步無吃子）。</summary>
+    /// <summary>和棋（三次重覆局面、一百二十步無吃子或棋子不足，皮卡魚規則）。</summary>
     Draw
 }

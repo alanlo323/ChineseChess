@@ -151,4 +151,77 @@ public class MoveClassifierTests
         var cls = MoveClassifier.Classify(board, new Move(45, 49), movedPiece, capturedPiece, out _);
         Assert.Equal(MoveClassification.Idle, cls);
     }
+
+    // ─── 8. 皮卡魚例外規則：以弱換強仍算捉 ────────────────────────────────
+    // 例外1：馬/炮 攻擊 受保護車 → Chase（車值600 >> 馬270/炮285）
+
+    [Fact]
+    public void Classify_CannonThreatensProtectedRook_ReturnsChase()
+    {
+        // 局面：黑將(3)，黑馬 row3 col7 (34)=保護者，
+        //   紅炮 row5 col0 (45)，黑仕(炮台) row5 col5 (50)，黑車 row5 col8 (53)，紅帥(85)
+        // 紅炮 45→47：移至 col2，經仕(炮台 col5) 威脅黑車 col8
+        // 黑車受黑馬(34→53)保護(270≤285)，但炮捉車屬於例外1 → Chase
+        var board = new Board("3k5/9/9/7n1/9/C4a2r/9/9/9/4K4 w - - 0 1");
+        var movedPiece    = board.GetPiece(45);
+        var capturedPiece = board.GetPiece(47);
+        board.MakeMove(new Move(45, 47));
+
+        var cls = MoveClassifier.Classify(board, new Move(45, 47), movedPiece, capturedPiece, out int victim);
+        Assert.Equal(MoveClassification.Chase, cls);
+        Assert.Equal(53, victim); // 黑車在 index 53
+    }
+
+    [Fact]
+    public void Classify_HorseThreatensProtectedRook_ReturnsChase()
+    {
+        // 局面：黑將(3)，黑馬(保護者) row3 col2 (29)，
+        //   黑車 row5 col3 (48)，紅帥(85)，紅馬 row9 col5 (86)
+        // 紅馬 86→67 (row7 col4)：可吃黑車 48（馬步 (7,4)→(5,3)）
+        // 黑車受黑馬 29→48 保護(270≤270)，但馬捉車屬於例外1 → Chase
+        var board = new Board("3k5/9/9/2n6/9/3r5/9/9/9/4KN3 w - - 0 1");
+        var movedPiece    = board.GetPiece(86);
+        var capturedPiece = board.GetPiece(67);
+        board.MakeMove(new Move(86, 67));
+
+        var cls = MoveClassifier.Classify(board, new Move(86, 67), movedPiece, capturedPiece, out int victim);
+        Assert.Equal(MoveClassification.Chase, cls);
+        Assert.Equal(48, victim); // 黑車在 index 48
+    }
+
+    // 例外2：士/象 攻擊 受保護馬/炮/車 → Chase（士象值120 << 馬270/炮285/車600）
+
+    [Fact]
+    public void Classify_AdvisorThreatensProtectedRook_ReturnsChase()
+    {
+        // 局面：黑將(3)，黑車 row7 col3 (66)，黑卒 row7 col4 (67)=保護者
+        //   紅仕 row9 col3 (84)，紅帥 row9 col4 (85)
+        // 紅仕 84→76 (row8 col4)：可吃黑車 66（對角線(8,4)→(7,3)）
+        // 黑車受黑卒 67→66 保護(30≤120)，但仕捉車屬於例外2 → Chase
+        var board = new Board("3k5/9/9/9/9/9/9/3rp4/9/3AK4 w - - 0 1");
+        var movedPiece    = board.GetPiece(84);
+        var capturedPiece = board.GetPiece(76);
+        board.MakeMove(new Move(84, 76));
+
+        var cls = MoveClassifier.Classify(board, new Move(84, 76), movedPiece, capturedPiece, out int victim);
+        Assert.Equal(MoveClassification.Chase, cls);
+        Assert.Equal(66, victim); // 黑車在 index 66
+    }
+
+    [Fact]
+    public void Classify_ElephantThreatensProtectedCannon_ReturnsChase()
+    {
+        // 局面：黑將(3)，黑卒 row5 col1 (46)=保護者，黑炮 row5 col2 (47)
+        //   紅象 row9 col2 (83)，紅帥 row9 col4 (85)
+        // 紅象 83→67 (row7 col4)：可吃黑炮 47（象步(7,4)→(5,2)，象眼(6,3)空）
+        // 黑炮受黑卒 46→47 保護(30≤120)，但象捉炮屬於例外2 → Chase
+        var board = new Board("3k5/9/9/9/9/1pc6/9/9/9/2B1K4 w - - 0 1");
+        var movedPiece    = board.GetPiece(83);
+        var capturedPiece = board.GetPiece(67);
+        board.MakeMove(new Move(83, 67));
+
+        var cls = MoveClassifier.Classify(board, new Move(83, 67), movedPiece, capturedPiece, out int victim);
+        Assert.Equal(MoveClassification.Chase, cls);
+        Assert.Equal(47, victim); // 黑炮在 index 47
+    }
 }

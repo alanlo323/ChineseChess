@@ -336,10 +336,11 @@ internal sealed class SearchWorker
             depth -= 1;
         }
 
-        // 2. 和局早返（重覆局面 OR 無吃子超限）
+        // 2. 和局早返（重覆局面 OR 無吃子超限 OR 棋子不足）
         if (ply > 0)
         {
             if (board.IsDrawByNoCapture()) return 0;
+            if (board.IsDrawByInsufficientMaterial()) return 0;
             if (board.IsDrawByRepetition(threshold: 3))
                 return EvaluateSearchRepetitionVerdict(ply);
         }

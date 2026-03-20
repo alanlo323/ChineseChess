@@ -64,6 +64,16 @@ public static class WxfRepetitionJudge
                 return RepetitionVerdict.None;
         }
 
+        // 預掃描：若整個重複週期（secondMatch+1 ~ n-1）中有任何 Check，Chase 不定義
+        // 皮卡魚規則：捉僅在「該循環序列中沒有任何一步將軍」時才定義，
+        // 「序列」指的是全部重複週期，不只最後一圈。
+        bool hasAnyCheck = false;
+        for (int i = secondMatch + 1; i < n; i++)
+        {
+            if (history[i].Classification == MoveClassification.Check)
+            { hasAnyCheck = true; break; }
+        }
+
         // 分析一個完整循環（firstMatch+1 ~ n-1）內各方的最高違規等級
         var redWorst   = MoveClassification.Idle;
         var blackWorst = MoveClassification.Idle;
@@ -72,6 +82,9 @@ public static class WxfRepetitionJudge
         {
             var cls = history[i].Classification;
             if (cls <= MoveClassification.Idle) continue; // Idle 或 Cancel 不升級違規等級
+
+            // 捉與將軍互斥：序列中有 Check 時，Chase 不定義
+            if (hasAnyCheck && cls == MoveClassification.Chase) continue;
 
             if (history[i].Turn == PieceColor.Red)
             {

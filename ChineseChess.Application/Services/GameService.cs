@@ -975,12 +975,21 @@ public class GameService : IGameService, IDisposable
             }
         }
 
-        // 和棋判定（六十步無吃子）
+        // 和棋判定：棋子不足（皮卡魚規則：雙方只剩將帥/士/象）
+        if (board.IsDrawByInsufficientMaterial())
+        {
+            isGameOver = true;
+            StopAndDisposeClock();
+            GameMessage?.Invoke("和棋！雙方棋子不足（皮卡魚規則）");
+            return true;
+        }
+
+        // 和棋判定（一百二十步無吃子，皮卡魚規則）
         if (board.IsDrawByNoCapture())
         {
             isGameOver = true;
             StopAndDisposeClock();
-            GameMessage?.Invoke("和棋！六十步無吃子");
+            GameMessage?.Invoke("和棋！一百二十步無吃子（皮卡魚規則）");
             return true;
         }
 

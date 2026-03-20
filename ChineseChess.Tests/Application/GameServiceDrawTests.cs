@@ -12,7 +12,7 @@ namespace ChineseChess.Tests.Application;
 
 /// <summary>
 /// GameService 和棋判定整合測試。
-/// 驗證三次重覆局面與六十步無吃子觸發正確的 GameMessage。
+/// 驗證三次重覆局面、一百二十步無吃子及棋子不足觸發正確的 GameMessage。
 ///
 /// LoopFen 局面說明：
 ///   "4ka3/9/9/9/9/9/9/9/9/R2K5 w - - 0 1"
@@ -117,15 +117,15 @@ public class GameServiceDrawTests
 
         await DoOneCycleAsync(gameService);
 
-        Assert.DoesNotContain(messages, msg => msg.Contains("重覆") || msg.Contains("重複") || msg.Contains("六十步"));
+        Assert.DoesNotContain(messages, msg => msg.Contains("重覆") || msg.Contains("重複") || msg.Contains("一百二十步"));
     }
 
-    // ─── 六十步無吃子（IsDrawByNoCapture）整合測試 ───────────────────────
+    // ─── 一百二十步無吃子（IsDrawByNoCapture）整合測試 ──────────────────────
 
     [Fact]
     public async Task HumanMove_DrawByNoCapture_ShouldTriggerDrawMessage()
     {
-        // 使用反射將 HalfMoveClock 設為 59，再走一步觸發無吃子和棋
+        // 使用反射將 HalfMoveClock 設為 119，再走一步觸發無吃子和棋（皮卡魚規則閾值 120）
         // 此局面：紅車 a1(81)，黑將 e10(4)，黑仕 f10(5)，紅帥 e1(85)
         var engine = new SearchEngine();
         var gameService = new GameService(engine);
@@ -135,14 +135,14 @@ public class GameServiceDrawTests
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
         LoadFenAndResetHistory(gameService, LoopFen);
 
-        // 設定無吃子計數為 59（模擬已走了 59 步無吃子）
-        SetHalfMoveClock((Board)gameService.CurrentBoard, 59);
-        Assert.Equal(59, gameService.CurrentBoard.HalfMoveClock);
+        // 設定無吃子計數為 119（模擬已走了 119 步無吃子）
+        SetHalfMoveClock((Board)gameService.CurrentBoard, 119);
+        Assert.Equal(119, gameService.CurrentBoard.HalfMoveClock);
 
-        // 走第 60 步（無吃子）觸發和棋
+        // 走第 120 步（無吃子）觸發和棋
         await gameService.HumanMoveAsync(RedRookDown); // 紅車 a1→a2，無吃子
 
-        Assert.Contains(messages, msg => msg.Contains("和棋") || msg.Contains("Draw") || msg.Contains("六十步"));
+        Assert.Contains(messages, msg => msg.Contains("和棋") || msg.Contains("Draw") || msg.Contains("一百二十步"));
     }
 
     [Fact]
@@ -156,18 +156,18 @@ public class GameServiceDrawTests
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
         LoadFenAndResetHistory(gameService, LoopFen);
 
-        // 設定無吃子計數為 59，再走一步觸發
-        SetHalfMoveClock((Board)gameService.CurrentBoard, 59);
+        // 設定無吃子計數為 119，再走一步觸發（皮卡魚規則）
+        SetHalfMoveClock((Board)gameService.CurrentBoard, 119);
         await gameService.HumanMoveAsync(RedRookDown);
 
-        // 訊息應包含「六十步無吃子」
-        Assert.Contains(messages, msg => msg.Contains("六十步無吃子"));
+        // 訊息應包含「一百二十步無吃子」
+        Assert.Contains(messages, msg => msg.Contains("一百二十步無吃子"));
     }
 
     [Fact]
-    public async Task HumanMove_DrawByNoCapture_At59Moves_ShouldNotTrigger()
+    public async Task HumanMove_DrawByNoCapture_At119Moves_ShouldNotTrigger()
     {
-        // 無吃子計數未達 60，不應觸發和棋
+        // 無吃子計數未達 120（皮卡魚規則），不應觸發和棋
         var engine = new SearchEngine();
         var gameService = new GameService(engine);
         var messages = new List<string>();
@@ -176,12 +176,12 @@ public class GameServiceDrawTests
         await gameService.StartGameAsync(GameMode.PlayerVsPlayer);
         LoadFenAndResetHistory(gameService, LoopFen);
 
-        // 設定無吃子計數為 58，走一步後只有 59 步
-        SetHalfMoveClock((Board)gameService.CurrentBoard, 58);
-        await gameService.HumanMoveAsync(RedRookDown); // 59 步，黑方回合
+        // 設定無吃子計數為 118，走一步後只有 119 步
+        SetHalfMoveClock((Board)gameService.CurrentBoard, 118);
+        await gameService.HumanMoveAsync(RedRookDown); // 119 步，黑方回合
 
-        Assert.DoesNotContain(messages, msg => msg.Contains("六十步"));
-        Assert.Equal(59, gameService.CurrentBoard.HalfMoveClock);
+        Assert.DoesNotContain(messages, msg => msg.Contains("一百二十步"));
+        Assert.Equal(119, gameService.CurrentBoard.HalfMoveClock);
     }
 
     // ─── 和棋後拒絕繼續走棋 ──────────────────────────────────────────────
@@ -237,7 +237,7 @@ public class GameServiceDrawTests
         // 走一步後確認未觸發和棋
         await gameService.HumanMoveAsync(RedRookDown);
 
-        Assert.DoesNotContain(messages, msg => msg.Contains("重覆") || msg.Contains("重複") || msg.Contains("六十步"));
+        Assert.DoesNotContain(messages, msg => msg.Contains("重覆") || msg.Contains("重複") || msg.Contains("一百二十步"));
     }
 
     // ─── HalfMoveClock 在黑方走棋後正確更新 ──────────────────────────────
