@@ -132,10 +132,7 @@ public class GameService : IGameService, IDisposable
         aiCts?.Cancel();
         aiPauseSignal.Set();
         // 等待舊的 AI 搜尋任務完全結束後再重置棋盤，避免新舊任務並存的競爭條件
-        // 使用 SemaphoreSlim 取代忙碌輪詢，消除 isThinking 讀取的競態條件
-        // WaitAsync 返回 false 表示超時（未取得信號），此時不可 Release，避免計數溢出
-        if (await thinkingCompletedSignal.WaitAsync(TimeSpan.FromSeconds(5)))
-            thinkingCompletedSignal.Release(); // 立即歸還，讓下次仍可等待
+        await WaitForThinkingCompletionAsync();
         board = new Board(); // 重置為標準初始局
         ClearLatestHint();
         Interlocked.Exchange(ref isGameOverFlag, 0);
@@ -1383,11 +1380,10 @@ public class GameService : IGameService, IDisposable
     {
         if (replayState == ReplayState.Replaying) return;
 
-        // 停止 AI 並等待完成（使用信號量，與 StartGameAsync 保持一致）
+        // 停止 AI 並等待完成
         aiCts?.Cancel();
         aiPauseSignal.Set();
-        if (await thinkingCompletedSignal.WaitAsync(TimeSpan.FromSeconds(5)))
-            thinkingCompletedSignal.Release();
+        await WaitForThinkingCompletionAsync();
 
         replayState = ReplayState.Replaying;
         // replayCurrentStep 維持當前步號（指向最新局面）
@@ -1543,11 +1539,10 @@ public class GameService : IGameService, IDisposable
     /// <summary>載入外部 GameRecord，進入重播模式。</summary>
     public async Task LoadGameRecordAsync(GameRecord record)
     {
-        // 停止當前 AI（使用信號量，與 StartGameAsync 保持一致）
+        // 停止當前 AI 並等待完成
         aiCts?.Cancel();
         aiPauseSignal.Set();
-        if (await thinkingCompletedSignal.WaitAsync(TimeSpan.FromSeconds(5)))
-            thinkingCompletedSignal.Release();
+        await WaitForThinkingCompletionAsync();
 
         // 驗證 FEN
         var loadedBoard = new Board();
@@ -1650,6 +1645,16 @@ public class GameService : IGameService, IDisposable
         var loser  = timedOutColor == PieceColor.Red ? "紅方" : "黑方";
         var winner = timedOutColor == PieceColor.Red ? "黑方" : "紅方";
         GameMessage?.Invoke($"時間到！{loser}超時，{winner}獲勝！");
+    }
+
+    /// <summary>
+    /// 等待 AI 搜尋完全結束（最多 5 秒）後歸還信號，讓後續呼叫仍可等待。
+    /// 若超時（WaitAsync 返回 false），不可 Release，避免計數溢出。
+    /// </summary>
+    private async Task WaitForThinkingCompletionAsync()
+    {
+        if (await thinkingCompletedSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            thinkingCompletedSignal.Release();
     }
 
     /// <summary>停止並釋放棋鐘及 Tick 計時器。</summary>

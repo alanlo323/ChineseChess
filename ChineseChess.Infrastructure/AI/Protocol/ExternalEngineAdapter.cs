@@ -74,6 +74,7 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
     private void StartProcess()
     {
         // 驗證路徑：正規化後確認為存在的 .exe 檔案，防止路徑遍歷與非預期程式啟動
+        // 此專案為 WPF（Windows-only），.exe 副檔名限制為有意設計
         string fullPath = Path.GetFullPath(executablePath);
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"引擎執行檔不存在：{fullPath}");
@@ -93,7 +94,6 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
 
         process = Process.Start(psi) ?? throw new InvalidOperationException($"無法啟動外部引擎：{fullPath}");
         input = process.StandardInput;
-        input.AutoFlush = true;
     }
 
     private async Task HandshakeAsync(CancellationToken ct)
@@ -289,19 +289,15 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
 
     /// <summary>向引擎發送 setoption name X value Y 命令。</summary>
     public Task SendOptionAsync(string name, string value)
-    {
-        // 移除換行符，防止注入額外 UCI 命令
-        string sanitizedName  = name.Replace("\r", "").Replace("\n", "");
-        string sanitizedValue = value.Replace("\r", "").Replace("\n", "");
-        return SendLineAsync($"setoption name {sanitizedName} value {sanitizedValue}");
-    }
+        => SendLineAsync($"setoption name {SanitizeUciToken(name)} value {SanitizeUciToken(value)}");
 
     /// <summary>向引擎發送無值選項（如 Clear Hash）。</summary>
     public Task SendButtonOptionAsync(string name)
-    {
-        string sanitizedName = name.Replace("\r", "").Replace("\n", "");
-        return SendLineAsync($"setoption name {sanitizedName}");
-    }
+        => SendLineAsync($"setoption name {SanitizeUciToken(name)}");
+
+    /// <summary>移除換行符，防止注入額外 UCI 命令。</summary>
+    private static string SanitizeUciToken(string token)
+        => token.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
     /// 持續讀取引擎 stdout，直到找到符合 <paramref name="predicate"/> 的行。

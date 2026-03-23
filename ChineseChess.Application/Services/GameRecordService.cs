@@ -56,7 +56,7 @@ public class GameRecordService : IGameRecordService
         var fileInfo = new FileInfo(filePath);
         if (fileInfo.Length > MaxImportFileSizeBytes)
             throw new InvalidOperationException(
-                $"棋局檔案過大（{fileInfo.Length / 1024 / 1024} MB），上限為 {MaxImportFileSizeBytes / 1024 / 1024} MB");
+                $"棋局檔案過大（{fileInfo.Length / 1024.0 / 1024:F2} MB），上限為 {MaxImportFileSizeBytes / 1024 / 1024} MB");
 
         var json = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, ct);
         return Deserialize(json);

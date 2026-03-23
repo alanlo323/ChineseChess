@@ -653,7 +653,7 @@ public class TranspositionTable
         // 防止惡意超大 JSON 造成記憶體耗盡
         if (input.CanSeek && input.Length > MaxJsonImportSizeBytes)
             throw new InvalidOperationException(
-                $"TT JSON 資料過大（{input.Length / 1024 / 1024} MB），上限為 {MaxJsonImportSizeBytes / 1024 / 1024} MB");
+                $"TT JSON 資料過大（{input.Length / 1024.0 / 1024:F2} MB），上限為 {MaxJsonImportSizeBytes / 1024 / 1024} MB");
 
         TTStateSnapshot? snapshot;
         try

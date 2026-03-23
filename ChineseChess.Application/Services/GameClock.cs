@@ -54,7 +54,7 @@ public sealed class GameClock : IGameClock
         {
             lock (lockObj)
             {
-                return GetRedRemainingInternal();
+                return GetRemainingInternal(PieceColor.Red);
             }
         }
     }
@@ -65,32 +65,20 @@ public sealed class GameClock : IGameClock
         {
             lock (lockObj)
             {
-                return GetBlackRemainingInternal();
+                return GetRemainingInternal(PieceColor.Black);
             }
         }
     }
 
-    // 不加鎖的內部計算，供 lock 區塊內部呼叫
-    private TimeSpan GetRedRemainingInternal()
+    // 不加鎖的內部計算，供 lock 區塊內部呼叫；呼叫端必須持有 lockObj
+    private TimeSpan GetRemainingInternal(PieceColor color)
     {
-        if (isRunning && !isPaused && activePlayer == PieceColor.Red)
+        var stored = color == PieceColor.Red ? redRemaining : blackRemaining;
+        if (isRunning && !isPaused && activePlayer == color)
         {
-            var elapsed = getNow() - turnStartedAt;
-            var remaining = redRemaining - elapsed;
-            return remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining;
+            stored -= getNow() - turnStartedAt;
         }
-        return redRemaining < TimeSpan.Zero ? TimeSpan.Zero : redRemaining;
-    }
-
-    private TimeSpan GetBlackRemainingInternal()
-    {
-        if (isRunning && !isPaused && activePlayer == PieceColor.Black)
-        {
-            var elapsed = getNow() - turnStartedAt;
-            var remaining = blackRemaining - elapsed;
-            return remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining;
-        }
-        return blackRemaining < TimeSpan.Zero ? TimeSpan.Zero : blackRemaining;
+        return stored < TimeSpan.Zero ? TimeSpan.Zero : stored;
     }
 
     public bool IsRunning
@@ -221,9 +209,7 @@ public sealed class GameClock : IGameClock
         {
             if (!isRunning || isPaused || timeoutFired) return;
 
-            var remaining = activePlayer == PieceColor.Red
-                ? GetRedRemainingInternal()
-                : GetBlackRemainingInternal();
+            var remaining = GetRemainingInternal(activePlayer!.Value);
 
             if (remaining <= TimeSpan.Zero && activePlayer.HasValue)
             {
