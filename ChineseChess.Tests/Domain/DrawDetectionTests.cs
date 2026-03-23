@@ -81,16 +81,6 @@ public class DrawDetectionTests
     // ─── IsDrawByRepetition：自訂閾值 ────────────────────────────────────
 
     [Fact]
-    public void IsDrawByRepetition_CustomThreshold2_TriggersOnSecondOccurrence()
-    {
-        var board = new Board(LoopFen);
-        DoOneCycle(board); // 局面第二次出現
-
-        Assert.True(board.IsDrawByRepetition(threshold: 2), "閾值 2 時第二次出現應觸發");
-        Assert.False(board.IsDrawByRepetition(threshold: 3), "閾值 3 時第二次出現不應觸發");
-    }
-
-    [Fact]
     public void IsDrawByRepetition_CustomThreshold_RespectedCorrectly()
     {
         var board = new Board(LoopFen);
@@ -326,38 +316,26 @@ public class DrawDetectionTests
     // ─── MakeNullMove：不污染歷史 ────────────────────────────────────────
 
     [Fact]
-    public void MakeNullMove_DoesNotAddToZobristHistory()
+    public void MakeNullMove_DoesNotPollutZobristHistory()
     {
-        // NullMove 不應加入 Zobrist 歷史，避免污染循環判定
+        // NullMove 在兩種重覆計數狀態下均不應干擾和棋判定
         var board = new Board(LoopFen);
 
-        // 造出一次重覆（局面第二次出現，threshold=2 觸發）
+        // 情境 1：threshold=2（局面第二次出現）
         DoOneCycle(board);
         Assert.True(board.IsDrawByRepetition(threshold: 2));
-
-        // 插入 NullMove 不應改變和棋判定
         board.MakeNullMove();
         board.UnmakeNullMove();
-
         Assert.True(board.IsDrawByRepetition(threshold: 2),
-            "NullMove/UnmakeNullMove 不應干擾重覆局面計數");
-    }
+            "NullMove/UnmakeNullMove 不應干擾重覆局面計數（threshold=2）");
 
-    [Fact]
-    public void MakeNullMove_DoesNotAffectRepetitionCount()
-    {
-        var board = new Board(LoopFen);
+        // 情境 2：threshold=3（局面第三次出現）
         DoOneCycle(board);
-        DoOneCycle(board); // 第三次出現
-
         Assert.True(board.IsDrawByRepetition());
-
-        // NullMove 不改變判定結果
         board.MakeNullMove();
         board.UnmakeNullMove();
-
         Assert.True(board.IsDrawByRepetition(),
-            "NullMove 不應導致重覆計數消失");
+            "NullMove 不應導致重覆計數消失（threshold=3）");
     }
 
     // ─── ParseFen：重置歷史 ──────────────────────────────────────────────

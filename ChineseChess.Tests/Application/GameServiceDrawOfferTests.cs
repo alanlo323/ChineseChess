@@ -62,7 +62,8 @@ public class GameServiceDrawOfferTests
         gameService.SetDrawOfferSettings(new DrawOfferSettings { MinMoveCountForAiDrawOffer = 0 });
 
         DrawOfferResult? resolvedResult = null;
-        gameService.DrawOfferResolved += r => resolvedResult = r;
+        var tcs = new TaskCompletionSource<DrawOfferResult>();
+        gameService.DrawOfferResolved += r => { resolvedResult = r; tcs.TrySetResult(r); };
 
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
 
@@ -72,8 +73,8 @@ public class GameServiceDrawOfferTests
 
         await gameService.RequestDrawAsync();
 
-        // 等待 AI 評估完成
-        await Task.Delay(1000);
+        // 等待 AI 評估完成（事件驅動，最多 5 秒）
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.NotNull(resolvedResult);
         Assert.Equal(DrawOfferSource.Player, resolvedResult!.Source);
@@ -99,9 +100,7 @@ public class GameServiceDrawOfferTests
 
         await gameService.RequestDrawAsync();
 
-        // 開局拒絕是同步的（不需要等待 AI 搜尋）
-        await Task.Delay(100);
-
+        // 開局拒絕是同步的（await RequestDrawAsync 後事件已觸發）
         Assert.NotNull(resolvedResult);
         Assert.Equal(DrawOfferSource.Player, resolvedResult!.Source);
         Assert.False(resolvedResult.Accepted);
@@ -120,7 +119,8 @@ public class GameServiceDrawOfferTests
         gameService.SetDrawOfferSettings(new DrawOfferSettings { MinMoveCountForAiDrawOffer = 0 });
 
         DrawOfferResult? resolvedResult = null;
-        gameService.DrawOfferResolved += r => resolvedResult = r;
+        var tcs = new TaskCompletionSource<DrawOfferResult>();
+        gameService.DrawOfferResolved += r => { resolvedResult = r; tcs.TrySetResult(r); };
 
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
 
@@ -130,8 +130,8 @@ public class GameServiceDrawOfferTests
 
         await gameService.RequestDrawAsync();
 
-        // 等待 AI 評估完成
-        await Task.Delay(2000);
+        // 等待 AI 評估完成（事件驅動，最多 5 秒）
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.NotNull(resolvedResult);
         Assert.Equal(DrawOfferSource.Player, resolvedResult!.Source);
@@ -186,7 +186,8 @@ public class GameServiceDrawOfferTests
         gameService.SetDrawOfferSettings(new DrawOfferSettings { MinMoveCountForAiDrawOffer = 0 });
 
         DrawOfferResult? drawOffered = null;
-        gameService.DrawOffered += args => drawOffered = args;
+        var tcs = new TaskCompletionSource<DrawOfferResult>();
+        gameService.DrawOffered += args => { drawOffered = args; tcs.TrySetResult(args); };
 
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
 
@@ -199,8 +200,8 @@ public class GameServiceDrawOfferTests
         // 紅方（玩家）走帥橫移，觸發 AI（黑方）進行搜尋
         await gameService.HumanMoveAsync(new Move(85, 84));
 
-        // 等待 AI 完成搜尋並執行提和評估（最多 2 秒）
-        await Task.Delay(2000);
+        // 等待 AI 完成搜尋並執行提和評估（事件驅動，最多 5 秒）
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         // AI 應偵測到均勢並主動提和
         Assert.NotNull(drawOffered);
@@ -363,6 +364,9 @@ public class GameServiceDrawOfferTests
         var gameService = new GameService(engine);
         gameService.SetDifficulty(1, 500, 1);
 
+        var tcs = new TaskCompletionSource<bool>();
+        gameService.DrawOfferResolved += _ => tcs.TrySetResult(true);
+
         await gameService.StartGameAsync(GameMode.PlayerVsAi);
 
         // 設定均勢局面
@@ -370,8 +374,8 @@ public class GameServiceDrawOfferTests
 
         await gameService.RequestDrawAsync();
 
-        // 等待 AI 評估
-        await Task.Delay(1000);
+        // 等待 AI 評估完成（事件驅動，最多 5 秒）
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         // 無論接受或拒絕，確認事件有觸發（提和流程完整執行）
         Assert.True(gameService.IsDrawOfferProcessed);

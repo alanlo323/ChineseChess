@@ -23,7 +23,19 @@
       "Bash(grep -rn \"ScrollIntoView\\\\|BringIntoView\\\\|Scroll\\\\|scroll\" D:/Git/ChineseChess/ChineseChess.WPF --include=*.cs --include=*.xaml)",
       "Bash(git stash:*)",
       "Bash(grep -E \"\\\\.cs$\")",
-      "Bash(grep -r setoption /d/Git/ChineseChess --include=*.cs)"
+      "Bash(grep -r setoption /d/Git/ChineseChess --include=*.cs)",
+      "Bash(Get-Content \"C:\\\\Users\\\\alanlo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--Git-ChineseChess\\\\0ceeb2d8-0c13-4058-a76c-403ebd206d68\\\\tasks\\\\buzz3cw2g.output\")",
+      "Bash(Select-Object -Last 20)",
+      "Bash(grep -E \"\\\\.cs$|\\\\.json$|\\\\.xml$\")",
+      "Bash(ls /d/Git/ChineseChess/ChineseChess.Tests/*.cs)",
+      "Bash(grep -n \"const string.*Fen\\\\|InitialFen\\\\|KingsOnlyFen\" /d/Git/ChineseChess/ChineseChess.Tests/**/*.cs)",
+      "Bash(grep -n \"public async Task\\\\|private async Task\" /d/Git/ChineseChess/ChineseChess.Tests/**/*.cs)",
+      "Bash(grep -n \"new SearchEngine\\(\\)\\\\|new Board\\(\\\\|new GameService\\(\" /d/Git/ChineseChess/ChineseChess.Tests/**/*.cs)",
+      "Bash(for dir:*)",
+      "Bash(do echo:*)",
+      "Read(//d/Git/ChineseChess/ChineseChess.Tests/**)",
+      "Bash(done)",
+      "Bash(grep -c \"public.*Task.*Test\\\\|Fact\\\\]\" /d/Git/ChineseChess/ChineseChess.Tests/**/*.cs)"
     ]
   },
   "outputStyle": "Explanatory"

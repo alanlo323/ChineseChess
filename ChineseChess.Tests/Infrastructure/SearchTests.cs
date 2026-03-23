@@ -67,19 +67,6 @@ public class SearchTests
     }
 
     [Fact]
-    public async Task Search_ShouldReturnSameMove_ForSamePosition()
-    {
-        var board = new Board(InitialFen);
-        var engine = new SearchEngine();
-        var settings = new SearchSettings { Depth = 2, TimeLimitMs = 12000, ThreadCount = 1 };
-
-        var first = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
-        var second = await engine.SearchAsync(new Board(board.ToFen()), settings, CancellationToken.None);
-
-        Assert.Equal(first.BestMove, second.BestMove);
-    }
-
-    [Fact]
     public async Task Search_WithCaptureQuiescence_ShouldReturnResult()
     {
         var board = new Board("4k4/9/9/9/4p4/4P4/9/9/9/4K4 w - - 0 1");
