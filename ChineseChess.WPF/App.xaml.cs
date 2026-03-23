@@ -76,6 +76,7 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<IAiEngine>(),
             sp.GetService<IHintExplanationService>(),
             sp.GetRequiredService<IEngineProvider>()));
+        services.AddSingleton<ICoreGameService>(sp => sp.GetRequiredService<IGameService>());
         services.AddSingleton<IGameRecordService, GameRecordService>();
 
         // ViewModel 層
