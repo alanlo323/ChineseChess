@@ -27,8 +27,8 @@ public class GameService : IGameService, IDisposable
     // 使用 int（0/1）搭配 Interlocked 做原子 check-and-set，避免 volatile bool 的 check-then-act 競態條件
     private int isThinkingFlag;
     private bool isThinking => Volatile.Read(ref isThinkingFlag) != 0;
-    // 提示搜尋進行中旗標（volatile 確保跨執行緒可見性）
-    private volatile bool isHintSearchingFlag;
+    // 提示搜尋進行中旗標；使用 int（0/1）搭配 Interlocked/Volatile，與 isThinkingFlag 保持一致
+    private int isHintSearchingFlag;
     private SearchSettings redAiSettings  = new SearchSettings();
     private SearchSettings blackAiSettings = new SearchSettings();
     private CancellationTokenSource? aiCts;
@@ -45,7 +45,7 @@ public class GameService : IGameService, IDisposable
     public IBoard CurrentBoard => board;
     public GameMode CurrentMode => currentMode;
     public bool IsThinking => isThinking; // 讀取 isThinkingFlag（透過私有 property）
-    public bool IsHintSearching => isHintSearchingFlag;
+    public bool IsHintSearching => Volatile.Read(ref isHintSearchingFlag) != 0;
     public Move? LastMove => board.TryGetLastMove(out var lastMove) ? lastMove : null;
     public bool IsSmartHintEnabled { get; set; } = true;
     public int SmartHintDepth { get; set; } = 2;
@@ -138,7 +138,7 @@ public class GameService : IGameService, IDisposable
             thinkingCompletedSignal.Release(); // 立即歸還，讓下次仍可等待
         board = new Board(); // 重置為標準初始局
         ClearLatestHint();
-        isGameOver = false;
+        Interlocked.Exchange(ref isGameOverFlag, 0);
         pendingAiDrawOffer = false;
         isDrawOfferProcessed = false;
         lastAiDrawOfferMoveCount = 0;
@@ -441,7 +441,7 @@ public class GameService : IGameService, IDisposable
         // 提示搜尋開始時設旗標
         if (!applyBestMove)
         {
-            isHintSearchingFlag = true;
+            Interlocked.Exchange(ref isHintSearchingFlag, 1);
         }
 
         var cts = new CancellationTokenSource();
@@ -575,7 +575,7 @@ public class GameService : IGameService, IDisposable
                     var moveNotation = MoveNotation.ToNotation(result.BestMove, board);
                     StoreLatestHint(result, board);
                     // HintReady 觸發前先清除搜尋旗標
-                    isHintSearchingFlag = false;
+                    Interlocked.Exchange(ref isHintSearchingFlag, 0);
                     HintReady?.Invoke(result);
                     ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, "提示完成", moveNotation, lastElapsedMs));
                 }
@@ -612,7 +612,7 @@ public class GameService : IGameService, IDisposable
             // 確保提示搜尋旗標在任何情況下都會清除（含異常路徑）
             if (!applyBestMove)
             {
-                isHintSearchingFlag = false;
+                Interlocked.Exchange(ref isHintSearchingFlag, 0);
             }
             if (result != null)
             {
@@ -814,7 +814,8 @@ public class GameService : IGameService, IDisposable
         return redAiSettings;
     }
 
-    private bool isGameOver;
+    private int isGameOverFlag; // 使用 int（0/1）搭配 Interlocked，防止 Timer 執行緒競態
+    private bool isGameOver => Volatile.Read(ref isGameOverFlag) != 0;
 
     // ─── 提和邏輯 ──────────────────────────────────────────────────────────
 
@@ -872,7 +873,7 @@ public class GameService : IGameService, IDisposable
 
         if (aiAccepts)
         {
-            isGameOver = true;
+            Interlocked.Exchange(ref isGameOverFlag, 1);
             GameMessage?.Invoke($"和棋！玩家提和，AI 接受（{reason}）");
         }
         else
@@ -896,7 +897,7 @@ public class GameService : IGameService, IDisposable
 
         if (accept)
         {
-            isGameOver = true;
+            Interlocked.Exchange(ref isGameOverFlag, 1);
             GameMessage?.Invoke("和棋！AI 提和，玩家接受");
         }
         else
@@ -960,7 +961,7 @@ public class GameService : IGameService, IDisposable
             var verdict = WxfRepetitionJudge.Judge(wxfHistory);
             if (verdict != RepetitionVerdict.None)
             {
-                isGameOver = true;
+                Interlocked.Exchange(ref isGameOverFlag, 1);
                 StopAndDisposeClock();
                 switch (verdict)
                 {
@@ -981,7 +982,7 @@ public class GameService : IGameService, IDisposable
         // 和棋判定：棋子不足（皮卡魚規則：雙方只剩將帥/士/象）
         if (board.IsDrawByInsufficientMaterial())
         {
-            isGameOver = true;
+            Interlocked.Exchange(ref isGameOverFlag, 1);
             StopAndDisposeClock();
             GameMessage?.Invoke("和棋！雙方棋子不足（皮卡魚規則）");
             return true;
@@ -990,7 +991,7 @@ public class GameService : IGameService, IDisposable
         // 和棋判定（一百二十步無吃子，皮卡魚規則）
         if (board.IsDrawByNoCapture())
         {
-            isGameOver = true;
+            Interlocked.Exchange(ref isGameOverFlag, 1);
             StopAndDisposeClock();
             GameMessage?.Invoke("和棋！一百二十步無吃子（皮卡魚規則）");
             return true;
@@ -999,7 +1000,7 @@ public class GameService : IGameService, IDisposable
         var currentTurn = board.Turn;
         if (board.GenerateLegalMoves().Any()) return false;
 
-        isGameOver = true;
+        Interlocked.Exchange(ref isGameOverFlag, 1);
         StopAndDisposeClock();
         var winner = currentTurn == PieceColor.Red ? "黑方" : "紅方";
         if (board.IsCheck(currentTurn))
@@ -1059,7 +1060,7 @@ public class GameService : IGameService, IDisposable
         if (didUndo)
         {
             // 悔棋後允許繼續走棋，重設遊戲結束旗標
-            isGameOver = false;
+            Interlocked.Exchange(ref isGameOverFlag, 0);
             MoveHistoryChanged?.Invoke();
             NotifyUpdate();
         }
@@ -1080,7 +1081,7 @@ public class GameService : IGameService, IDisposable
             board.ParseFen(fen);
             ResetWxfHistory();
             // 重設遊戲狀態，避免遊戲結束後載入書籤仍無法繼續走棋
-            isGameOver = false;
+            Interlocked.Exchange(ref isGameOverFlag, 0);
             pendingAiDrawOffer = false;
             isDrawOfferProcessed = false;
             ClearLatestHint();
@@ -1140,7 +1141,9 @@ public class GameService : IGameService, IDisposable
         if (Interlocked.CompareExchange(ref isThinkingFlag, 1, 0) != 0)
             return new SearchResult { BestMove = Move.Null };
 
-        isHintSearchingFlag = true;
+        // 與 RunAiSearchAsync 一致：佔用信號量，讓 StartGameAsync 等待者能偵測搜尋進行中
+        await thinkingCompletedSignal.WaitAsync();
+        Interlocked.Exchange(ref isHintSearchingFlag, 1);
         var cts = new CancellationTokenSource();
         var boardSnapshot = board.Clone();
         var activeEngine = GetCurrentEngine();
@@ -1178,7 +1181,7 @@ public class GameService : IGameService, IDisposable
 
             StoreLatestHint(result, board);
             latestMultiPvEvaluations = evaluations;
-            isHintSearchingFlag = false;
+            Interlocked.Exchange(ref isHintSearchingFlag, 0);
             HintReady?.Invoke(result);
             MultiPvHintReady?.Invoke(evaluations);
 
@@ -1197,7 +1200,8 @@ public class GameService : IGameService, IDisposable
         finally
         {
             Interlocked.Exchange(ref isThinkingFlag, 0);
-            isHintSearchingFlag = false;
+            thinkingCompletedSignal.Release(); // 通知等待者（如 StartGameAsync）MultiPV 搜尋已結束
+            Interlocked.Exchange(ref isHintSearchingFlag, 0);
             if (ReferenceEquals(aiCts, cts)) aiCts = null;
             cts.Dispose();
         }
@@ -1379,15 +1383,11 @@ public class GameService : IGameService, IDisposable
     {
         if (replayState == ReplayState.Replaying) return;
 
-        // 停止 AI 並等待完成
+        // 停止 AI 並等待完成（使用信號量，與 StartGameAsync 保持一致）
         aiCts?.Cancel();
         aiPauseSignal.Set();
-        var waited = 0;
-        while (isThinking && waited < 500)
-        {
-            await Task.Delay(10);
-            waited++;
-        }
+        if (await thinkingCompletedSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            thinkingCompletedSignal.Release();
 
         replayState = ReplayState.Replaying;
         // replayCurrentStep 維持當前步號（指向最新局面）
@@ -1488,7 +1488,7 @@ public class GameService : IGameService, IDisposable
 
         // 重設對局狀態
         currentMode = mode;
-        isGameOver = false;
+        Interlocked.Exchange(ref isGameOverFlag, 0);
         pendingAiDrawOffer = false;
         isDrawOfferProcessed = false;
         Interlocked.Exchange(ref completedGameNodes, 0);
@@ -1543,15 +1543,11 @@ public class GameService : IGameService, IDisposable
     /// <summary>載入外部 GameRecord，進入重播模式。</summary>
     public async Task LoadGameRecordAsync(GameRecord record)
     {
-        // 停止當前 AI
+        // 停止當前 AI（使用信號量，與 StartGameAsync 保持一致）
         aiCts?.Cancel();
         aiPauseSignal.Set();
-        var waited = 0;
-        while (isThinking && waited < 500)
-        {
-            await Task.Delay(10);
-            waited++;
-        }
+        if (await thinkingCompletedSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            thinkingCompletedSignal.Release();
 
         // 驗證 FEN
         var loadedBoard = new Board();
@@ -1572,7 +1568,7 @@ public class GameService : IGameService, IDisposable
             });
         }
 
-        isGameOver = false;
+        Interlocked.Exchange(ref isGameOverFlag, 0);
         pendingAiDrawOffer = false;
         isDrawOfferProcessed = false;
         ClearLatestHint();
@@ -1648,8 +1644,8 @@ public class GameService : IGameService, IDisposable
     /// </summary>
     private void OnClockTimeout(object? sender, PieceColor timedOutColor)
     {
-        if (isGameOver) return;
-        isGameOver = true;
+        // 原子地從 0 設為 1；若已為 1 表示遊戲已結束，直接返回（防 Timer 執行緒競態）
+        if (Interlocked.CompareExchange(ref isGameOverFlag, 1, 0) != 0) return;
         StopAndDisposeClock();
         var loser  = timedOutColor == PieceColor.Red ? "紅方" : "黑方";
         var winner = timedOutColor == PieceColor.Red ? "黑方" : "紅方";

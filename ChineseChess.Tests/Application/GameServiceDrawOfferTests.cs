@@ -273,12 +273,12 @@ public class GameServiceDrawOfferTests
         // 將局面設定為終局（黑方被將死）
         ((Board)gameService.CurrentBoard).ParseFen("3k5/9/9/9/9/9/9/9/9/R3K4 w - - 0 1");
 
-        // 手動設定 isGameOver（透過走棋觸發勝負）
-        // 使用反射設定 isGameOver = true
+        // 手動設定 isGameOverFlag（透過走棋觸發勝負）
+        // isGameOver 現為 property，backing field 為 isGameOverFlag（int，1=true）
         var field = typeof(GameService).GetField(
-            "isGameOver",
+            "isGameOverFlag",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        field!.SetValue(gameService, true);
+        field!.SetValue(gameService, 1);
 
         await gameService.RequestDrawAsync();
 
