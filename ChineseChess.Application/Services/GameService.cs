@@ -36,6 +36,9 @@ public class GameService : IGameService, IDisposable
     private readonly ManualResetEventSlim aiPauseSignal = new ManualResetEventSlim(true);
     // 用於 StartGameAsync 等待 AI 搜尋完全結束（取代忙碌輪詢）
     private readonly SemaphoreSlim thinkingCompletedSignal = new SemaphoreSlim(1, 1);
+    // 追蹤停止狀態與上次搜尋類型，用於 ResumeThinkingAsync 重啟邏輯
+    private int wasStoppedFlag;       // 0 = 未停止, 1 = 曾被停止
+    private int lastSearchWasHintFlag; // 0 = 走棋搜尋, 1 = 提示搜尋
     private readonly IHintExplanationService? hintExplanationService;
     private SearchResult? latestHint;
     private string? latestHintFen;
@@ -208,6 +211,8 @@ public class GameService : IGameService, IDisposable
     public Task StopGameAsync()
     {
         aiPauseSignal.Set();
+        if (isThinking)
+            Interlocked.Exchange(ref wasStoppedFlag, 1);
         aiCts?.Cancel();
         StopAndDisposeClock();
         ThinkingProgress?.Invoke("AI 思考已停止");
@@ -231,6 +236,17 @@ public class GameService : IGameService, IDisposable
     {
         if (!isThinking)
         {
+            // 嘗試重啟上次被停止的搜尋
+            if (Volatile.Read(ref wasStoppedFlag) != 0 && !isGameOver)
+            {
+                bool wasHint = Volatile.Read(ref lastSearchWasHintFlag) != 0;
+                if (wasHint)
+                    _ = GetHintAsync();
+                else
+                    _ = RunAiSearchAsync(applyBestMove: true);
+                return Task.CompletedTask;
+            }
+
             ThinkingProgress?.Invoke("AI 目前未在思考中");
             return Task.CompletedTask;
         }
@@ -432,6 +448,8 @@ public class GameService : IGameService, IDisposable
 
         // 原子地將 isThinkingFlag 從 0 設為 1；若已是 1 表示另一搜尋進行中，直接返回
         if (Interlocked.CompareExchange(ref isThinkingFlag, 1, 0) != 0) return null;
+        Interlocked.Exchange(ref wasStoppedFlag, 0);                             // 新搜尋開始，重置停止旗標
+        Interlocked.Exchange(ref lastSearchWasHintFlag, applyBestMove ? 0 : 1); // 記錄搜尋類型
         // 佔用信號量，通知等待者（如 StartGameAsync）搜尋正在進行
         await thinkingCompletedSignal.WaitAsync();
         ThinkingProgress?.Invoke("AI 思考中...");
@@ -1139,6 +1157,8 @@ public class GameService : IGameService, IDisposable
         if (Interlocked.CompareExchange(ref isThinkingFlag, 1, 0) != 0)
             return new SearchResult { BestMove = Move.Null };
 
+        Interlocked.Exchange(ref wasStoppedFlag, 0);      // 新搜尋開始，重置停止旗標
+        Interlocked.Exchange(ref lastSearchWasHintFlag, 1); // MultiPV 提示搜尋
         // 與 RunAiSearchAsync 一致：佔用信號量，讓 StartGameAsync 等待者能偵測搜尋進行中
         await thinkingCompletedSignal.WaitAsync();
         Interlocked.Exchange(ref isHintSearchingFlag, 1);

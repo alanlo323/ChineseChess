@@ -2,6 +2,7 @@ using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Services;
 using ChineseChess.Domain.Entities;
+using ChineseChess.Domain.Enums;
 using ChineseChess.Infrastructure.AI.Search;
 using System;
 using System.Collections.Generic;
@@ -112,6 +113,53 @@ public class GameServiceTests
 
         Assert.False(gameService.IsThinking);
         Assert.NotNull(hint);
+    }
+
+    [Fact]
+    public async Task StopAndResume_ShouldRestartHintSearch()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        gameService.SetDifficulty(depth: 18, timeMs: 10000, threadCount: 1);
+        await gameService.StartGameAsync(GameMode.PlayerVsAi);
+
+        var hintTask = gameService.GetHintAsync();
+        await Task.Delay(40);
+        await gameService.StopGameAsync();
+        await hintTask; // 等待停止完成
+
+        Assert.False(gameService.IsThinking);
+
+        // 重啟後應再次開始思考
+        await gameService.ResumeThinkingAsync();
+        await Task.Delay(40);
+
+        Assert.True(gameService.IsThinking, "繼續後 AI 應重新開始提示搜尋");
+        await gameService.StopGameAsync();
+    }
+
+    [Fact]
+    public async Task StopAndResume_WhenAiMoveStopped_ShouldRestartAiSearch()
+    {
+        var engine = new SearchEngine();
+        var gameService = new GameService(engine);
+        gameService.SetDifficulty(depth: 18, timeMs: 10000, threadCount: 1);
+        // 玩家選黑，AI（紅方）先手；不 await StartGameAsync，讓 AI 搜尋在背景執行
+        gameService.PlayerColor = PieceColor.Black;
+        _ = gameService.StartGameAsync(GameMode.PlayerVsAi);
+        await Task.Delay(80); // 等 AI 開始思考
+
+        Assert.True(gameService.IsThinking, "AI 應已開始走棋搜尋");
+        await gameService.StopGameAsync();
+        await Task.Delay(40); // 等停止完成
+
+        Assert.False(gameService.IsThinking);
+
+        await gameService.ResumeThinkingAsync();
+        await Task.Delay(80);
+
+        Assert.True(gameService.IsThinking, "繼續後 AI 應重新開始走棋搜尋");
+        await gameService.StopGameAsync();
     }
 
     [Fact]
