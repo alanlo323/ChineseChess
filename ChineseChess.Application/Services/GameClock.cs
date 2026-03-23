@@ -8,11 +8,13 @@ namespace ChineseChess.Application.Services;
 /// 棋鐘實作：管理紅黑雙方剩餘時間的狀態機。
 /// 支援假時鐘注入（Func&lt;DateTime&gt; getNow）以利測試。
 /// 狀態：Stopped → Running → Paused → Running → Stopped
+/// 所有公開成員均以 lockObj 保護，可安全跨執行緒（UI / Timer / 讀取）存取。
 /// </summary>
 public sealed class GameClock : IGameClock
 {
     private readonly TimeSpan timePerPlayer;
     private readonly Func<DateTime> getNow;
+    private readonly object lockObj = new();
 
     // 雙方剩餘時間（不含當前正在計時的部分）
     private TimeSpan redRemaining;
@@ -50,13 +52,10 @@ public sealed class GameClock : IGameClock
     {
         get
         {
-            if (isRunning && !isPaused && activePlayer == PieceColor.Red)
+            lock (lockObj)
             {
-                var elapsed = getNow() - turnStartedAt;
-                var remaining = redRemaining - elapsed;
-                return remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining;
+                return GetRedRemainingInternal();
             }
-            return redRemaining < TimeSpan.Zero ? TimeSpan.Zero : redRemaining;
         }
     }
 
@@ -64,19 +63,45 @@ public sealed class GameClock : IGameClock
     {
         get
         {
-            if (isRunning && !isPaused && activePlayer == PieceColor.Black)
+            lock (lockObj)
             {
-                var elapsed = getNow() - turnStartedAt;
-                var remaining = blackRemaining - elapsed;
-                return remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining;
+                return GetBlackRemainingInternal();
             }
-            return blackRemaining < TimeSpan.Zero ? TimeSpan.Zero : blackRemaining;
         }
     }
 
-    public bool IsRunning => isRunning;
+    // 不加鎖的內部計算，供 lock 區塊內部呼叫
+    private TimeSpan GetRedRemainingInternal()
+    {
+        if (isRunning && !isPaused && activePlayer == PieceColor.Red)
+        {
+            var elapsed = getNow() - turnStartedAt;
+            var remaining = redRemaining - elapsed;
+            return remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining;
+        }
+        return redRemaining < TimeSpan.Zero ? TimeSpan.Zero : redRemaining;
+    }
 
-    public PieceColor? ActivePlayer => activePlayer;
+    private TimeSpan GetBlackRemainingInternal()
+    {
+        if (isRunning && !isPaused && activePlayer == PieceColor.Black)
+        {
+            var elapsed = getNow() - turnStartedAt;
+            var remaining = blackRemaining - elapsed;
+            return remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining;
+        }
+        return blackRemaining < TimeSpan.Zero ? TimeSpan.Zero : blackRemaining;
+    }
+
+    public bool IsRunning
+    {
+        get { lock (lockObj) { return isRunning; } }
+    }
+
+    public PieceColor? ActivePlayer
+    {
+        get { lock (lockObj) { return activePlayer; } }
+    }
 
     /// <summary>
     /// 開始計時，firstPlayer 方先行。
@@ -85,13 +110,16 @@ public sealed class GameClock : IGameClock
     {
         if (firstPlayer == PieceColor.None) return;
 
-        redRemaining = timePerPlayer;
-        blackRemaining = timePerPlayer;
-        isRunning = true;
-        isPaused = false;
-        activePlayer = firstPlayer;
-        turnStartedAt = getNow();
-        timeoutFired = false;
+        lock (lockObj)
+        {
+            redRemaining = timePerPlayer;
+            blackRemaining = timePerPlayer;
+            isRunning = true;
+            isPaused = false;
+            activePlayer = firstPlayer;
+            turnStartedAt = getNow();
+            timeoutFired = false;
+        }
     }
 
     // 走棋後剩餘時間的最低保障（避免因走棋延遲而立即超時）
@@ -103,26 +131,29 @@ public sealed class GameClock : IGameClock
     /// </summary>
     public void SwitchTurn()
     {
-        if (!isRunning || activePlayer == null) return;
-
-        // 記錄當前方消耗的時間
-        CommitCurrentTurnTime();
-
-        // 走棋後剩餘不足 5 秒時，補回至 5 秒
-        if (activePlayer == PieceColor.Red)
+        lock (lockObj)
         {
-            if (redRemaining < MinRemainingAfterMove)
-                redRemaining = MinRemainingAfterMove;
-        }
-        else
-        {
-            if (blackRemaining < MinRemainingAfterMove)
-                blackRemaining = MinRemainingAfterMove;
-        }
+            if (!isRunning || activePlayer == null) return;
 
-        // 切換到另一方
-        activePlayer = activePlayer == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
-        turnStartedAt = getNow();
+            // 記錄當前方消耗的時間
+            CommitCurrentTurnTimeInternal();
+
+            // 走棋後剩餘不足 5 秒時，補回至 5 秒
+            if (activePlayer == PieceColor.Red)
+            {
+                if (redRemaining < MinRemainingAfterMove)
+                    redRemaining = MinRemainingAfterMove;
+            }
+            else
+            {
+                if (blackRemaining < MinRemainingAfterMove)
+                    blackRemaining = MinRemainingAfterMove;
+            }
+
+            // 切換到另一方
+            activePlayer = activePlayer == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
+            turnStartedAt = getNow();
+        }
     }
 
     /// <summary>
@@ -130,12 +161,15 @@ public sealed class GameClock : IGameClock
     /// </summary>
     public void Pause()
     {
-        if (!isRunning || isPaused) return;
+        lock (lockObj)
+        {
+            if (!isRunning || isPaused) return;
 
-        // 先提交目前消耗的時間
-        CommitCurrentTurnTime();
-        isPaused = true;
-        pauseStartedAt = getNow();
+            // 先提交目前消耗的時間
+            CommitCurrentTurnTimeInternal();
+            isPaused = true;
+            pauseStartedAt = getNow();
+        }
     }
 
     /// <summary>
@@ -143,11 +177,14 @@ public sealed class GameClock : IGameClock
     /// </summary>
     public void Resume()
     {
-        if (!isRunning || !isPaused) return;
+        lock (lockObj)
+        {
+            if (!isRunning || !isPaused) return;
 
-        isPaused = false;
-        // 重新設定本輪開始時間點為「現在」（暫停期間不計）
-        turnStartedAt = getNow();
+            isPaused = false;
+            // 重新設定本輪開始時間點為「現在」（暫停期間不計）
+            turnStartedAt = getNow();
+        }
     }
 
     /// <summary>
@@ -155,41 +192,57 @@ public sealed class GameClock : IGameClock
     /// </summary>
     public void Stop()
     {
-        if (!isRunning) return;
-
-        // 提交已計時的時間
-        if (!isPaused)
+        lock (lockObj)
         {
-            CommitCurrentTurnTime();
-        }
+            if (!isRunning) return;
 
-        isRunning = false;
-        isPaused = false;
-        activePlayer = null;
+            // 提交已計時的時間
+            if (!isPaused)
+            {
+                CommitCurrentTurnTimeInternal();
+            }
+
+            isRunning = false;
+            isPaused = false;
+            activePlayer = null;
+        }
     }
 
     /// <summary>
     /// 手動觸發計時器檢查（測試用）。
     /// 正式環境由 DispatcherTimer 每秒呼叫；測試中由假時鐘推進後手動呼叫。
+    /// 在 lock 內確認超時狀態，lock 外觸發事件（避免 lock 內觸發外部事件造成死鎖）。
     /// </summary>
     public void Tick()
     {
-        if (!isRunning || isPaused || timeoutFired) return;
+        PieceColor? timedOutPlayer = null;
 
-        var remaining = activePlayer == PieceColor.Red ? RedRemaining : BlackRemaining;
-        if (remaining <= TimeSpan.Zero && activePlayer.HasValue)
+        lock (lockObj)
         {
-            timeoutFired = true;
-            isRunning = false;
-            OnTimeout?.Invoke(this, activePlayer.Value);
+            if (!isRunning || isPaused || timeoutFired) return;
+
+            var remaining = activePlayer == PieceColor.Red
+                ? GetRedRemainingInternal()
+                : GetBlackRemainingInternal();
+
+            if (remaining <= TimeSpan.Zero && activePlayer.HasValue)
+            {
+                timeoutFired = true;
+                isRunning = false;
+                timedOutPlayer = activePlayer.Value;
+            }
         }
+
+        // lock 外觸發事件，防止在 lock 持有期間呼叫外部訂閱者造成死鎖
+        if (timedOutPlayer.HasValue)
+            OnTimeout?.Invoke(this, timedOutPlayer.Value);
     }
 
     /// <summary>
     /// 將當前輪次的已計時時間提交到剩餘時間欄位中。
-    /// 呼叫後 turnStartedAt 失效，呼叫端需重設。
+    /// 呼叫端必須持有 lockObj。呼叫後 turnStartedAt 失效，呼叫端需重設。
     /// </summary>
-    private void CommitCurrentTurnTime()
+    private void CommitCurrentTurnTimeInternal()
     {
         if (activePlayer == null || isPaused) return;
 
