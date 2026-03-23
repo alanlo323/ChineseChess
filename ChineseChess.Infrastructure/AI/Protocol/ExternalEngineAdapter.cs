@@ -73,7 +73,14 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
 
     private void StartProcess()
     {
-        var psi = new ProcessStartInfo(executablePath)
+        // 驗證路徑：正規化後確認為存在的 .exe 檔案，防止路徑遍歷與非預期程式啟動
+        string fullPath = Path.GetFullPath(executablePath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"引擎執行檔不存在：{fullPath}");
+        if (!Path.GetExtension(fullPath).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"引擎執行檔必須為 .exe 檔案：{fullPath}");
+
+        var psi = new ProcessStartInfo(fullPath)
         {
             UseShellExecute        = false,
             RedirectStandardInput  = true,
@@ -84,7 +91,7 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
             StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
         };
 
-        process = Process.Start(psi) ?? throw new InvalidOperationException($"無法啟動外部引擎：{executablePath}");
+        process = Process.Start(psi) ?? throw new InvalidOperationException($"無法啟動外部引擎：{fullPath}");
         input = process.StandardInput;
         input.AutoFlush = true;
     }
@@ -247,7 +254,13 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
         }
         catch { /* 忽略退出時的 IO 錯誤 */ }
 
-        try { process?.Kill(entireProcessTree: true); } catch { }
+        // 給引擎最多 2 秒優雅退出，逾時才強制 Kill
+        try
+        {
+            if (process != null && !process.HasExited && !process.WaitForExit(2000))
+                process.Kill(entireProcessTree: true);
+        }
+        catch { }
         try { process?.Dispose(); } catch { }
 
         input?.Dispose();
@@ -256,11 +269,11 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
 
     // ─── 私有通訊輔助 ─────────────────────────────────────────────────────
 
-    private Task SendLineAsync(string line)
+    private async Task SendLineAsync(string line)
     {
         if (input == null) throw new InvalidOperationException("引擎尚未啟動");
-        input.WriteLine(line);
-        return Task.CompletedTask;
+        await input.WriteLineAsync(line);
+        await input.FlushAsync();
     }
 
     /// <summary>
@@ -276,11 +289,19 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
 
     /// <summary>向引擎發送 setoption name X value Y 命令。</summary>
     public Task SendOptionAsync(string name, string value)
-        => SendLineAsync($"setoption name {name} value {value}");
+    {
+        // 移除換行符，防止注入額外 UCI 命令
+        string sanitizedName  = name.Replace("\r", "").Replace("\n", "");
+        string sanitizedValue = value.Replace("\r", "").Replace("\n", "");
+        return SendLineAsync($"setoption name {sanitizedName} value {sanitizedValue}");
+    }
 
     /// <summary>向引擎發送無值選項（如 Clear Hash）。</summary>
     public Task SendButtonOptionAsync(string name)
-        => SendLineAsync($"setoption name {name}");
+    {
+        string sanitizedName = name.Replace("\r", "").Replace("\n", "");
+        return SendLineAsync($"setoption name {sanitizedName}");
+    }
 
     /// <summary>
     /// 持續讀取引擎 stdout，直到找到符合 <paramref name="predicate"/> 的行。

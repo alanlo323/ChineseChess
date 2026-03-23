@@ -700,7 +700,7 @@ internal sealed class SearchWorker
                     if (alpha >= beta)
                     {
                         UpdateKillers(ply, move);
-                        historyTable[move.From, move.To] += depth * depth;
+                        historyTable[move.From, move.To] = Math.Min(historyTable[move.From, move.To] + depth * depth, 16384);
                         // H2b：記錄反制著法（對手上一步 → 此著法）
                         if (opponentLastFrom >= 0 && opponentLastTo >= 0)
                         {

@@ -44,13 +44,13 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private PieceColor playerColor = PieceColor.Red;
     private string redTimeDisplay = "--:--";
     private string blackTimeDisplay = "--:--";
-    private System.Timers.Timer clockDisplayTimer = null!;
+    private System.Timers.Timer? clockDisplayTimer;
     private string hintExplanationText = "（尚未產生提示）";
     private TTStatistics ttStats = new TTStatistics();
     private TTStatistics? blackTtStats = null;
     private const int TTExploreMaxDepth = 20;   // 固定最大深度（TT 搜尋深度通常 ≤ 10，此值足以顯示全樹）
     private string ttExplorerText = "（初始化中...）";
-    private System.Timers.Timer ttExplorerTimer = null!;
+    private System.Timers.Timer? ttExplorerTimer;
     private int ttExplorerBusy;   // Interlocked 防止重疊執行（0 = 閒置，1 = 執行中）
     private int selectedTabIndex;
     private const int HintExplanationTabIndex = 3;
@@ -720,7 +720,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
                         return;
                     }
 
-                    app.Dispatcher.Invoke(() =>
+                    app.Dispatcher.InvokeAsync(() =>
                     {
                         HintExplanationText = $"{statusPrefix}{Environment.NewLine}{streamingText}";
                     });
@@ -776,14 +776,14 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     {
         var app = global::System.Windows.Application.Current;
         if (app == null) { StatusMessage = msg; return; }
-        app.Dispatcher.Invoke(() => StatusMessage = msg);
+        app.Dispatcher.InvokeAsync(() => StatusMessage = msg);
     }
 
     private void OnThinkingProgress(string _)
     {
         var app = global::System.Windows.Application.Current;
         if (app == null) return;
-        app.Dispatcher.Invoke(RefreshTTStats);
+        app.Dispatcher.InvokeAsync(RefreshTTStats);
     }
 
     private void OnHintReady(SearchResult _)
@@ -794,7 +794,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             HintExplanationText = "（已取得提示，可按解釋）";
             return;
         }
-        app.Dispatcher.Invoke(() => HintExplanationText = "（已取得提示，可按解釋）");
+        app.Dispatcher.InvokeAsync(() => HintExplanationText = "（已取得提示，可按解釋）");
     }
 
     /// <summary>
@@ -814,7 +814,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             StatusMessage = message;
             return;
         }
-        app.Dispatcher.Invoke(() => StatusMessage = message);
+        app.Dispatcher.InvokeAsync(() => StatusMessage = message);
     }
 
     private void OnBoardUpdated()
@@ -832,7 +832,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         }
 
         if (app == null) Reset();
-        else app.Dispatcher.Invoke(Reset);
+        else app.Dispatcher.InvokeAsync(Reset);
     }
 
     private void SelectMultiPvItem(MultiPvItemViewModel item)
@@ -865,7 +865,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         }
 
         if (app == null) Update();
-        else app.Dispatcher.Invoke(Update);
+        else app.Dispatcher.InvokeAsync(Update);
     }
 
     private void OnMoveCompleted(MoveCompletedEventArgs args)
@@ -899,7 +899,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         {
             if (disposed) return;
             if (app == null) action();
-            else app.Dispatcher.Invoke(action);
+            else app.Dispatcher.InvokeAsync(action);
         }
 
         SetUiState(() =>
@@ -950,7 +950,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     {
         var app = global::System.Windows.Application.Current;
         if (app == null) return;
-        app.Dispatcher.Invoke(() =>
+        app.Dispatcher.InvokeAsync(() =>
         {
             var answer = MessageBox.Show(
                 $"AI 提議和棋。\n{offerResult.Reason}\n\n是否接受？",
@@ -968,7 +968,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         string message = result.Accepted
             ? $"和棋成立！{result.Reason}"
             : $"提和遭拒。{result.Reason}";
-        app.Dispatcher.Invoke(() => StatusMessage = message);
+        app.Dispatcher.InvokeAsync(() => StatusMessage = message);
     }
 
     private void RefreshTTStats()
@@ -1017,7 +1017,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             {
                 string text = BuildTTExplorerText();
                 var app = global::System.Windows.Application.Current;
-                app?.Dispatcher.Invoke(() => TTExplorerText = text);
+                app?.Dispatcher.InvokeAsync(() => TTExplorerText = text);
             }
             finally
             {
@@ -1228,7 +1228,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         }
         else
         {
-            app.Dispatcher.Invoke(() =>
+            app.Dispatcher.InvokeAsync(() =>
             {
                 RedTimeDisplay   = red;
                 BlackTimeDisplay = black;
@@ -1263,10 +1263,10 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         analysisCts?.Dispose();
         analysisCts = null;
 
-        ttExplorerTimer.Stop();
-        ttExplorerTimer.Dispose();
-        clockDisplayTimer.Stop();
-        clockDisplayTimer.Dispose();
+        ttExplorerTimer?.Stop();
+        ttExplorerTimer?.Dispose();
+        clockDisplayTimer?.Stop();
+        clockDisplayTimer?.Dispose();
         MoveHistory?.Dispose();
     }
 }

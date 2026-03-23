@@ -38,7 +38,7 @@ public class JsonUserSettingsService : IUserSettingsService
         }
         catch (Exception ex)
         {
-            Trace.TraceWarning($"載入引擎設定失敗，使用預設值：{ex.Message}");
+            Trace.TraceWarning($"載入引擎設定失敗，使用預設值：{ex.GetType().Name}");
             return new ExternalEngineSettings();
         }
     }
@@ -52,7 +52,7 @@ public class JsonUserSettingsService : IUserSettingsService
         }
         catch (Exception ex)
         {
-            Trace.TraceWarning($"儲存引擎設定失敗：{ex.Message}");
+            Trace.TraceWarning($"儲存引擎設定失敗：{ex.GetType().Name}");
         }
     }
 }

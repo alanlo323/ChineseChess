@@ -179,7 +179,7 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     public int ServerPort
     {
         get => serverPort;
-        set => SetProperty(ref serverPort, value);
+        set => SetProperty(ref serverPort, Math.Clamp(value, 1024, 65535));
     }
 
     public string ServerStatus
@@ -744,7 +744,7 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
 
     private void OnServerStatusChanged(string message)
     {
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             ServerStatus    = message;
             IsServerRunning = engineServer.IsRunning;
