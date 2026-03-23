@@ -38,7 +38,9 @@
       "Bash(grep -c \"public.*Task.*Test\\\\|Fact\\\\]\" /d/Git/ChineseChess/ChineseChess.Tests/**/*.cs)",
       "Bash(grep -r \"benchmark\\\\|performance\\\\|BenchmarkDotNet\" /d/Git/ChineseChess --include=*.cs)",
       "Bash(ls:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(Select-String warn:*)",
+      "Bash(TaskOutput b8iuma6g6:*)"
     ]
   },
   "outputStyle": "Explanatory"
