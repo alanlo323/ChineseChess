@@ -413,6 +413,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     public ICommand ImportBlackTranspositionTableCommand { get; private set; } = null!;
     public ICommand RefreshTTStatsCommand { get; private set; } = null!;
     public ICommand MergeTranspositionTablesCommand { get; private set; } = null!;
+    public ICommand SetDifficultyPresetCommand { get; private set; } = null!;
 
     /// <summary>外部引擎 / 伺服器設定的 ViewModel（供 ExternalEngineView 綁定）。</summary>
     public ExternalEngineViewModel? ExternalEngine { get; }
@@ -672,6 +673,21 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             {
                 StatusMessage = $"TT 合併失敗：{ex.Message}";
             }
+        });
+
+        SetDifficultyPresetCommand = new RelayCommand(param =>
+        {
+            // 根據預設等級快速填入深度與思考時間
+            (int depth, int timeSec) = (param as string) switch
+            {
+                "beginner" => (2, 3),
+                "casual"   => (4, 8),
+                "advanced" => (6, 15),
+                "expert"   => (9, 25),
+                _          => (searchDepth, searchThinkingTime)
+            };
+            SearchDepth        = depth;
+            SearchThinkingTime = timeSec;
         });
 
         HintCommand = new AsyncRelayCommand(async _ =>

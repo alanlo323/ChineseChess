@@ -122,7 +122,8 @@ public class GameService : IGameService, IDisposable
         this.aiEngine = aiEngine;
         this.hintExplanationService = hintExplanationService;
         this.engineProvider = engineProvider;
-        bookmarkManager = new BookmarkManager();
+        bookmarkManager = new BookmarkManager(GetDefaultBookmarkPath());
+        bookmarkManager.Load();
         board = new Board(); // 初始局面
     }
 
@@ -1336,6 +1337,12 @@ public class GameService : IGameService, IDisposable
             : string.Empty;
         return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {scoreText}，建議 {bestMove}{ttHitRate}";
     }
+
+    private static string GetDefaultBookmarkPath() =>
+        System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ChineseChess",
+            "bookmarks.json");
 
     private static string FormatHintProgress(SearchResult result, PieceColor searchTurn, string label, string? notation = null, long elapsedMs = 0)
     {

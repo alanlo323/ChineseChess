@@ -166,6 +166,21 @@
                             <TextBlock Text="搜尋設定"
                                        Style="{StaticResource SectionTitleStyle}"
                                        Margin="0,0,0,6" />
+                            <!-- 難度等級快選 -->
+                            <UniformGrid Columns="4" Margin="0,0,0,6">
+                                <Button Content="新手" Style="{StaticResource CompactButtonStyle}"
+                                        Command="{Binding SetDifficultyPresetCommand}" CommandParameter="beginner"
+                                        Margin="0,0,3,0" ToolTip="深度 2 / 3 秒" />
+                                <Button Content="業餘" Style="{StaticResource CompactButtonStyle}"
+                                        Command="{Binding SetDifficultyPresetCommand}" CommandParameter="casual"
+                                        Margin="1,0,2,0" ToolTip="深度 4 / 8 秒" />
+                                <Button Content="進階" Style="{StaticResource CompactButtonStyle}"
+                                        Command="{Binding SetDifficultyPresetCommand}" CommandParameter="advanced"
+                                        Margin="2,0,1,0" ToolTip="深度 6 / 15 秒" />
+                                <Button Content="專家" Style="{StaticResource CompactButtonStyle}"
+                                        Command="{Binding SetDifficultyPresetCommand}" CommandParameter="expert"
+                                        Margin="3,0,0,0" ToolTip="深度 9 / 25 秒" />
+                            </UniformGrid>
                             <!-- 深度（內聯）-->
                             <Grid Margin="0,2,0,4">
                                 <Grid.ColumnDefinitions>
