@@ -51,6 +51,12 @@ public class BookmarkManager
         return bookmarks.Keys.ToList();
     }
 
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping  // 以原始中文字儲存，提升可讀性
+    };
+
     /// <summary>從 JSON 檔同步載入書籤（建構後立即呼叫，檔案不存在時安靜略過）。</summary>
     public void Load()
     {
@@ -85,11 +91,7 @@ public class BookmarkManager
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
 
-            var json = JsonSerializer.Serialize(bookmarks, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping  // 以原始中文字儲存，提升可讀性
-            });
+            var json = JsonSerializer.Serialize(bookmarks, SerializerOptions);
             File.WriteAllText(persistencePath, json, Encoding.UTF8);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
