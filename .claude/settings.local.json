@@ -35,7 +35,10 @@
       "Bash(do echo:*)",
       "Read(//d/Git/ChineseChess/ChineseChess.Tests/**)",
       "Bash(done)",
-      "Bash(grep -c \"public.*Task.*Test\\\\|Fact\\\\]\" /d/Git/ChineseChess/ChineseChess.Tests/**/*.cs)"
+      "Bash(grep -c \"public.*Task.*Test\\\\|Fact\\\\]\" /d/Git/ChineseChess/ChineseChess.Tests/**/*.cs)",
+      "Bash(grep -r \"benchmark\\\\|performance\\\\|BenchmarkDotNet\" /d/Git/ChineseChess --include=*.cs)",
+      "Bash(ls:*)",
+      "Bash(grep:*)"
     ]
   },
   "outputStyle": "Explanatory"
