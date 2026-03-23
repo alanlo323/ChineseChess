@@ -30,6 +30,10 @@ public class Board : IBoard
     // 無吃子半回合計數器（達 120 觸發和棋，皮卡魚規則）
     private int halfMoveClock;
 
+    // 將/帥位置快取：O(1) 查詢，避免在搜尋熱路徑中每次掃描 90 格
+    private int redKingIndex = -1;
+    private int blackKingIndex = -1;
+
     // 重要子計數器：車/馬/炮/兵（卒）的總數；歸零時觸發棋子不足和棋（皮卡魚規則）
     private int majorPieceCount;
 
@@ -115,6 +119,13 @@ public class Board : IBoard
         // 更新棋盤
         pieces[move.To] = piece;
         pieces[move.From] = Piece.None;
+
+        // 維護將/帥位置快取
+        if (piece.Type == PieceType.King)
+        {
+            if (piece.Color == PieceColor.Red) redKingIndex = move.To;
+            else blackKingIndex = move.To;
+        }
 
         // 更新 Zobrist：新增 Piece 到 To
         zobristKey ^= ZobristHash.GetPieceKey(move.To, piece.Color, piece.Type);
@@ -202,6 +213,13 @@ public class Board : IBoard
 
         pieces[state.Move.From] = movedPiece;
         pieces[state.Move.To] = capturedPiece;
+
+        // 還原將/帥位置快取
+        if (movedPiece.Type == PieceType.King)
+        {
+            if (movedPiece.Color == PieceColor.Red) redKingIndex = state.Move.From;
+            else blackKingIndex = state.Move.From;
+        }
 
         // 還原重要子計數
         if (!capturedPiece.IsNone)
@@ -305,6 +323,8 @@ public class Board : IBoard
         var backupMajorPieceCount = majorPieceCount;
         var backupZobristHistory = new List<ulong>(zobristHistory);
         var backupWasCheckAfterMove = new List<bool>(wasCheckAfterMove);
+        var backupRedKingIndex = redKingIndex;
+        var backupBlackKingIndex = blackKingIndex;
 
         // 清空棋盤
         for (int i = 0; i < BoardSize; i++) pieces[i] = Piece.None;
@@ -313,6 +333,8 @@ public class Board : IBoard
         zobristHistory.Clear();
         wasCheckAfterMove.Clear();
         halfMoveClock = 0;
+        redKingIndex = -1;
+        blackKingIndex = -1;
 
         try
         {
@@ -342,6 +364,12 @@ public class Board : IBoard
                     Piece p = CharToPiece(ch);
                     pieces[index] = p;
                     zobristKey ^= ZobristHash.GetPieceKey(index, p.Color, p.Type);
+                    // 同步維護將/帥位置快取
+                    if (p.Type == PieceType.King)
+                    {
+                        if (p.Color == PieceColor.Red) redKingIndex = index;
+                        else blackKingIndex = index;
+                    }
                     c++;
                 }
             }
@@ -388,6 +416,8 @@ public class Board : IBoard
             zobristKey = backupZobristKey;
             halfMoveClock = backupHalfMoveClock;
             majorPieceCount = backupMajorPieceCount;
+            redKingIndex = backupRedKingIndex;
+            blackKingIndex = backupBlackKingIndex;
             zobristHistory.Clear();
             zobristHistory.AddRange(backupZobristHistory);
             wasCheckAfterMove.Clear();
@@ -744,16 +774,7 @@ public class Board : IBoard
     }
 
     private int GetKingIndex(PieceColor color)
-    {
-        for (int i = 0; i < BoardSize; i++)
-        {
-            if (pieces[i].Color == color && pieces[i].Type == PieceType.King)
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
+        => color == PieceColor.Red ? redKingIndex : blackKingIndex;
 
     private bool IsSquareAttacked(int targetIndex, PieceColor byColor)
     {
@@ -921,6 +942,8 @@ public class Board : IBoard
         b.zobristKey = zobristKey;
         b.halfMoveClock = halfMoveClock;
         b.majorPieceCount = majorPieceCount;
+        b.redKingIndex = redKingIndex;
+        b.blackKingIndex = blackKingIndex;
         // 複製 Zobrist 歷史以便 Clone 後繼續做和棋判定
         b.zobristHistory.AddRange(zobristHistory);
         // 複製將軍歷史以便 Clone 後繼續做 WXF 長將偵測

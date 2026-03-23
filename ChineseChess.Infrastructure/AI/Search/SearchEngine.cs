@@ -254,6 +254,7 @@ public class SearchEngine : IAiEngine
             try
             {
                 int prevScore = 0;
+                int prevPrevScore = 0; // 用於自適應 Aspiration Window delta 計算
 
                 for (int depth = 1; depth <= settings.Depth; depth++)
                 {
@@ -271,8 +272,9 @@ public class SearchEngine : IAiEngine
                     }
                     else
                     {
-                        // 以上一層分數為中心建立縮小窗口
-                        int delta = AspWindowDelta;
+                        // 自適應 Aspiration Window：以前兩層分數差估算期望波動，
+                        // 分數穩定時縮小窗口（加快搜尋），波動大時擴大（減少重搜）
+                        int delta = Math.Clamp(Math.Abs(prevScore - prevPrevScore) + 25, 25, 100);
                         int alpha = prevScore - delta;
                         int beta = prevScore + delta;
                         int retries = 0;
@@ -321,6 +323,7 @@ public class SearchEngine : IAiEngine
                         }
                     }
 
+                    prevPrevScore = prevScore;
                     prevScore = score;
 
                     var bestMove = mainWorker.ProbeBestMove();

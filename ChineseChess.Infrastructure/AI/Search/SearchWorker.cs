@@ -30,8 +30,25 @@ internal sealed class SearchWorker
     private long nodesVisited;
     private Move[,] killerMoves;
     private int[,] historyTable;
+
+    // 預計算 LMR 對數表：LmrTable[depth, moveIndex] = (int)(log(depth) * log(moveIndex) / 2.0)
+    // 靜態唯讀，所有 worker 共用，無 GC 壓力
+    private static readonly int[,] LmrTable = BuildLmrTable();
+
+    private static int[,] BuildLmrTable()
+    {
+        var table = new int[128, 128];
+        for (int d = 1; d < 128; d++)
+            for (int m = 1; m < 128; m++)
+                table[d, m] = (int)(Math.Log(d) * Math.Log(m) / 2.0);
+        return table;
+    }
     // H2b：反制著法表（countermoveTable[opponentFrom, opponentTo] = bestCounterMove）
     private Move[,] countermoveTable;
+    // H3：Continuation History（contHistory[prevTo * 8100 + currFrom * 90 + currTo]）
+    // 記錄「在對手走至某格之後，當前著法的效果」，比純 from-to 歷史更捕捉棋面脈絡
+    // 大小：90 × 90 × 90 = 729,000 int ≈ 2.8MB per worker
+    private int[] contHistory;
     // H1：Triangular PV Table（pvTable[ply, plyOffset] 存放 PV 著法，pvLength[ply] 存放長度）
     private readonly Move[,] pvTable;
     private readonly int[] pvLength;
@@ -67,6 +84,10 @@ internal sealed class SearchWorker
 
     internal static readonly int[] PieceValues = { 0, 10000, 120, 120, 270, 600, 285, 30 };
     private static readonly int[] FutilityMargins = { 0, 200, 500 };
+    // QSearch Delta Pruning 邊際：最大吃子收益（車=600）+ 50 安全邊際
+    private const int QSearchDeltaMargin = 650;
+    // 個別著法 Delta Pruning 附加邊際（允許略低估）
+    private const int QSearchMoveDeltaMargin = 50;
     // ProbCut 相關常數
     private const int ProbCutMinDepth = 5;          // 觸發 ProbCut 的最小搜尋深度
     private const int ProbCutMargin = 120;           // probBeta = beta + ProbCutMargin
@@ -110,6 +131,7 @@ internal sealed class SearchWorker
         killerMoves = new Move[MaxSearchPly, 2];
         historyTable = new int[90, 90];
         countermoveTable = new Move[90, 90];
+        contHistory = new int[90 * 90 * 90];
         pvTable = new Move[MaxSearchPly, MaxSearchPly];
         pvLength = new int[MaxSearchPly];
     }
@@ -133,7 +155,7 @@ internal sealed class SearchWorker
         try
         {
             int prevScore = 0;
-            const int helperAspDelta = 50;
+            int prevPrevScore = 0; // 自適應 Aspiration Window delta 計算
             const int helperAspExpansion = 4;
             const int helperAspMaxRetries = 2;
 
@@ -154,7 +176,8 @@ internal sealed class SearchWorker
                 }
                 else
                 {
-                    int delta = helperAspDelta;
+                    // 自適應 delta：以前兩層分數差估算期望波動
+                    int delta = Math.Clamp(Math.Abs(prevScore - prevPrevScore) + 25, 25, 100);
                     int alpha = prevScore - delta;
                     int beta = prevScore + delta;
                     int retries = 0;
@@ -195,6 +218,7 @@ internal sealed class SearchWorker
                     }
                 }
 
+                prevPrevScore = prevScore;
                 prevScore = score;
 
                 var bestMove = Move.Null;
@@ -705,6 +729,9 @@ internal sealed class SearchWorker
                         if (opponentLastFrom >= 0 && opponentLastTo >= 0)
                         {
                             countermoveTable[opponentLastFrom, opponentLastTo] = move;
+                            // H3：更新 Continuation History
+                            int contIdx = opponentLastTo * 8100 + move.From * 90 + move.To;
+                            contHistory[contIdx] = Math.Min(contHistory[contIdx] + depth * depth, 16384);
                         }
 
                         tt.Store(board.ZobristKey, beta, depth, TTFlag.LowerBound, move);
@@ -738,6 +765,12 @@ internal sealed class SearchWorker
 
         int eval = evaluator.Evaluate(board);
         if (eval >= beta) return beta;
+
+        // Delta Pruning（整體）：若靜態評估加上最大可能收益仍低於 alpha，
+        // 整個局面已無望達到 alpha，直接剪枝。
+        // 注意：必須在 alpha = eval 之前執行，否則條件永遠為 false（eval + 650 < eval）
+        if (eval + QSearchDeltaMargin < alpha) return alpha;
+
         if (eval > alpha) alpha = eval;
 
         if (ply >= QuiescenceMaxPly) return alpha;
@@ -754,6 +787,19 @@ internal sealed class SearchWorker
 
             // SEE 過濾：跳過明顯不利的吃子（SEE < 0），減少靜止搜尋的爆炸性擴展
             if (StaticExchangeEvaluator.See(board, move, PieceValues) < 0) continue;
+
+            // Delta Pruning（個別著法）：若此著法的最大收益仍無法達到 alpha，跳過。
+            // 炮作為進攻方時豁免：跳吃機制讓靜態收益難以估算（與 ProbCut 的炮排除邏輯一致）
+            var capturedPiece = board.GetPiece(move.To);
+            if (!capturedPiece.IsNone)
+            {
+                var attackingPiece = board.GetPiece(move.From);
+                if (attackingPiece.Type != PieceType.Cannon)
+                {
+                    if (eval + PieceValues[(int)capturedPiece.Type] + QSearchMoveDeltaMargin < alpha)
+                        continue;
+                }
+            }
 
             board.MakeMove(move);
             int score = -Quiescence(-beta, -alpha, ply + 1);
@@ -807,6 +853,10 @@ internal sealed class SearchWorker
         for (int i = 0; i < 90; i++)
             for (int j = 0; j < 90; j++)
                 historyTable[i, j] /= 2;
+
+        // H3：Continuation History 同步衰減，讓舊資訊逐漸淡出
+        for (int i = 0; i < contHistory.Length; i++)
+            contHistory[i] /= 2;
     }
 
     // H2b/測試輔助：反制著法表存取
@@ -816,6 +866,12 @@ internal sealed class SearchWorker
     // 測試輔助：歷史表存取
     internal int GetHistoryScore(int from, int to) => historyTable[from, to];
     internal void SetHistoryScore(int from, int to, int value) => historyTable[from, to] = value;
+
+    // H3/測試輔助：Continuation History 存取
+    internal int GetContHistoryScore(int prevTo, int currFrom, int currTo)
+        => contHistory[prevTo * 8100 + currFrom * 90 + currTo];
+    internal void SetContHistoryScore(int prevTo, int currFrom, int currTo, int value)
+        => contHistory[prevTo * 8100 + currFrom * 90 + currTo] = value;
 
     /// <summary>
     /// 測試輔助：以排除指定走法的方式執行 Negamax（用於驗證 SE 排除搜尋機制）。
@@ -857,15 +913,16 @@ internal sealed class SearchWorker
         // 前 4 個著法或深度 < 3 不進行 LMR
         if (moveIndex < 4 || depth < 3) return 0;
 
-        // 基礎減量
-        int baseReduction = moveIndex >= 8 ? 2 : 1;
+        // 對數公式（查預計算表）：比 step function 更平滑，深層搜尋效果更好
+        // log(depth) × log(moveIndex) / 2.0；depth=6,m=8 ≈ 1.3；depth=12,m=16 ≈ 2.5
+        int baseReduction = Math.Max(1, LmrTable[Math.Min(depth, 127), Math.Min(moveIndex, 127)]);
 
         // H2c：根據歷史分數動態調整
         // 歷史分數高（此著法表現良好）→ 減少減量
-        // 閾值：4000 以上為高分（depth*depth 最大約 depth=20 → 400，累積可達 4000+）
         if (historyScore >= 4000) baseReduction = Math.Max(0, baseReduction - 1);
 
-        return baseReduction;
+        // 上限：不超過 depth/2，避免過度縮減
+        return Math.Min(baseReduction, depth / 2);
     }
 
     // --- ProbCut 資料收集 Helper ---
@@ -950,9 +1007,14 @@ internal sealed class SearchWorker
             return see >= 0 ? 100_000 + mvvLva : -50_000 + mvvLva;
         }
 
+        // H3：Continuation History 分數（安靜著法）
+        int contScore = opponentLastTo >= 0
+            ? contHistory[opponentLastTo * 8100 + move.From * 90 + move.To]
+            : 0;
+
         if (ply == 0 && MoveGivesCheck(move))
         {
-            return CheckMoveBonus + historyTable[move.From, move.To];
+            return CheckMoveBonus + historyTable[move.From, move.To] + contScore;
         }
 
         if (ply < MaxSearchPly)
@@ -962,13 +1024,15 @@ internal sealed class SearchWorker
         }
 
         // H2b：反制著法啟發式（優先級低於 killer，高於純 history）
+        // 注意：不加 contScore，確保此分數段（88_000 + history）不超過 killer 固定優先級
         if (opponentLastFrom >= 0 && opponentLastTo >= 0
             && countermoveTable[opponentLastFrom, opponentLastTo] == move)
         {
             return 88_000 + historyTable[move.From, move.To];
         }
 
-        return historyTable[move.From, move.To];
+        // H3：Continuation History 僅影響純 history 排序（最低優先級段）
+        return historyTable[move.From, move.To] + contScore;
     }
 
     internal bool ShouldExtendForCapture(Move move)
