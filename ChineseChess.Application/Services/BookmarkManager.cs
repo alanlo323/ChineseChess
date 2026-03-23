@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace ChineseChess.Application.Services;
 
@@ -18,6 +18,9 @@ public class BookmarkManager
     private readonly Dictionary<string, string> bookmarks = new();
     private readonly string? persistencePath;
 
+    /// <summary>書籤存檔失敗時發出通知，呼叫端可決定是否提示使用者。</summary>
+    public event Action<Exception>? SaveFailed;
+
     public BookmarkManager(string? persistencePath = null)
     {
         this.persistencePath = persistencePath;
@@ -25,6 +28,9 @@ public class BookmarkManager
 
     public void AddBookmark(string name, string fen)
     {
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("書籤名稱不可為空白。", nameof(name));
+        if (string.IsNullOrWhiteSpace(fen))  throw new ArgumentException("FEN 字串不可為空白。", nameof(fen));
+
         bookmarks[name] = fen;
         SaveIfConfigured();
     }
@@ -40,7 +46,7 @@ public class BookmarkManager
         SaveIfConfigured();
     }
 
-    public IEnumerable<string> GetBookmarkNames()
+    public IReadOnlyList<string> GetBookmarkNames()
     {
         return bookmarks.Keys.ToList();
     }
@@ -59,9 +65,13 @@ public class BookmarkManager
             foreach (var kv in loaded)
                 bookmarks[kv.Key] = kv.Value;
         }
-        catch (Exception)
+        catch (JsonException)
         {
-            // 書籤檔案損毀時靜默忽略，從空書籤開始
+            // 書籤 JSON 損毀時靜默忽略，從空書籤開始
+        }
+        catch (IOException)
+        {
+            // 讀取失敗（如權限問題）時靜默忽略，從空書籤開始
         }
     }
 
@@ -69,12 +79,23 @@ public class BookmarkManager
     {
         if (persistencePath is null) return;
 
-        // 同步寫入：書籤數量極小，不需要非同步開銷
-        var dir = Path.GetDirectoryName(persistencePath);
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
+        try
+        {
+            var dir = Path.GetDirectoryName(persistencePath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
 
-        var json = JsonSerializer.Serialize(bookmarks, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(persistencePath, json, Encoding.UTF8);
+            var json = JsonSerializer.Serialize(bookmarks, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping  // 以原始中文字儲存，提升可讀性
+            });
+            File.WriteAllText(persistencePath, json, Encoding.UTF8);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 通知呼叫端存檔失敗，讓 UI 層決定是否提示使用者
+            SaveFailed?.Invoke(ex);
+        }
     }
 }

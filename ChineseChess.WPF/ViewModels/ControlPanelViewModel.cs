@@ -678,6 +678,8 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         SetDifficultyPresetCommand = new RelayCommand(param =>
         {
             // 根據預設等級快速填入深度與思考時間
+            // 直接設定 backing fields 再呼叫一次 SetDifficulty，避免透過 property setter
+            // 觸發兩次 SetDifficulty（第一次會帶入「新深度＋舊時間」的中間狀態）
             (int depth, int timeSec) = (param as string) switch
             {
                 "beginner" => (2, 3),
@@ -686,8 +688,11 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
                 "expert"   => (9, 25),
                 _          => (searchDepth, searchThinkingTime)
             };
-            SearchDepth        = depth;
-            SearchThinkingTime = timeSec;
+            searchDepth        = depth;
+            searchThinkingTime = timeSec;
+            gameService.SetDifficulty(depth, timeSec * 1000);
+            OnPropertyChanged(nameof(SearchDepth));
+            OnPropertyChanged(nameof(SearchThinkingTime));
         });
 
         HintCommand = new AsyncRelayCommand(async _ =>
