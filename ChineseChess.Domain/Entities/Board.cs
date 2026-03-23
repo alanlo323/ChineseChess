@@ -121,11 +121,7 @@ public class Board : IBoard
         pieces[move.From] = Piece.None;
 
         // 維護將/帥位置快取
-        if (piece.Type == PieceType.King)
-        {
-            if (piece.Color == PieceColor.Red) redKingIndex = move.To;
-            else blackKingIndex = move.To;
-        }
+        if (piece.Type == PieceType.King) UpdateKingCache(piece.Color, move.To);
 
         // 更新 Zobrist：新增 Piece 到 To
         zobristKey ^= ZobristHash.GetPieceKey(move.To, piece.Color, piece.Type);
@@ -215,11 +211,7 @@ public class Board : IBoard
         pieces[state.Move.To] = capturedPiece;
 
         // 還原將/帥位置快取
-        if (movedPiece.Type == PieceType.King)
-        {
-            if (movedPiece.Color == PieceColor.Red) redKingIndex = state.Move.From;
-            else blackKingIndex = state.Move.From;
-        }
+        if (movedPiece.Type == PieceType.King) UpdateKingCache(movedPiece.Color, state.Move.From);
 
         // 還原重要子計數
         if (!capturedPiece.IsNone)
@@ -365,11 +357,7 @@ public class Board : IBoard
                     pieces[index] = p;
                     zobristKey ^= ZobristHash.GetPieceKey(index, p.Color, p.Type);
                     // 同步維護將/帥位置快取
-                    if (p.Type == PieceType.King)
-                    {
-                        if (p.Color == PieceColor.Red) redKingIndex = index;
-                        else blackKingIndex = index;
-                    }
+                    if (p.Type == PieceType.King) UpdateKingCache(p.Color, index);
                     c++;
                 }
             }
@@ -775,6 +763,12 @@ public class Board : IBoard
 
     private int GetKingIndex(PieceColor color)
         => color == PieceColor.Red ? redKingIndex : blackKingIndex;
+
+    private void UpdateKingCache(PieceColor color, int index)
+    {
+        if (color == PieceColor.Red) redKingIndex = index;
+        else blackKingIndex = index;
+    }
 
     private bool IsSquareAttacked(int targetIndex, PieceColor byColor)
     {

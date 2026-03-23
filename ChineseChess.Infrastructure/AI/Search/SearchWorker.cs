@@ -45,7 +45,7 @@ internal sealed class SearchWorker
     }
     // H2b：反制著法表（countermoveTable[opponentFrom, opponentTo] = bestCounterMove）
     private Move[,] countermoveTable;
-    // H3：Continuation History（contHistory[prevTo * 8100 + currFrom * 90 + currTo]）
+    // H3：Continuation History（contHistory[prevTo * ContHistStride + currFrom * 90 + currTo]）
     // 記錄「在對手走至某格之後，當前著法的效果」，比純 from-to 歷史更捕捉棋面脈絡
     // 大小：90 × 90 × 90 = 729,000 int ≈ 2.8MB per worker
     private int[] contHistory;
@@ -88,6 +88,8 @@ internal sealed class SearchWorker
     private const int QSearchDeltaMargin = 650;
     // 個別著法 Delta Pruning 附加邊際（允許略低估）
     private const int QSearchMoveDeltaMargin = 50;
+    // Continuation History 索引步幅：prevTo(90) × currFrom(90) = 90×90
+    private const int ContHistStride = 90 * 90;
     // ProbCut 相關常數
     private const int ProbCutMinDepth = 5;          // 觸發 ProbCut 的最小搜尋深度
     private const int ProbCutMargin = 120;           // probBeta = beta + ProbCutMargin
@@ -730,7 +732,7 @@ internal sealed class SearchWorker
                         {
                             countermoveTable[opponentLastFrom, opponentLastTo] = move;
                             // H3：更新 Continuation History
-                            int contIdx = opponentLastTo * 8100 + move.From * 90 + move.To;
+                            int contIdx = opponentLastTo * ContHistStride + move.From * 90 + move.To;
                             contHistory[contIdx] = Math.Min(contHistory[contIdx] + depth * depth, 16384);
                         }
 
@@ -790,16 +792,12 @@ internal sealed class SearchWorker
 
             // Delta Pruning（個別著法）：若此著法的最大收益仍無法達到 alpha，跳過。
             // 炮作為進攻方時豁免：跳吃機制讓靜態收益難以估算（與 ProbCut 的炮排除邏輯一致）
+            // GenerateCaptureMoves 保證 move.To 有棋子，不需額外 IsNone 檢查
             var capturedPiece = board.GetPiece(move.To);
-            if (!capturedPiece.IsNone)
-            {
-                var attackingPiece = board.GetPiece(move.From);
-                if (attackingPiece.Type != PieceType.Cannon)
-                {
-                    if (eval + PieceValues[(int)capturedPiece.Type] + QSearchMoveDeltaMargin < alpha)
-                        continue;
-                }
-            }
+            var attackingPiece = board.GetPiece(move.From);
+            if (attackingPiece.Type != PieceType.Cannon &&
+                eval + PieceValues[(int)capturedPiece.Type] + QSearchMoveDeltaMargin < alpha)
+                continue;
 
             board.MakeMove(move);
             int score = -Quiescence(-beta, -alpha, ply + 1);
@@ -869,9 +867,9 @@ internal sealed class SearchWorker
 
     // H3/測試輔助：Continuation History 存取
     internal int GetContHistoryScore(int prevTo, int currFrom, int currTo)
-        => contHistory[prevTo * 8100 + currFrom * 90 + currTo];
+        => contHistory[prevTo * ContHistStride + currFrom * 90 + currTo];
     internal void SetContHistoryScore(int prevTo, int currFrom, int currTo, int value)
-        => contHistory[prevTo * 8100 + currFrom * 90 + currTo] = value;
+        => contHistory[prevTo * ContHistStride + currFrom * 90 + currTo] = value;
 
     /// <summary>
     /// 測試輔助：以排除指定走法的方式執行 Negamax（用於驗證 SE 排除搜尋機制）。
@@ -1009,7 +1007,7 @@ internal sealed class SearchWorker
 
         // H3：Continuation History 分數（安靜著法）
         int contScore = opponentLastTo >= 0
-            ? contHistory[opponentLastTo * 8100 + move.From * 90 + move.To]
+            ? contHistory[opponentLastTo * ContHistStride + move.From * 90 + move.To]
             : 0;
 
         if (ply == 0 && MoveGivesCheck(move))
