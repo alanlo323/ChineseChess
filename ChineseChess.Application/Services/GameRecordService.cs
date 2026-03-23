@@ -46,10 +46,17 @@ public class GameRecordService : IGameRecordService
         await File.WriteAllTextAsync(filePath, json, System.Text.Encoding.UTF8, ct);
     }
 
+    private const long MaxImportFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+
     public async Task<GameRecord> ImportAsync(string filePath, CancellationToken ct = default)
     {
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"棋局檔案不存在：{filePath}");
+
+        var fileInfo = new FileInfo(filePath);
+        if (fileInfo.Length > MaxImportFileSizeBytes)
+            throw new InvalidOperationException(
+                $"棋局檔案過大（{fileInfo.Length / 1024 / 1024} MB），上限為 {MaxImportFileSizeBytes / 1024 / 1024} MB");
 
         var json = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, ct);
         return Deserialize(json);

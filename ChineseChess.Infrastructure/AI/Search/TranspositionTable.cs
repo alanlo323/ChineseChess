@@ -643,10 +643,17 @@ public class TranspositionTable
         });
     }
 
+    private const long MaxJsonImportSizeBytes = 500 * 1024 * 1024; // 500 MB
+
     public void ImportFromJson(Stream input)
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));
+
+        // 防止惡意超大 JSON 造成記憶體耗盡
+        if (input.CanSeek && input.Length > MaxJsonImportSizeBytes)
+            throw new InvalidOperationException(
+                $"TT JSON 資料過大（{input.Length / 1024 / 1024} MB），上限為 {MaxJsonImportSizeBytes / 1024 / 1024} MB");
 
         TTStateSnapshot? snapshot;
         try
