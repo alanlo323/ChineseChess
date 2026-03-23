@@ -74,7 +74,7 @@ public class MainViewModel : ObservableObject, IDisposable
         var scoreText = FormatScoreWithPerspective(hint.Score, turnLabel);
 
         var notation = MoveNotation.ToNotation(hint.BestMove, gameService.CurrentBoard);
-        return $"提示：{notation} | 分數: {scoreText} | 深度: {hint.Depth} | 節點: {hint.Nodes}";
+        return $"提示：{notation} | 分數: {scoreText} | 深度: {hint.Depth} | 節點: {hint.Nodes:N0}";
     }
 
     private static string FormatScoreWithPerspective(int score, string turnLabel)

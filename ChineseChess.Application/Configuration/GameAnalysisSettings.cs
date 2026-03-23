@@ -2,7 +2,7 @@ namespace ChineseChess.Application.Configuration;
 
 public class GameAnalysisSettings
 {
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled { get; set; } = false;
     public string Endpoint { get; set; } = "http://localhost:11434/v1";
     public string Model { get; set; } = "gpt-4o-mini";
     public string ApiKey { get; set; } = string.Empty;

@@ -466,7 +466,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     private void InitializeSettings(GameSettings settings, GameAnalysisSettings? analysisSettings)
     {
-        isGameAnalysisEnabled   = analysisSettings?.IsEnabled ?? true;
+        isGameAnalysisEnabled   = analysisSettings?.IsEnabled ?? false;
         gameAnalysisDisclaimer  = analysisSettings?.Disclaimer ?? "以下分析由 AI 產生，僅供參考，不代表最終結論。";
 
         searchDepth            = settings.SearchDepth;

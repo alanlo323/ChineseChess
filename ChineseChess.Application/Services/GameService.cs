@@ -1329,13 +1329,14 @@ public class GameService : IGameService, IDisposable
             : "n/a";
         var turnLabel = board.Turn == PieceColor.Red ? "紅方" : "黑方";
         var scoreText = FormatScore(progress.Score, turnLabel);
+        var nodesText = $"{progress.Nodes:N0}";
         var bestMove = string.IsNullOrWhiteSpace(progress.BestMove) ? "待更新" : progress.BestMove;
         var mode = progress.IsHeartbeat ? "（即時）" : "（階段）";
 
         var ttHitRate = progress.TtHitRate > 0
             ? $"，TT:{progress.TtHitRate:P0}"
             : string.Empty;
-        return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {progress.Nodes}（{speed}），分數 {scoreText}，建議 {bestMove}{ttHitRate}";
+        return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {nodesText}（{speed}），分數 {scoreText}，建議 {bestMove}{ttHitRate}";
     }
 
     private static string GetDefaultBookmarkPath() =>
@@ -1356,7 +1357,7 @@ public class GameService : IGameService, IDisposable
         var moveText  = notation ?? result.BestMove.ToString();
         var elapsedText = elapsedMs > 0 ? $" | 用時: {elapsedMs / 1000.0:0.0}s" : string.Empty;
 
-        return $"{label}：{moveText} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes}{elapsedText}";
+        return $"{label}：{moveText} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes:N0}{elapsedText}";
     }
 
     private static string FormatScore(int score, string turnLabel)
