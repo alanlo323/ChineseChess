@@ -200,12 +200,12 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
     private void OnBoardUpdated()
     {
         // 必須在 UI 執行緒執行
-        System.Windows.Application.Current?.Dispatcher.Invoke(RefreshBoard);
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(RefreshBoard);
     }
 
     private void OnHintReady(SearchResult hint)
     {
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             hintFrom = null;
             hintTo = null;
@@ -243,7 +243,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
     /// </summary>
     private void OnHintUpdated(SearchResult intermediateHint)
     {
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             // 清除舊的提示高亮
             ClearHintHighlights();
@@ -374,7 +374,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             // async void 中的未處理例外會導致應用程式崩潰，在此統一攔截並顯示訊息
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
                 System.Windows.MessageBox.Show($"操作時發生錯誤：{ex.Message}", "錯誤",
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error));
         }
@@ -382,7 +382,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
 
     private void OnSmartHintReady(IReadOnlyList<MoveEvaluation> evaluations)
     {
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             ClearSmartHintHighlights();
 
@@ -409,7 +409,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
 
     private void OnMultiPvHintReady(IReadOnlyList<MoveEvaluation> evaluations)
     {
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             // rank#1 高亮由 HintReady → OnHintReady 處理；
             // rank#2~N Badge 已移除，改由使用者點選清單項目來切換高亮
@@ -507,7 +507,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
     /// </summary>
     public void SelectMultiPvMove(Move? move)
     {
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
             ApplyMultiPvMoveHighlight(move));
     }
 

@@ -43,7 +43,7 @@ public class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        global::System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        global::System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
         {
             AnalysisText = progress;
         });
@@ -57,7 +57,7 @@ public class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        global::System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        global::System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
         {
             AnalysisText = FormatHintText(hint);
         });
