@@ -40,7 +40,8 @@
       "Bash(ls:*)",
       "Bash(grep:*)",
       "Bash(Select-String warn:*)",
-      "Bash(TaskOutput b8iuma6g6:*)"
+      "Bash(TaskOutput b8iuma6g6:*)",
+      "Skill(update-config)"
     ]
   },
   "outputStyle": "Explanatory"
