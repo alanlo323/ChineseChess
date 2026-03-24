@@ -1,0 +1,122 @@
+<UserControl x:Class="ChineseChess.WPF.Views.NnueView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:NnueViewModel}">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,8">
+
+            <!-- ─── 模型狀態 ──────────────────────────────────────────── -->
+            <TextBlock Text="NNUE 模型"
+                       Style="{StaticResource SectionTitleStyle}"
+                       Margin="0,0,0,6" />
+
+            <!-- 狀態文字 -->
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="{StaticResource InkBrush}"
+                       FontStyle="Italic"
+                       Margin="0,0,0,8"
+                       TextWrapping="Wrap" />
+
+            <!-- 模型路徑 -->
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0"
+                         Text="{Binding ModelPath, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource InputControlStyle}"
+                         ToolTip="NNUE 模型檔路徑（.nnue）" />
+                <Button Grid.Column="1"
+                        Content="瀏覽…"
+                        Command="{Binding BrowseModelCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="4,0,0,0" />
+            </Grid>
+
+            <!-- 載入 / 卸載按鈕 -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="載入模型"
+                        Command="{Binding LoadModelCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="0,0,6,0" />
+                <Button Content="卸載模型"
+                        Command="{Binding UnloadModelCommand}"
+                        Style="{StaticResource ActionButtonStyle}" />
+            </StackPanel>
+
+            <!-- ─── 模型資訊（已載入時顯示）─────────────────────────── -->
+            <GroupBox Header="模型資訊"
+                      Visibility="{Binding IsLoaded, Converter={StaticResource BoolToVisibilityConverter}}"
+                      Margin="0,0,0,8"
+                      Padding="8">
+                <StackPanel>
+                    <Grid Margin="0,0,0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="描述："
+                                   Style="{StaticResource FormLabelStyle}" />
+                        <TextBlock Grid.Column="1" Text="{Binding ModelDescription}"
+                                   Foreground="{StaticResource InkBrush}"
+                                   TextWrapping="Wrap" />
+                    </Grid>
+                    <Grid Margin="0,0,0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="大小："
+                                   Style="{StaticResource FormLabelStyle}" />
+                        <TextBlock Grid.Column="1" Text="{Binding ModelFileSizeText}"
+                                   Foreground="{StaticResource InkBrush}" />
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="載入時間："
+                                   Style="{StaticResource FormLabelStyle}" />
+                        <TextBlock Grid.Column="1" Text="{Binding ModelLoadedAt}"
+                                   Foreground="{StaticResource InkBrush}" />
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- ─── 評估模式 ─────────────────────────────────────────── -->
+            <TextBlock Text="評估模式"
+                       Style="{StaticResource SectionTitleStyle}"
+                       Margin="0,4,0,6" />
+
+            <ComboBox ItemsSource="{Binding EvaluationModes}"
+                      SelectedItem="{Binding EvaluationMode}"
+                      Style="{StaticResource InputControlStyle}"
+                      Margin="0,0,0,4" />
+
+            <TextBlock Text="Composite：NNUE 已載入時使用 NNUE，否則自動退回手工評估"
+                       Foreground="{StaticResource InkBrush}"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,2" />
+            <TextBlock Text="PureNnue：強制使用 NNUE（未載入時拋出例外）"
+                       Foreground="{StaticResource InkBrush}"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,2" />
+            <TextBlock Text="Disabled：停用 NNUE，始終使用手工評估"
+                       Foreground="{StaticResource InkBrush}"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,8" />
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

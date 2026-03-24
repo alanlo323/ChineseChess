@@ -418,6 +418,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>外部引擎 / 伺服器設定的 ViewModel（供 ExternalEngineView 綁定）。</summary>
     public ExternalEngineViewModel? ExternalEngine { get; }
 
+    /// <summary>NNUE 設定的 ViewModel（供 NnueView 綁定）。</summary>
+    public NnueViewModel? Nnue { get; }
+
     /// <summary>棋譜側邊欄 ViewModel。</summary>
     public MoveHistoryViewModel? MoveHistory { get; }
 
@@ -450,10 +453,11 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>黑方已設定引擎路徑（決定快速開關 CheckBox 是否可用）。</summary>
     public bool HasBlackEngineConfig => ExternalEngine?.HasBlackEngineConfig ?? false;
 
-    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null)
+    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null, NnueViewModel? nnueViewModel = null)
     {
         ExternalEngine = externalEngineViewModel;
         MoveHistory = moveHistoryViewModel;
+        Nnue = nnueViewModel;
         this.gameService = gameService;
         this.gameAnalysisService = gameAnalysisService;
 

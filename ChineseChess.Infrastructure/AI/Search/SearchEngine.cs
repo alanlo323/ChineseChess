@@ -36,8 +36,12 @@ public class SearchEngine : IAiEngine
     }
 
     public SearchEngine(GameSettings settings)
+        : this(settings, new HandcraftedEvaluator()) { }
+
+    /// <summary>以注入的評估器建立引擎（供 NNUE / 複合評估器使用）。</summary>
+    public SearchEngine(GameSettings settings, IEvaluator evaluator)
     {
-        evaluator = new HandcraftedEvaluator();
+        this.evaluator = evaluator;
         tt = new TranspositionTable(settings.TranspositionTableSizeMb);
     }
 
@@ -71,8 +75,9 @@ public class SearchEngine : IAiEngine
             var token = linkedCts.Token;
 
             // --- 建立主 worker ---
+            // 每個 worker 需要獨立的 evaluator 實例（NnueEvaluator 有 per-instance 累加器）
             // ct = 使用者明確停止 token（hardStopCt），token = 時間限制 + 使用者停止（合併）
-            var mainWorker = new SearchWorker(board.Clone(), evaluator, tt, token, ct, pauseSignal);
+            var mainWorker = new SearchWorker(board.Clone(), evaluator.CreateWorkerInstance(), tt, token, ct, pauseSignal);
 
             // --- 啟動輔助 worker（各自獨立執行迭代加深） ---
             var helperWorkers = new SearchWorker[threadCount - 1];
@@ -80,7 +85,7 @@ public class SearchEngine : IAiEngine
 
             for (int i = 0; i < threadCount - 1; i++)
             {
-                var helper = new SearchWorker(board.Clone(), evaluator, tt, token, ct, pauseSignal);
+                var helper = new SearchWorker(board.Clone(), evaluator.CreateWorkerInstance(), tt, token, ct, pauseSignal);
                 helperWorkers[i] = helper;
 
                 int helperDepth = settings.Depth + 1 + (i % 2);
@@ -449,7 +454,7 @@ public class SearchEngine : IAiEngine
         return Task.Run(() =>
         {
             using var noopPause = new ManualResetEventSlim(true);
-            var worker = new SearchWorker(board.Clone(), evaluator, tt, ct, ct, noopPause);
+            var worker = new SearchWorker(board.Clone(), evaluator.CreateWorkerInstance(), tt, ct, ct, noopPause);
             return worker.EvaluateRootMoves(moves, depth, progress, threadLabel: "單執行緒");
         }, ct);
     }
@@ -484,7 +489,7 @@ public class SearchEngine : IAiEngine
                 {
                     var clonedBoard = board.Clone();
                     clonedBoard.MakeMove(move);
-                    var worker = new SearchWorker(clonedBoard, evaluator, tt, ct, ct, noopPause);
+                    var worker = new SearchWorker(clonedBoard, evaluator.CreateWorkerInstance(), tt, ct, ct, noopPause);
                     // 限制延伸深度：board 已走一步，SearchSingleDepth 從 ply=0 開始
                     // 延伸預算 +4：避免 check extension 在深層局面造成指數爆炸
                     worker.effectiveMaxPly = (depth - 1) + 4;

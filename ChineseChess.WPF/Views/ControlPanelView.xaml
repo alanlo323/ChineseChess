@@ -847,6 +847,11 @@
                 <views:ExternalEngineView DataContext="{Binding ExternalEngine}" />
             </TabItem>
 
+            <!-- NNUE 頁 -->
+            <TabItem Header="NNUE">
+                <views:NnueView DataContext="{Binding Nnue}" />
+            </TabItem>
+
             <!-- 棋譜頁 -->
             <TabItem Header="棋譜">
                 <views:MoveHistoryView DataContext="{Binding MoveHistory}" />

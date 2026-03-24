@@ -136,6 +136,9 @@ internal sealed class SearchWorker
         contHistory = new int[90 * 90 * 90];
         pvTable = new Move[MaxSearchPly, MaxSearchPly];
         pvLength = new int[MaxSearchPly];
+
+        // NNUE：搜尋開始前刷新累加器（HandcraftedEvaluator 的 no-op）
+        evaluator.RefreshAccumulator(board);
     }
 
     /// <summary>
@@ -292,11 +295,15 @@ internal sealed class SearchWorker
             if (ct.IsCancellationRequested) break;
 
             var move = moveList[i];
+            var movedPiece    = board.GetPiece(move.From);
+            var capturedPiece = board.GetPiece(move.To);
             try
             {
                 board.MakeMove(move);
+                evaluator.OnMakeMove(board, move, movedPiece, capturedPiece);
                 // Negamax 在 MakeMove 後已切換行棋方，取負號還原為「做出此走法的玩家」視角
                 int score = -Negamax(searchDepth, 1, -Infinity, Infinity, false);
+                evaluator.OnUndoMove(board, move);
                 board.UnmakeMove(move);
 
                 results.Add((move, score));
@@ -308,6 +315,7 @@ internal sealed class SearchWorker
             catch (OperationCanceledException)
             {
                 // MakeMove 已執行，Negamax 中取消 → 還原棋盤後停止
+                evaluator.OnUndoMove(board, move);
                 board.UnmakeMove(move);
                 break;
             }
@@ -471,7 +479,10 @@ internal sealed class SearchWorker
                         StaticExchangeEvaluator.See(board, captureMove, PieceValues) < probBeta - staticEvalForProb)
                         continue;
 
+                    var probMovedPiece    = board.GetPiece(captureMove.From);
+                    var probCapturedPiece = board.GetPiece(captureMove.To);
                     board.MakeMove(captureMove);
+                    evaluator.OnMakeMove(board, captureMove, probMovedPiece, probCapturedPiece);
 
                     // givesCheck 守衛（WXF 特化）：
                     // MakeMove 後 board.Turn 已切換為對手方，IsCheck(board.Turn) 正確檢查
@@ -479,6 +490,7 @@ internal sealed class SearchWorker
                     // ProbCut 機率邊界無法涵蓋，須排除此類候選避免誤剪。
                     if (!DataCollectionMode && board.IsCheck(board.Turn))
                     {
+                        evaluator.OnUndoMove(board, captureMove);
                         board.UnmakeMove(captureMove);
                         continue;
                     }
@@ -495,6 +507,7 @@ internal sealed class SearchWorker
                             captureMove.From, captureMove.To);
                     }
 
+                    evaluator.OnUndoMove(board, captureMove);
                     board.UnmakeMove(captureMove);
 
                     // FalseCount：QSearch 預篩通過但深搜未確認（false positive）
@@ -604,6 +617,7 @@ internal sealed class SearchWorker
             bool isKiller = IsKillerMove(ply, move);
 
             board.MakeMove(move);
+            evaluator.OnMakeMove(board, move, movingPiece, targetPiece);
 
             bool givesCheck = board.IsCheck(board.Turn);
             plyZobristKeys[ply + 1]  = board.ZobristKey;
@@ -620,6 +634,7 @@ internal sealed class SearchWorker
             score = -Negamax(depth - 1 + extension, ply + 1, -beta, -alpha, false,
                 move.From, move.To);
 
+            evaluator.OnUndoMove(board, move);
             board.UnmakeMove(move);
 
             if (score > bestScore)
@@ -672,6 +687,7 @@ internal sealed class SearchWorker
             }
 
             board.MakeMove(move);
+            evaluator.OnMakeMove(board, move, movingPiece, targetPiece);
 
             bool givesCheck = board.IsCheck(board.Turn);
             plyZobristKeys[ply + 1]  = board.ZobristKey;
@@ -710,6 +726,7 @@ internal sealed class SearchWorker
                     move.From, move.To);
             }
 
+            evaluator.OnUndoMove(board, move);
             board.UnmakeMove(move);
 
             if (score > bestScore)
@@ -800,7 +817,9 @@ internal sealed class SearchWorker
                 continue;
 
             board.MakeMove(move);
+            evaluator.OnMakeMove(board, move, attackingPiece, capturedPiece);
             int score = -Quiescence(-beta, -alpha, ply + 1);
+            evaluator.OnUndoMove(board, move);
             board.UnmakeMove(move);
 
             if (score >= beta) return beta;
@@ -1048,13 +1067,17 @@ internal sealed class SearchWorker
     internal bool CreatesImmediateThreat(Move move)
     {
         bool hadThreatBefore = SideToMoveHasHighValueCapture();
+        var movedPiece    = board.GetPiece(move.From);
+        var capturedPiece = board.GetPiece(move.To);
         board.MakeMove(move);
+        evaluator.OnMakeMove(board, move, movedPiece, capturedPiece);
         try
         {
             return !hadThreatBefore && CreatesImmediateThreatFromCurrentPosition();
         }
         finally
         {
+            evaluator.OnUndoMove(board, move);
             board.UnmakeMove(move);
         }
     }
@@ -1112,26 +1135,34 @@ internal sealed class SearchWorker
 
     private bool MoveGivesCheck(Move move)
     {
+        var movedPiece    = board.GetPiece(move.From);
+        var capturedPiece = board.GetPiece(move.To);
         board.MakeMove(move);
+        evaluator.OnMakeMove(board, move, movedPiece, capturedPiece);
         try
         {
             return board.IsCheck(board.Turn);
         }
         finally
         {
+            evaluator.OnUndoMove(board, move);
             board.UnmakeMove(move);
         }
     }
 
     private bool IsMoveRecapturable(Move move)
     {
+        var movedPiece    = board.GetPiece(move.From);
+        var capturedPiece = board.GetPiece(move.To);
         board.MakeMove(move);
+        evaluator.OnMakeMove(board, move, movedPiece, capturedPiece);
         try
         {
             return IsCurrentSquareRecapturable(move.To);
         }
         finally
         {
+            evaluator.OnUndoMove(board, move);
             board.UnmakeMove(move);
         }
     }

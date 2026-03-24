@@ -4,6 +4,8 @@ using ChineseChess.Application.Services;
 using ChineseChess.Infrastructure.AI.Analysis;
 using ChineseChess.Infrastructure.AI.Book;
 using ChineseChess.Infrastructure.AI.Hint;
+using ChineseChess.Infrastructure.AI.Nnue.Evaluator;
+using ChineseChess.Infrastructure.AI.Nnue.Network;
 using ChineseChess.Infrastructure.AI.Protocol;
 using ChineseChess.Infrastructure.AI.Search;
 using ChineseChess.Infrastructure.Persistence;
@@ -57,9 +59,18 @@ public partial class App : System.Windows.Application
         // 開局庫（啟動時從預設資料建構，若設定檔存在則改從檔案載入）
         services.AddSingleton<IOpeningBook>(_ => BuildOpeningBook(openingBookSettings));
 
-        // 基礎設施（Infrastructure）
+        // 基礎設施（Infrastructure）— NNUE
+        services.AddSingleton<INnueSettingsService, JsonNnueSettingsService>();
+        services.AddSingleton<INnueNetwork, NnueNetwork>();
+        // CompositeEvaluator：NNUE 已載入時使用 NNUE，否則 fallback 至 HandcraftedEvaluator
+        services.AddSingleton<ChineseChess.Infrastructure.AI.Evaluators.IEvaluator>(sp =>
+            new CompositeEvaluator(sp.GetRequiredService<INnueNetwork>()));
+
         // SearchEngine：底層引擎（不含開局庫），供 ChessEngineServer 直接使用
-        services.AddSingleton<SearchEngine>();
+        services.AddSingleton<SearchEngine>(sp =>
+            new SearchEngine(
+                sp.GetRequiredService<GameSettings>(),
+                sp.GetRequiredService<ChineseChess.Infrastructure.AI.Evaluators.IEvaluator>()));
         // IAiEngine：包裝開局庫的 Decorator，供 GameService / EngineProvider 使用
         services.AddSingleton<IAiEngine>(sp =>
             new OpeningBookEngineDecorator(
@@ -90,13 +101,18 @@ public partial class App : System.Windows.Application
         services.AddTransient<MoveHistoryViewModel>(sp => new MoveHistoryViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<IGameRecordService>()));
+        services.AddSingleton<NnueViewModel>(sp =>
+            new NnueViewModel(
+                sp.GetRequiredService<INnueNetwork>(),
+                sp.GetRequiredService<INnueSettingsService>()));
         services.AddTransient<ControlPanelViewModel>(sp => new ControlPanelViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<GameSettings>(),
             sp.GetService<IGameAnalysisService>(),
             sp.GetService<GameAnalysisSettings>(),
             sp.GetRequiredService<ExternalEngineViewModel>(),
-            sp.GetRequiredService<MoveHistoryViewModel>()));
+            sp.GetRequiredService<MoveHistoryViewModel>(),
+            sp.GetRequiredService<NnueViewModel>()));
 
         // 視圖層（Views）
         services.AddTransient<MainWindowView>();
