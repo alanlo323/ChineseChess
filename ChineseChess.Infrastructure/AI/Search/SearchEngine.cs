@@ -48,10 +48,10 @@ public class SearchEngine : IAiEngine
     // 測試用：使用預設設定
     public SearchEngine() : this(new GameSettings()) { }
 
-    // 以既有 TT 建立引擎（CloneWithCopiedTT 專用）
-    private SearchEngine(TranspositionTable tt)
+    // 以既有 TT 建立引擎（CloneWithCopiedTT / CloneWithEmptyTT 專用），保留原始評估器
+    private SearchEngine(IEvaluator evaluator, TranspositionTable tt)
     {
-        evaluator = new HandcraftedEvaluator();
+        this.evaluator = evaluator;
         this.tt = tt;
     }
 
@@ -597,10 +597,10 @@ public class SearchEngine : IAiEngine
     public TTStatistics GetTTStatistics() => tt.GetStatistics();
 
     /// <inheritdoc/>
-    public IAiEngine CloneWithCopiedTT() => new SearchEngine(tt.Clone());
+    public IAiEngine CloneWithCopiedTT() => new SearchEngine(evaluator, tt.Clone());
 
     /// <inheritdoc/>
-    public IAiEngine CloneWithEmptyTT() => new SearchEngine(new TranspositionTable(tt.GetStatistics().Capacity));
+    public IAiEngine CloneWithEmptyTT() => new SearchEngine(evaluator, new TranspositionTable(tt.GetStatistics().Capacity));
 
     /// <inheritdoc/>
     public void MergeTranspositionTableFrom(IAiEngine other)

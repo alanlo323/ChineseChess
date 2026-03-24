@@ -4,6 +4,7 @@ using ChineseChess.Application.Services;
 using ChineseChess.Infrastructure.AI.Analysis;
 using ChineseChess.Infrastructure.AI.Book;
 using ChineseChess.Infrastructure.AI.Hint;
+using ChineseChess.Infrastructure.AI.Nnue;
 using ChineseChess.Infrastructure.AI.Nnue.Evaluator;
 using ChineseChess.Infrastructure.AI.Nnue.Network;
 using ChineseChess.Infrastructure.AI.Protocol;
@@ -81,8 +82,18 @@ public partial class App : System.Windows.Application
             new ChessEngineServer(sp.GetRequiredService<SearchEngine>()));
         services.AddSingleton<IUserSettingsService, JsonUserSettingsService>();
 
+        // NNUE 引擎工廠（Infrastructure → Application 介面的橋接）
+        services.AddSingleton<IAiEngineFactory>(sp =>
+            new NnueAiEngineFactory(
+                sp.GetRequiredService<GameSettings>(),
+                sp.GetRequiredService<IOpeningBook>(),
+                sp.GetRequiredService<OpeningBookSettings>()));
+
         // 應用層（Application）
-        services.AddSingleton<IEngineProvider, EngineProvider>();
+        services.AddSingleton<IEngineProvider>(sp =>
+            new EngineProvider(
+                sp.GetRequiredService<IAiEngine>(),
+                sp.GetRequiredService<IAiEngineFactory>()));
         services.AddSingleton<IGameService>(sp => new GameService(
             sp.GetRequiredService<IAiEngine>(),
             sp.GetService<IHintExplanationService>(),
@@ -104,7 +115,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton<NnueViewModel>(sp =>
             new NnueViewModel(
                 sp.GetRequiredService<INnueNetwork>(),
-                sp.GetRequiredService<INnueSettingsService>()));
+                sp.GetRequiredService<INnueSettingsService>(),
+                sp.GetRequiredService<IEngineProvider>()));
         services.AddTransient<ControlPanelViewModel>(sp => new ControlPanelViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<GameSettings>(),

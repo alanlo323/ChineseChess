@@ -13,6 +13,20 @@ public class NnueSettings
 
     /// <summary>評估模式。</summary>
     public NnueEvaluationMode EvaluationMode { get; set; } = NnueEvaluationMode.Composite;
+
+    // ── AIvsAI 每方獨立 NNUE 設定 ─────────────────────────────────────────
+
+    /// <summary>
+    /// 是否啟用每方獨立 NNUE 設定（AIvsAI 模式）。
+    /// false（預設）：紅黑方共用上方的全域設定；true：各自使用下方的獨立設定。
+    /// </summary>
+    public bool UsePerPlayerNnue { get; set; } = false;
+
+    /// <summary>紅方 AI 的獨立 NNUE 設定（null 表示沿用全域設定）。</summary>
+    public NnueSettings? RedPlayerSettings { get; set; } = null;
+
+    /// <summary>黑方 AI 的獨立 NNUE 設定（null 表示沿用全域設定）。</summary>
+    public NnueSettings? BlackPlayerSettings { get; set; } = null;
 }
 
 /// <summary>NNUE 評估模式。</summary>

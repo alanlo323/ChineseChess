@@ -1,3 +1,5 @@
+using ChineseChess.Application.Configuration;
+
 namespace ChineseChess.Application.Interfaces;
 
 /// <summary>
@@ -29,4 +31,22 @@ public interface IEngineProvider
 
     /// <summary>黑方目前是否使用外部引擎。</summary>
     bool IsBlackExternal { get; }
+
+    // ── 每方獨立 NNUE 設定 ────────────────────────────────────────────────
+
+    /// <summary>
+    /// 套用每方獨立的 NNUE 設定，為各方建立帶獨立 NnueNetwork 的引擎（非同步，因為需要載入模型）。
+    /// 傳入 null 表示該方使用 Handcrafted 評估器。
+    /// 優先順序：外部引擎 > 每方 NNUE 引擎 > 全域內建引擎。
+    /// </summary>
+    Task ApplyPerPlayerNnueAsync(
+        NnueEngineConfig? redConfig,
+        NnueEngineConfig? blackConfig,
+        CancellationToken ct = default);
+
+    /// <summary>清除每方獨立 NNUE 設定，回復使用內建（全域）引擎。</summary>
+    void ClearPerPlayerNnue();
+
+    /// <summary>是否已套用每方獨立 NNUE 設定。</summary>
+    bool HasPerPlayerNnue { get; }
 }
