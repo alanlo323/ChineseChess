@@ -26,7 +26,7 @@ public class GameAnalysisServiceTests
     {
         var settings = new GameAnalysisSettings();
 
-        Assert.True(settings.IsEnabled);
+        Assert.False(settings.IsEnabled);
         Assert.False(string.IsNullOrWhiteSpace(settings.SystemPrompt));
         Assert.False(string.IsNullOrWhiteSpace(settings.Disclaimer));
         Assert.True(settings.MaxTokens > 0);

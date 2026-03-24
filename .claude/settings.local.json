@@ -41,7 +41,9 @@
       "Bash(grep:*)",
       "Bash(Select-String warn:*)",
       "Bash(TaskOutput b8iuma6g6:*)",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(xxd D:GitChineseChessNNUEpikafish.nnue)",
+      "Bash(python3 -c \":*)"
     ]
   },
   "outputStyle": "Explanatory"

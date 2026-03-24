@@ -1,4 +1,5 @@
 using System.Text;
+using ZstdSharp;
 
 namespace ChineseChess.Infrastructure.AI.Nnue.Network;
 
@@ -31,14 +32,34 @@ public static class NnueFileFormat
 
     // ── 公開 API ─────────────────────────────────────────────────────
 
-    /// <summary>從 .nnue 檔路徑讀取並回傳 NnueWeights。</summary>
+    private const uint ZstdMagic = 0xFD2FB528u;  // ZSTD 壓縮格式魔術碼
+
+    /// <summary>從 .nnue 檔路徑讀取並回傳 NnueWeights。支援 ZSTD 壓縮與未壓縮兩種格式。</summary>
     /// <exception cref="InvalidDataException">格式不符或版本不匹配。</exception>
     public static NnueWeights LoadWeights(string filePath)
     {
-        using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read,
-            FileShare.Read, bufferSize: 1 << 20);
-        using var br = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
+        byte[] raw = File.ReadAllBytes(filePath);
+
+        // 偵測 ZSTD 魔術碼（小端序）並自動解壓縮
+        if (raw.Length >= 4 && BitConverter.ToUInt32(raw, 0) == ZstdMagic)
+            raw = DecompressZstd(raw, filePath);
+
+        using var ms = new MemoryStream(raw);
+        using var br = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
         return Read(br, filePath);
+    }
+
+    private static byte[] DecompressZstd(byte[] compressed, string filePath)
+    {
+        try
+        {
+            using var decompressor = new Decompressor();
+            return decompressor.Unwrap(compressed).ToArray();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException($"ZSTD 解壓縮失敗（{filePath}）：{ex.Message}", ex);
+        }
     }
 
     // ── 私有讀取流程 ─────────────────────────────────────────────────
