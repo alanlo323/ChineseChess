@@ -266,3 +266,6 @@ Thumbs.db
 # Local app settings (may contain API keys, do not commit)
 appsettings.local.json
 ChineseChess.WPF/appsettings.local.json
+
+# NNUE files
+/NNUE
