@@ -28,6 +28,8 @@ public class OpeningBookEngineDecorator : IAiEngine
         this.settings = settings;
     }
 
+    public string EngineLabel => inner.EngineLabel;
+
     public async Task<SearchResult> SearchAsync(
         IBoard board,
         SearchSettings searchSettings,

@@ -55,6 +55,8 @@ public class SearchEngine : IAiEngine
         this.tt = tt;
     }
 
+    public string EngineLabel => evaluator.Label;
+
     public Task<SearchResult> SearchAsync(IBoard board, SearchSettings settings, CancellationToken ct = default, IProgress<SearchProgress>? progress = null)
     {
         return Task.Run(() =>

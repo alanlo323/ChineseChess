@@ -30,6 +30,8 @@ public sealed class NnueEvaluator : IEvaluator
 
     // ── IEvaluator ───────────────────────────────────────────────────────
 
+    public string Label => "NNUE";
+
     public int Evaluate(IBoard board)
     {
         if (!network.IsLoaded)

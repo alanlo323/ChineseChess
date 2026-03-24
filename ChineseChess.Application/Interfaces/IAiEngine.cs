@@ -123,6 +123,9 @@ public class TTTreeNode
 
 public interface IAiEngine
 {
+    /// <summary>引擎的顯示標籤，用於 UI 進度訊息中標示引擎類型（如 "NNUE"、"手工評估"、"Pikafish"）。</summary>
+    string EngineLabel => string.Empty;
+
     /// <summary>開局庫是否已載入。非 Decorator 引擎預設回傳 false。</summary>
     bool IsOpeningBookLoaded => false;
 

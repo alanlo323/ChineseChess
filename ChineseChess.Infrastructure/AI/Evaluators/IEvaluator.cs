@@ -4,6 +4,9 @@ namespace ChineseChess.Infrastructure.AI.Evaluators;
 
 public interface IEvaluator
 {
+    /// <summary>評估器的顯示標籤，供 AI 進度訊息中標示引擎類型。</summary>
+    string Label => "手工評估";
+
     int Evaluate(IBoard board);
 
     /// <summary>

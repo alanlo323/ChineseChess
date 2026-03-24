@@ -26,6 +26,8 @@ public sealed class CompositeEvaluator : IEvaluator
 
     // ── IEvaluator ───────────────────────────────────────────────────────
 
+    public string Label => network.IsLoaded ? "NNUE" : "手工評估";
+
     public int Evaluate(IBoard board) =>
         network.IsLoaded ? nnue.Evaluate(board) : handcrafted.Evaluate(board);
 

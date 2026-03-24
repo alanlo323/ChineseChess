@@ -31,6 +31,7 @@ public class GameService : IGameService, IDisposable
     private int isHintSearchingFlag;
     private SearchSettings redAiSettings  = new SearchSettings();
     private SearchSettings blackAiSettings = new SearchSettings();
+    private string currentEngineLabel = string.Empty; // 當前搜索所用引擎的顯示標籤
     private CancellationTokenSource? aiCts;
     private CancellationTokenSource? smartHintCts;
     private readonly ManualResetEventSlim aiPauseSignal = new ManualResetEventSlim(true);
@@ -452,7 +453,8 @@ public class GameService : IGameService, IDisposable
         Interlocked.Exchange(ref lastSearchWasHintFlag, applyBestMove ? 0 : 1); // 記錄搜尋類型
         // 佔用信號量，通知等待者（如 StartGameAsync）搜尋正在進行
         await thinkingCompletedSignal.WaitAsync();
-        ThinkingProgress?.Invoke("AI 思考中...");
+        currentEngineLabel = GetCurrentEngine().EngineLabel;
+        ThinkingProgress?.Invoke($"[{currentEngineLabel}] AI 思考中...");
 
         // 提示搜尋開始時設旗標
         if (!applyBestMove)
@@ -573,7 +575,7 @@ public class GameService : IGameService, IDisposable
                     var moveSource = result.IsFromOpeningBook ? "開局庫" : "AI";
                     var scoreStr = result.IsFromOpeningBook ? "定式" : FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方");
                     GameMessage?.Invoke($"{moveSource} 走了 {moveNotation}（{scoreStr}）");
-                    ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, "思考完成", moveNotation, lastElapsedMs));
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, "思考完成", moveNotation, lastElapsedMs, currentEngineLabel));
                     MoveCompleted?.Invoke(new MoveCompletedEventArgs
                     {
                         Fen          = board.ToFen(),
@@ -593,7 +595,7 @@ public class GameService : IGameService, IDisposable
                     // HintReady 觸發前先清除搜尋旗標
                     Interlocked.Exchange(ref isHintSearchingFlag, 0);
                     HintReady?.Invoke(result);
-                    ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, "提示完成", moveNotation, lastElapsedMs));
+                    ThinkingProgress?.Invoke(FormatHintProgress(result, board.Turn, "提示完成", moveNotation, lastElapsedMs, currentEngineLabel));
                 }
 
                 if (applyBestMove && !CheckGameOver())
@@ -1166,6 +1168,7 @@ public class GameService : IGameService, IDisposable
         var boardSnapshot = board.Clone();
         var activeEngine = GetCurrentEngine();
         var activeSettings = GetCurrentSettings();
+        currentEngineLabel = activeEngine.EngineLabel;
 
         // 套用 UI 設定的思考時間限制，與普通 AI 搜尋的時間控制語意一致
         if (activeSettings.TimeLimitMs > 0)
@@ -1183,7 +1186,7 @@ public class GameService : IGameService, IDisposable
 
         try
         {
-            ThinkingProgress?.Invoke("MultiPV 提示搜尋中...");
+            ThinkingProgress?.Invoke($"[{currentEngineLabel}] MultiPV 提示搜尋中...");
 
             var evaluations = await activeEngine.SearchMultiPvAsync(
                 boardSnapshot, settings, MultiPvCount, cts.Token);
@@ -1205,7 +1208,7 @@ public class GameService : IGameService, IDisposable
 
             var notation = !result.BestMove.IsNull
                 ? MoveNotation.ToNotation(result.BestMove, board) : "（無）";
-            ThinkingProgress?.Invoke($"MultiPV 提示完成：最佳 {notation}，共 {evaluations.Count} 個著法");
+            ThinkingProgress?.Invoke($"[{currentEngineLabel}] MultiPV 提示完成：最佳 {notation}，共 {evaluations.Count} 個著法");
 
             return result;
         }
@@ -1313,7 +1316,8 @@ public class GameService : IGameService, IDisposable
 
             if (moves.Count == 0) return;
 
-            ThinkingProgress?.Invoke($"智能提示：開始分析 {moves.Count} 個走法（深度 {SmartHintDepth}）...");
+            currentEngineLabel = aiEngine.EngineLabel;
+            ThinkingProgress?.Invoke($"[{currentEngineLabel}] 智能提示：開始分析 {moves.Count} 個走法（深度 {SmartHintDepth}）...");
 
             var smartHintStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var progress = new Progress<string>(msg => ThinkingProgress?.Invoke(msg));
@@ -1328,7 +1332,7 @@ public class GameService : IGameService, IDisposable
                     string scoreStr    = best.Score > 0 ? $"+{best.Score}" : best.Score.ToString();
                     string bestNotation = MoveNotation.ToNotation(best.Move, board);
                     string elapsedText = $" | 用時: {smartHintStopwatch.Elapsed.TotalSeconds:0.0}s";
-                    ThinkingProgress?.Invoke($"智能提示完成：最佳走法 {bestNotation} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法{elapsedText}");
+                    ThinkingProgress?.Invoke($"[{currentEngineLabel}] 智能提示完成：最佳走法 {bestNotation} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法{elapsedText}");
                 }
                 SmartHintReady?.Invoke(evaluations);
             }
@@ -1356,7 +1360,8 @@ public class GameService : IGameService, IDisposable
         var ttHitRate = progress.TtHitRate > 0
             ? $"，TT:{progress.TtHitRate:P0}"
             : string.Empty;
-        return $"AI 思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {nodesText}（{speed}），分數 {scoreText}，建議 {bestMove}{ttHitRate}";
+        var labelPrefix = string.IsNullOrEmpty(currentEngineLabel) ? "" : $"[{currentEngineLabel}] ";
+        return $"{labelPrefix}思考中{mode}：深度 {progress.CurrentDepth}/{progress.MaxDepth}，耗時 {elapsedSeconds}，節點 {nodesText}（{speed}），分數 {scoreText}，建議 {bestMove}{ttHitRate}";
     }
 
     private static string GetDefaultBookmarkPath() =>
@@ -1365,11 +1370,13 @@ public class GameService : IGameService, IDisposable
             "ChineseChess",
             "bookmarks.json");
 
-    private static string FormatHintProgress(SearchResult result, PieceColor searchTurn, string label, string? notation = null, long elapsedMs = 0)
+    private static string FormatHintProgress(SearchResult result, PieceColor searchTurn, string label, string? notation = null, long elapsedMs = 0, string engineLabel = "")
     {
+        var labelPrefix = string.IsNullOrEmpty(engineLabel) ? "" : $"[{engineLabel}] ";
+
         if (result.BestMove.IsNull)
         {
-            return $"{label}：目前局面沒有可行的最佳走法";
+            return $"{labelPrefix}{label}：目前局面沒有可行的最佳走法";
         }
 
         var turnLabel = searchTurn == PieceColor.Red ? "紅方" : "黑方";
@@ -1377,7 +1384,7 @@ public class GameService : IGameService, IDisposable
         var moveText  = notation ?? result.BestMove.ToString();
         var elapsedText = elapsedMs > 0 ? $" | 用時: {elapsedMs / 1000.0:0.0}s" : string.Empty;
 
-        return $"{label}：{moveText} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes:N0}{elapsedText}";
+        return $"{labelPrefix}{label}：{moveText} | 分數: {scoreText} | 深度: {result.Depth} | 節點: {result.Nodes:N0}{elapsedText}";
     }
 
     private static string FormatScore(int score, string turnLabel)

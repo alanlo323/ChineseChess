@@ -41,6 +41,9 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
     /// <summary>引擎是否為 Pikafish（大小寫不敏感）。</summary>
     public bool IsPikafish => engineName.Contains("Pikafish", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>引擎顯示標籤：握手後回傳引擎名稱，握手前回傳「外部引擎」。</summary>
+    public string EngineLabel => string.IsNullOrEmpty(engineName) ? "外部引擎" : engineName;
+
     // ─── 建構子 ───────────────────────────────────────────────────────────
 
     public ExternalEngineAdapter(string executablePath, EngineProtocol protocol)
