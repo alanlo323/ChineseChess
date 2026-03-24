@@ -38,6 +38,14 @@ public sealed class NnueViewModel : ObservableObject
         BrowseModelCommand = new RelayCommand(_ => BrowseModel());
         LoadModelCommand   = new RelayCommand(_ => _ = LoadModelAsync(), _ => !isLoading && File.Exists(ModelPath));
         UnloadModelCommand = new RelayCommand(_ => UnloadModel(), _ => network.IsLoaded);
+
+        // 若上次已設定模型路徑且模式非停用，啟動時自動嘗試載入
+        if (!string.IsNullOrEmpty(modelPath)
+            && File.Exists(modelPath)
+            && evaluationMode != NnueEvaluationMode.Disabled)
+        {
+            _ = TryAutoLoadModelAsync();
+        }
     }
 
     // ── 公開屬性 ─────────────────────────────────────────────────────
@@ -123,6 +131,29 @@ public sealed class NnueViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusMessage = $"載入失敗：{ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            NotifyModelChanged();
+        }
+    }
+
+    private async Task TryAutoLoadModelAsync()
+    {
+        isLoading = true;
+        StatusMessage = "自動載入中…";
+        OnPropertyChanged(nameof(CanLoad));
+
+        try
+        {
+            await network.LoadFromFileAsync(modelPath);
+            StatusMessage = $"已自動載入：{Path.GetFileName(modelPath)}";
+            SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"自動載入失敗：{ex.Message}";
         }
         finally
         {

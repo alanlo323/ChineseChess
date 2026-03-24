@@ -269,3 +269,4 @@ ChineseChess.WPF/appsettings.local.json
 
 # NNUE files
 /NNUE
+.claude/
