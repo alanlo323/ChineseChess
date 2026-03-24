@@ -30,8 +30,17 @@ public sealed class TrainingNetwork
     private const float Int16Max = 32767f;
 
     // OutputScale（對應推論版）
-    private const float OutputScale = 16f;
-    private const float WeightScaleBitsF = 64f; // 1 << 6
+    private const float OutputScale          = 16f;
+    private const float WeightScaleBitsF     = 64f;   // 1 << 6
+
+    // 命名常數（避免魔術數字散落各處）
+    private const float PairwiseClampDivisor = 512f;
+    private const float PairwiseClampMax     = 255f;
+    private const float WdlScaleFactor       = 600f;
+    private const float SqrCReLUExtraDivisor = 128f;
+    private const float FtBiasScale          = 2f;
+    private const float LogEpsilon           = 1e-7f;
+    private const float PsqtHalfScale        = 0.5f;
 
     // ── 訓練參數 ─────────────────────────────────────────────────────
     public float[] FtBiases  { get; }  // float[1024]
@@ -44,6 +53,31 @@ public sealed class TrainingNetwork
     public float[][] Fc1Weights { get; }  // [16][L3*32]
     public float[][] Fc2Biases  { get; }  // [16][1]
     public float[][] Fc2Weights { get; }  // [16][32]
+
+    // ── 前向快取（ForwardAndLoss → Backward 共用）────────────────────────
+    private int      cachedStackBucket;
+    private int      cachedUsPerspColorIdx;
+    private float[,] cachedFtAcc  = new float[2, L1];
+    private float[]  cachedFtOut  = new float[L1];
+    private float[]  cachedFc0Out = new float[L2 + 1];
+    private float[]  cachedAc0    = new float[32];
+    private float[]  cachedFc1Out = new float[L3];
+    private float[]  cachedAc1    = new float[L3];
+    private float    cachedSigPred;
+    private bool     cachedValuesValid;   // 防止 Backward() 在 ForwardAndLoss() 前被呼叫
+    private int      cachedFeatCount0;    // ComputeFtAccumulator 快取特徵數（perspective 0）
+    private int      cachedFeatCount1;    // ComputeFtAccumulator 快取特徵數（perspective 1）
+    private readonly int[] cachedFeats0 = new int[32];  // perspective 0 特徵索引快取
+    private readonly int[] cachedFeats1 = new int[32];  // perspective 1 特徵索引快取
+
+    // ── 反向傳播工作緩衝（預分配，避免每次 Backward 呼叫觸發 GC 配置）────
+    private readonly float[]  bwdDAc1     = new float[L3];
+    private readonly float[]  bwdDFc1Out  = new float[L3];
+    private readonly float[]  bwdDAc0     = new float[32];
+    private readonly float[]  bwdDFc0Out  = new float[L2];
+    private readonly float[]  bwdDFtOut   = new float[L1];
+    private readonly float[,] bwdDFtAcc   = new float[2, L1];
+    private readonly int[]    featuresWork = new int[32];  // ForwardAndLoss + Backward 共用
 
     // ── 梯度（對應同形狀）─────────────────────────────────────────────
     private readonly float[] gradFtBiases;
@@ -158,9 +192,9 @@ public sealed class TrainingNetwork
 
     public void LoadFromQuantized(NnueWeights q)
     {
-        // FT biases（int16 → float，除以 2 還原縮放）
+        // FT biases（int16 → float，除以 FtBiasScale 還原縮放）
         for (int i = 0; i < L1; i++)
-            FtBiases[i] = q.FtBiases[i] / 2f;
+            FtBiases[i] = q.FtBiases[i] / FtBiasScale;
 
         // FT weights（int8 → float）
         for (long i = 0; i < q.FtWeights.LongLength; i++)
@@ -199,28 +233,29 @@ public sealed class TrainingNetwork
         float targetResult,
         out float predictedScore)
     {
-        int usPerspColorIdx = board.Turn == PieceColor.Red ? 0 : 1;
-        int stackBucket = LayerStackBucketHelper.GetBucket(board);
+        int usPerspColorIdx = cachedUsPerspColorIdx = board.Turn == PieceColor.Red ? 0 : 1;
+        int stackBucket = cachedStackBucket = LayerStackBucketHelper.GetBucket(board);
 
-        // FT：計算雙視角累加器
-        var ftAcc = ComputeFtAccumulator(board);
+        // FT：就地計算雙視角累加器（重用 cachedFtAcc，無堆積配置）
+        ComputeFtAccumulator(board, cachedFtAcc);
+        var ftAcc = cachedFtAcc;
 
-        // Transform：pairwise clamp ReLU → uint8-range float
-        var ftOut = new float[L1];
+        // Transform：pairwise clamp ReLU → uint8-range float（直接寫入快取陣列）
+        var ftOut = cachedFtOut;
         for (int p = 0; p < 2; p++)
         {
-            int colorIdx   = p == 0 ? usPerspColorIdx : 1 - usPerspColorIdx;
-            int outOffset  = p * (L1 / 2);
+            int colorIdx  = p == 0 ? usPerspColorIdx : 1 - usPerspColorIdx;
+            int outOffset = p * (L1 / 2);
             for (int j = 0; j < L1 / 2; j++)
             {
-                float a0 = Math.Clamp(ftAcc[colorIdx, j],          0f, 255f);
-                float a1 = Math.Clamp(ftAcc[colorIdx, j + L1 / 2], 0f, 255f);
-                ftOut[outOffset + j] = a0 * a1 / 512f;
+                float a0 = Math.Clamp(ftAcc[colorIdx, j],          0f, PairwiseClampMax);
+                float a1 = Math.Clamp(ftAcc[colorIdx, j + L1 / 2], 0f, PairwiseClampMax);
+                ftOut[outOffset + j] = a0 * a1 / PairwiseClampDivisor;
             }
         }
 
-        // FC0
-        var fc0Out = new float[L2 + 1];
+        // FC0（直接寫入快取陣列）
+        var fc0Out = cachedFc0Out;
         for (int j = 0; j <= L2; j++)
         {
             float sum = Fc0Biases[stackBucket][j];
@@ -230,19 +265,19 @@ public sealed class TrainingNetwork
         }
 
         // PSQT 分量（fc0Out[L2]）
-        float psqtFrac = fc0Out[L2] * 600f * OutputScale / (127f * WeightScaleBitsF);
+        float psqtFrac = fc0Out[L2] * WdlScaleFactor * OutputScale / (Int8Max * WeightScaleBitsF);
 
-        // SqrCReLU + CReLU → ac0 (float, 對應量化版的 uint8)
-        var ac0 = new float[32];
+        // SqrCReLU + CReLU → ac0（直接寫入快取陣列）
+        var ac0 = cachedAc0;
         for (int i = 0; i < L2; i++)
         {
             float v = fc0Out[i];
-            ac0[i]      = Math.Clamp(v * v / (WeightScaleBitsF * WeightScaleBitsF * 128f), 0f, 127f);  // SqrCReLU
-            ac0[i + L2] = Math.Clamp(v / WeightScaleBitsF, 0f, 127f);  // CReLU
+            ac0[i]      = Math.Clamp(v * v / (WeightScaleBitsF * WeightScaleBitsF * SqrCReLUExtraDivisor), 0f, Int8Max);  // SqrCReLU
+            ac0[i + L2] = Math.Clamp(v / WeightScaleBitsF, 0f, Int8Max);  // CReLU
         }
 
-        // FC1
-        var fc1Out = new float[L3];
+        // FC1（直接寫入快取陣列）
+        var fc1Out = cachedFc1Out;
         for (int j = 0; j < L3; j++)
         {
             float sum = Fc1Biases[stackBucket][j];
@@ -251,10 +286,10 @@ public sealed class TrainingNetwork
             fc1Out[j] = sum;
         }
 
-        // CReLU → ac1
-        var ac1 = new float[L3];
+        // CReLU → ac1（直接寫入快取陣列）
+        var ac1 = cachedAc1;
         for (int i = 0; i < L3; i++)
-            ac1[i] = Math.Clamp(fc1Out[i] / WeightScaleBitsF, 0f, 127f);
+            ac1[i] = Math.Clamp(fc1Out[i] / WeightScaleBitsF, 0f, Int8Max);
 
         // FC2
         float fc2Out = Fc2Biases[stackBucket][0];
@@ -262,32 +297,153 @@ public sealed class TrainingNetwork
             fc2Out += Fc2Weights[stackBucket][i] * ac1[i];
 
         // PSQT
-        float psqt = ComputePsqt(board, usPerspColorIdx, stackBucket);
+        float psqt = ComputePsqt(usPerspColorIdx, stackBucket);
 
         // 合併分數
         float positional = (fc2Out + psqtFrac) / OutputScale;
         predictedScore = psqt / OutputScale + positional;
 
         // WDL 損失：cross-entropy with sigmoid
-        float sigPred   = Sigmoid(predictedScore / 600f);
-        float loss = -(targetResult * MathF.Log(sigPred + 1e-7f)
-                     + (1f - targetResult) * MathF.Log(1f - sigPred + 1e-7f));
+        cachedSigPred = Sigmoid(predictedScore / WdlScaleFactor);
+        cachedValuesValid = true;
+        float sigPred = cachedSigPred;
+        float loss = -(targetResult * MathF.Log(sigPred + LogEpsilon)
+                     + (1f - targetResult) * MathF.Log(1f - sigPred + LogEpsilon));
 
         return loss;
     }
 
     // ── 反向傳播 ─────────────────────────────────────────────────────
 
-    /// <summary>
-    /// 計算梯度並累積至 grad* 陣列（呼叫 Adam 步驟前不清除）。
-    /// </summary>
-    /// <exception cref="NotImplementedException">反向傳播尚未完整實作，呼叫此方法將立即拋出例外以防止匯出損壞的模型。</exception>
+    /// <summary>計算梯度並累積至 grad* 陣列（呼叫 Adam 步驟前不清除）。</summary>
+    /// <exception cref="InvalidOperationException">未先呼叫 ForwardAndLoss() 時拋出。</exception>
     public void Backward(IBoard board, float targetResult, float batchSize = 1f)
     {
-        // 反向傳播尚未實作：丟出例外而非靜默地以全零梯度呼叫 StepAdam，
-        // 確保訓練迴圈在此明確失敗，而不是產生看似正常但實際未訓練的模型。
-        throw new NotImplementedException(
-            "NNUE 反向傳播尚未完整實作。請先實作 FC 層梯度計算再啟用訓練功能。");
+        if (!cachedValuesValid)
+            throw new InvalidOperationException("必須先呼叫 ForwardAndLoss() 才能呼叫 Backward()。");
+
+        int sb = cachedStackBucket;
+
+        // ── A：dL/d(predictedScore)（sigmoid × cross-entropy 偏微分相消）────
+        float dScore = (cachedSigPred - targetResult) / (WdlScaleFactor * batchSize);
+
+        // ── B：FC2 梯度（使用預分配工作緩衝 bwdDAc1）────────────────────────
+        float dFc2Out = dScore / OutputScale;
+        gradFc2Biases[sb][0] += dFc2Out;
+        var dAc1 = bwdDAc1;
+        for (int i = 0; i < L3; i++)
+        {
+            gradFc2Weights[sb][i] += dFc2Out * cachedAc1[i];
+            dAc1[i] = dFc2Out * Fc2Weights[sb][i];
+        }
+
+        // ── C：CReLU backward（fc1Out → ac1）────────────────────────────────
+        var dFc1Out = bwdDFc1Out;
+        for (int i = 0; i < L3; i++)
+            dFc1Out[i] = (cachedFc1Out[i] > 0f && cachedAc1[i] < Int8Max)
+                         ? dAc1[i] / WeightScaleBitsF : 0f;
+
+        // ── D：FC1 梯度（bwdDAc0 需清零，因為下方為累積寫入）────────────────
+        var dAc0 = bwdDAc0;
+        Array.Clear(dAc0);
+        for (int j = 0; j < L3; j++)
+        {
+            gradFc1Biases[sb][j] += dFc1Out[j];
+            for (int i = 0; i < 32; i++)
+            {
+                gradFc1Weights[sb][i + j * 32] += dFc1Out[j] * cachedAc0[i];
+                dAc0[i] += dFc1Out[j] * Fc1Weights[sb][i + j * 32];
+            }
+        }
+
+        // ── E：SqrCReLU + CReLU backward（fc0Out[0..L2) → ac0）────────────
+        var dFc0Out = bwdDFc0Out;
+        for (int i = 0; i < L2; i++)
+        {
+            float v = cachedFc0Out[i];
+            // SqrCReLU：d(clamp(v²/D))/dv = 2v/D（非飽和區間）
+            float dSqr = (cachedAc0[i] > 0f && cachedAc0[i] < Int8Max)
+                         ? dAc0[i] * 2f * v / (WeightScaleBitsF * WeightScaleBitsF * SqrCReLUExtraDivisor) : 0f;
+            // CReLU：d(clamp(v/64))/dv = 1/64（非飽和區間）
+            float dCre = (cachedAc0[i + L2] > 0f && cachedAc0[i + L2] < Int8Max)
+                         ? dAc0[i + L2] / WeightScaleBitsF : 0f;
+            dFc0Out[i] = dSqr + dCre;
+        }
+
+        // ── F：PSQT neuron（fc0Out[L2]）梯度 ─────────────────────────────────
+        // predictedScore 中含 fc0Out[L2] * WdlScaleFactor / (Int8Max * 64) 分量
+        float dFc0PsqtNeuron = dScore * WdlScaleFactor / (Int8Max * WeightScaleBitsF);
+
+        // ── G：FC0 梯度（含 PSQT neuron），同時累積 dFtOut ─────────────────
+        var dFtOut = bwdDFtOut;
+        Array.Clear(dFtOut);
+        for (int j = 0; j < L2; j++)
+        {
+            gradFc0Biases[sb][j] += dFc0Out[j];
+            for (int i = 0; i < L1; i++)
+            {
+                gradFc0Weights[sb][i + j * L1] += dFc0Out[j] * cachedFtOut[i];
+                dFtOut[i] += dFc0Out[j] * Fc0Weights[sb][i + j * L1];
+            }
+        }
+        // PSQT neuron 欄（j = L2）
+        gradFc0Biases[sb][L2] += dFc0PsqtNeuron;
+        for (int i = 0; i < L1; i++)
+        {
+            gradFc0Weights[sb][i + L2 * L1] += dFc0PsqtNeuron * cachedFtOut[i];
+            dFtOut[i] += dFc0PsqtNeuron * Fc0Weights[sb][i + L2 * L1];
+        }
+
+        // ── H：Pairwise mul-clamp backward（ftAcc → ftOut）──────────────────
+        // ftOut[p*H+j] = clamp(a0) × clamp(a1) / PairwiseClampDivisor
+        // dFtAcc[ci,j]   += clamp(a1)/D × dg  當 a0 ∈ (0,255)
+        // dFtAcc[ci,j+H] += clamp(a0)/D × dg  當 a1 ∈ (0,255)
+        int H = L1 / 2;
+        var dFtAcc = bwdDFtAcc;
+        Array.Clear(dFtAcc);
+        for (int p = 0; p < 2; p++)
+        {
+            int ci = p == 0 ? cachedUsPerspColorIdx : 1 - cachedUsPerspColorIdx;
+            for (int j = 0; j < H; j++)
+            {
+                float rawA0 = cachedFtAcc[ci, j];
+                float rawA1 = cachedFtAcc[ci, j + H];
+                float a0 = Math.Clamp(rawA0, 0f, PairwiseClampMax);
+                float a1 = Math.Clamp(rawA1, 0f, PairwiseClampMax);
+                float dg = dFtOut[p * H + j];
+                if (rawA0 > 0f && rawA0 < PairwiseClampMax) dFtAcc[ci, j]     += a1 / PairwiseClampDivisor * dg;
+                if (rawA1 > 0f && rawA1 < PairwiseClampMax) dFtAcc[ci, j + H] += a0 / PairwiseClampDivisor * dg;
+            }
+        }
+
+        // ── I：FT Sparse 梯度（Biases ×2、Weights 稀疏、PSQT 稀疏）──────────
+        // 重用 ComputeFtAccumulator 已快取的特徵索引，無需再次呼叫 GetActiveFeatures
+        for (int c = 0; c < 2; c++)
+        {
+            int   count = c == 0 ? cachedFeatCount0 : cachedFeatCount1;
+            int[] feats = c == 0 ? cachedFeats0 : cachedFeats1;
+
+            // Biases：acc[c,n] = FtBiases[n] * FtBiasScale → 梯度需 ×FtBiasScale
+            for (int n = 0; n < L1; n++)
+                gradFtBiases[n] += dFtAcc[c, n] * FtBiasScale;
+
+            // Weights（稀疏：只更新活躍特徵的對應行）
+            for (int f = 0; f < count; f++)
+            {
+                long wOff = (long)feats[f] * L1;
+                for (int n = 0; n < L1; n++)
+                    gradFtWeights[wOff + n] += dFtAcc[c, n];
+            }
+
+            // PSQT：psqt = (usSum - themSum) / 2 → d(psqt/OutputScale)/d(sum) = ±0.5/OutputScale
+            float sign = (c == cachedUsPerspColorIdx) ? 1f : -1f;
+            float dPsqtPerFeature = dScore * sign * PsqtHalfScale / OutputScale;
+            for (int f = 0; f < count; f++)
+            {
+                long pOff = (long)feats[f] * PsqtBuckets + cachedStackBucket;
+                gradFtPsqt[pOff] += dPsqtPerFeature;
+            }
+        }
     }
 
     /// <summary>清除所有梯度陣列（每批次開始時呼叫）。</summary>
@@ -347,47 +503,45 @@ public sealed class TrainingNetwork
 
     // ── 私有輔助 ─────────────────────────────────────────────────────
 
-    private float[,] ComputeFtAccumulator(IBoard board)
+    /// <summary>計算雙視角 FT 累加器並就地寫入 <paramref name="acc"/>（重用預分配陣列，無堆積配置）。</summary>
+    private void ComputeFtAccumulator(IBoard board, float[,] acc)
     {
-        var acc = new float[2, L1];
-        var features = new int[32];
-
         for (int c = 0; c < 2; c++)
         {
             var perspective = c == 0 ? PieceColor.Red : PieceColor.Black;
 
-            // FT biases（×2 還原縮放）
-            for (int n = 0; n < L1; n++) acc[c, n] = FtBiases[n] * 2f;
+            // FT biases（×FtBiasScale 還原縮放）
+            for (int n = 0; n < L1; n++) acc[c, n] = FtBiases[n] * FtBiasScale;
 
             bool mm    = MidMirrorEncoder.RequiresMidMirror(board, perspective);
-            int  count = HalfKAv2Features.GetActiveFeatures(board, perspective, mm, features);
+            int  count = HalfKAv2Features.GetActiveFeatures(board, perspective, mm, featuresWork);
+
+            // 快取特徵索引供 ComputePsqt 和 Backward Step I 重用，避免重複呼叫 GetActiveFeatures
+            if (c == 0) { cachedFeatCount0 = count; Array.Copy(featuresWork, cachedFeats0, count); }
+            else        { cachedFeatCount1 = count; Array.Copy(featuresWork, cachedFeats1, count); }
 
             for (int f = 0; f < count; f++)
             {
-                int featIdx = features[f];
+                int featIdx = featuresWork[f];
                 int wOffset = (int)((long)featIdx * L1);
                 for (int n = 0; n < L1; n++)
                     acc[c, n] += FtWeights[wOffset + n];
             }
         }
-        return acc;
     }
 
-    private float ComputePsqt(IBoard board, int usPerspColorIdx, int stackBucket)
+    private float ComputePsqt(int usPerspColorIdx, int stackBucket)
     {
-        var features = new int[32];
         float us = 0f, them = 0f;
 
         for (int c = 0; c < 2; c++)
         {
-            var perspective = c == 0 ? PieceColor.Red : PieceColor.Black;
-            bool mm    = MidMirrorEncoder.RequiresMidMirror(board, perspective);
-            int  count = HalfKAv2Features.GetActiveFeatures(board, perspective, mm, features);
-            float sum  = 0f;
+            int   count = c == 0 ? cachedFeatCount0 : cachedFeatCount1;
+            int[] feats = c == 0 ? cachedFeats0 : cachedFeats1;
+            float sum   = 0f;
             for (int f = 0; f < count; f++)
             {
-                int featIdx = features[f];
-                int pOffset = (int)((long)featIdx * PsqtBuckets + stackBucket);
+                int pOffset = (int)((long)feats[f] * PsqtBuckets + stackBucket);
                 sum += FtPsqt[pOffset];
             }
             if (c == usPerspColorIdx) us = sum; else them = sum;
@@ -396,6 +550,41 @@ public sealed class TrainingNetwork
     }
 
     private static float Sigmoid(float x) => 1f / (1f + MathF.Exp(-x));
+
+    // ── 測試輔助（internal，供 ChineseChess.Tests 使用）──────────────────
+
+    /// <summary>
+    /// 檢查所有梯度陣列均無 NaN 或 Infinity（供測試驗證）。
+    /// ⚠️ 僅供測試使用：此方法需迭代 gradFtWeights（約 16.7M floats），
+    ///    請勿在訓練迴圈中呼叫。
+    /// </summary>
+    internal bool AllGradientsFinite() => ValidateAllGradients(float.IsFinite);
+
+    /// <summary>
+    /// 檢查所有梯度陣列均為零（ZeroGradients 後驗證用）。
+    /// ⚠️ 僅供測試使用：同 AllGradientsFinite，請勿在訓練迴圈中呼叫。
+    /// </summary>
+    internal bool AllGradientsZero() => ValidateAllGradients(v => v == 0f);
+
+    private bool ValidateAllGradients(Func<float, bool> check)
+    {
+        if (!AllSatisfy(gradFtBiases, check) || !AllSatisfy(gradFtWeights, check) || !AllSatisfy(gradFtPsqt, check))
+            return false;
+        for (int s = 0; s < Stacks; s++)
+        {
+            if (!AllSatisfy(gradFc0Biases[s], check) || !AllSatisfy(gradFc0Weights[s], check)) return false;
+            if (!AllSatisfy(gradFc1Biases[s], check) || !AllSatisfy(gradFc1Weights[s], check)) return false;
+            if (!AllSatisfy(gradFc2Biases[s], check) || !AllSatisfy(gradFc2Weights[s], check)) return false;
+        }
+        return true;
+    }
+
+    private static bool AllSatisfy(float[] arr, Func<float, bool> check)
+    {
+        foreach (float v in arr)
+            if (!check(v)) return false;
+        return true;
+    }
 
     // ── LayerStack 選桶（委派至 LayerStackBucketHelper，與推論版共用邏輯）
 
