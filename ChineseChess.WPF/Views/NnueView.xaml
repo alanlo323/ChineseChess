@@ -31,7 +31,6 @@
                 </Grid.ColumnDefinitions>
                 <TextBox Grid.Column="0"
                          Text="{Binding ModelPath, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{StaticResource InputControlStyle}"
                          ToolTip="NNUE 模型檔路徑（.nnue）" />
                 <Button Grid.Column="1"
                         Content="瀏覽…"
@@ -53,7 +52,7 @@
 
             <!-- ─── 模型資訊（已載入時顯示）─────────────────────────── -->
             <GroupBox Header="模型資訊"
-                      Visibility="{Binding IsLoaded, Converter={StaticResource BoolToVisibilityConverter}}"
+                      Visibility="{Binding IsLoaded, Converter={StaticResource BooleanToVisibilityConverter}}"
                       Margin="0,0,0,8"
                       Padding="8">
                 <StackPanel>
