@@ -39,7 +39,7 @@
             </StackPanel>
 
             <!-- 訓練資料路徑（FromFile 模式） -->
-            <StackPanel Visibility="{Binding IsFromFileMode, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel Visibility="{Binding IsFromFileMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock Text="訓練資料（.plain）："
                            Style="{StaticResource FormLabelStyle}"
                            Margin="0,0,0,2" />
@@ -60,7 +60,7 @@
             </StackPanel>
 
             <!-- 生成設定（VsHandcrafted / SelfPlay 模式） -->
-            <StackPanel Visibility="{Binding IsGeneratorMode, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel Visibility="{Binding IsGeneratorMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid Margin="0,0,0,6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -94,7 +94,7 @@
 
                 <!-- 隨機開局（SelfPlay 模式） -->
                 <Grid Margin="0,0,0,8"
-                      Visibility="{Binding IsSelfPlayMode, Converter={StaticResource BoolToVisibilityConverter}}">
+                      Visibility="{Binding IsSelfPlayMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
@@ -182,7 +182,7 @@
             </StackPanel>
 
             <!-- ─── 生成進度區（Generator 模式時顯示）────────────────────── -->
-            <StackPanel Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibilityConverter}}"
+            <StackPanel Visibility="{Binding IsGenerating, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Margin="0,0,0,8">
                 <TextBlock Text="生成對局中…"
                            Style="{StaticResource FormLabelStyle}"
