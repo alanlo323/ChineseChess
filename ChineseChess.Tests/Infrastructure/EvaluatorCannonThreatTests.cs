@@ -20,7 +20,7 @@ namespace ChineseChess.Tests.Infrastructure;
 /// </summary>
 public class EvaluatorCannonThreatTests
 {
-    private static readonly HandcraftedEvaluator evaluator = new();
+    private readonly HandcraftedEvaluator evaluator = new();
 
     // ─── 紅炮威脅黑將 ─────────────────────────────────────────────────────
 

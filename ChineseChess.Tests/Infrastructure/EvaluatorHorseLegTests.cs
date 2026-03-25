@@ -18,7 +18,7 @@ namespace ChineseChess.Tests.Infrastructure;
 /// </summary>
 public class EvaluatorHorseLegTests
 {
-    private static readonly HandcraftedEvaluator evaluator = new();
+    private readonly HandcraftedEvaluator evaluator = new();
 
     // ─── 單腳封堵 ──────────────────────────────────────────────────────────
 

@@ -11,6 +11,7 @@ namespace ChineseChess.Tests.Infrastructure.Nnue;
 ///   4. 取消令牌能停止生成
 ///   5. 每完成一局至少呼叫一次進度回調
 /// </summary>
+[Collection("NnueGeneration")]
 public class VsHandcraftedGeneratorTests
 {
     [Fact]

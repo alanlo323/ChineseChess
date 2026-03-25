@@ -21,7 +21,7 @@ namespace ChineseChess.Tests.Infrastructure;
 /// </summary>
 public class EvaluatorKingSafetyTests
 {
-    private static readonly HandcraftedEvaluator evaluator = new();
+    private readonly HandcraftedEvaluator evaluator = new();
 
     // ─── 紅帥受黑車壓制 ───────────────────────────────────────────────────
 

@@ -81,6 +81,7 @@ public class NnueTrainingTests
 ///   1. 使用 generator 的訓練迴圈，單 epoch 後損失為有限值
 ///   2. generationProgressCallback 在生成階段被呼叫
 /// </summary>
+[Collection("NnueGeneration")]
 public class NnueTrainerGeneratorTests
 {
     private const string InitialFen =

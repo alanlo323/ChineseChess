@@ -11,6 +11,7 @@ namespace ChineseChess.Tests.Infrastructure.Nnue;
 ///   4. 取消令牌能停止生成
 ///   5. randomOpeningMoves=0 時，兩局開局路徑相同（確定性）
 /// </summary>
+[Collection("NnueGeneration")]
 public class SelfPlayGeneratorTests
 {
     [Fact]
