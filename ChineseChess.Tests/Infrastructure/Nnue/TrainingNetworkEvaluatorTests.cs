@@ -56,15 +56,32 @@ public class TrainingNetworkEvaluatorTests
     }
 
     [Fact]
-    public void CreateWorkerInstance_ReturnsSelf()
+    public void CreateWorkerInstance_ReturnsIndependentEvaluatorWithSameLabel()
     {
         var network   = new TrainingNetwork();
         var evaluator = new TrainingNetworkEvaluator(network);
 
         IEvaluator worker = evaluator.CreateWorkerInstance();
 
-        // TrainingNetworkEvaluator 是單執行緒設計，返回 this
-        Assert.Same(evaluator, worker);
+        // CreateWorkerInstance 應回傳獨立的 InferenceEvaluator（非 this），
+        // 讓多個 SearchWorker 可安全並行使用（共享 weights，獨立快取）
+        Assert.NotSame(evaluator, worker);
+        Assert.Equal(evaluator.Label, worker.Label);
+    }
+
+    [Fact]
+    public void CreateWorkerInstance_Worker_EvaluateSameAsOriginal()
+    {
+        var network   = new TrainingNetwork();
+        var evaluator = new TrainingNetworkEvaluator(network);
+        var worker    = evaluator.CreateWorkerInstance();
+        var board     = new Board(InitialFen);
+
+        int scoreOriginal = evaluator.Evaluate(board);
+        int scoreWorker   = worker.Evaluate(board);
+
+        // worker 共享同一份 weights，對相同局面應回傳相同分數
+        Assert.Equal(scoreOriginal, scoreWorker);
     }
 
     [Fact]

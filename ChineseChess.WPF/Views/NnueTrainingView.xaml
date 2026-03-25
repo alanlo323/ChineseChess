@@ -107,6 +107,22 @@
                                  ToolTip="前 N 步隨機走棋，增加對局多樣性（建議 4~12）" />
                     </StackPanel>
                 </Grid>
+
+                <!-- 並行生成執行緒（所有 Generator 模式） -->
+                <Grid Margin="0,0,0,8"
+                      Visibility="{Binding IsGeneratorMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="並行生成執行緒"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,2" />
+                        <TextBox Text="{Binding GenerationThreadCount, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="同時進行的對局數（建議 CPU核心數/2，最大不超過核心數）" />
+                    </StackPanel>
+                </Grid>
             </StackPanel>
 
             <!-- 輸出模型路徑 -->

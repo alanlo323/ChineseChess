@@ -15,18 +15,23 @@ namespace ChineseChess.Infrastructure.AI.Nnue.Training;
 ///     以 gameIndex 作為種子確保每局不同但可重現。
 ///   - 此設計可避免所有對局從完全相同的路徑出發，增加訓練資料多樣性。
 ///
-/// 注意：TrainingNetworkEvaluator 不支援多執行緒，強制 ThreadCount=1。
+/// 並行設計：
+///   - <paramref name="parallelism"/> &gt; 1 時同時執行多局，每局持有獨立的
+///     <see cref="TrainingNetworkEvaluator"/> 和 <see cref="SearchEngine"/>，
+///     透過 <see cref="TrainingNetworkInferenceView"/> 共享 weights（唯讀），無競爭。
+///   - 進度回報使用 Interlocked 計數，確保執行緒安全。
 /// </summary>
 public sealed class SelfPlayGenerator : IGameDataGenerator
 {
-
     private readonly TrainingNetwork network;
     private readonly int randomOpeningMoves;
+    private readonly int parallelism;
 
-    public SelfPlayGenerator(TrainingNetwork network, int randomOpeningMoves = 8)
+    public SelfPlayGenerator(TrainingNetwork network, int randomOpeningMoves = 8, int parallelism = 1)
     {
-        this.network             = network;
-        this.randomOpeningMoves  = randomOpeningMoves;
+        this.network            = network;
+        this.randomOpeningMoves = randomOpeningMoves;
+        this.parallelism        = Math.Max(1, parallelism);
     }
 
     public async Task<List<TrainingPosition>> GenerateAsync(
@@ -36,37 +41,54 @@ public sealed class SelfPlayGenerator : IGameDataGenerator
         Action<GameGenerationProgress>? onProgress,
         CancellationToken ct)
     {
-        // 引擎在 epoch 內共用（TT 可跨局累積），每 epoch 重建由 NnueTrainer 保證。
-        var evaluator  = new TrainingNetworkEvaluator(network);
-        var engine     = new SearchEngine(new Application.Configuration.GameSettings(), evaluator);
         var searchSettings = new SearchSettings
         {
-            Depth       = searchDepth,
-            TimeLimitMs = searchTimeLimitMs,
-            ThreadCount = 1,   // TrainingNetworkEvaluator 不支援多執行緒
+            Depth            = searchDepth,
+            TimeLimitMs      = searchTimeLimitMs,
+            ThreadCount      = 1,   // 每個 worker 的引擎單執行緒，並行由局層級管理
             AllowOpeningBook = false,
         };
 
-        var allPositions = new List<TrainingPosition>();
-
-        for (int gameIndex = 0; gameIndex < gameCount; gameIndex++)
+        if (parallelism <= 1)
         {
-            if (ct.IsCancellationRequested) break;
+            // 單執行緒路徑：維持原本語義（TT 可跨局累積）
+            var evaluator = new TrainingNetworkEvaluator(network);
+            var engine    = new SearchEngine(new Application.Configuration.GameSettings(), evaluator);
+            var allPositions = new List<TrainingPosition>();
 
-            var gamePositions = await PlayOneGameAsync(gameIndex, evaluator, engine, searchSettings, ct);
-            allPositions.AddRange(gamePositions);
-
-            onProgress?.Invoke(new GameGenerationProgress
+            for (int gameIndex = 0; gameIndex < gameCount; gameIndex++)
             {
-                GamesCompleted     = gameIndex + 1,
-                GamesTarget        = gameCount,
-                PositionsCollected = allPositions.Count,
-                Message            = $"自我對戰 {gameIndex + 1}/{gameCount}，已收集 {allPositions.Count} 個局面",
-                IsGenerating       = gameIndex + 1 < gameCount,
-            });
+                if (ct.IsCancellationRequested) break;
+
+                var gamePositions = await PlayOneGameAsync(gameIndex, evaluator, engine, searchSettings, ct);
+                allPositions.AddRange(gamePositions);
+
+                onProgress?.Invoke(new GameGenerationProgress
+                {
+                    GamesCompleted     = gameIndex + 1,
+                    GamesTarget        = gameCount,
+                    PositionsCollected = allPositions.Count,
+                    Message            = $"自我對戰 {gameIndex + 1}/{gameCount}，已收集 {allPositions.Count} 個局面",
+                    IsGenerating       = gameIndex + 1 < gameCount,
+                });
+            }
+
+            return allPositions;
         }
 
-        return allPositions;
+        return await ParallelGameRunner.RunAsync(
+            gameCount, parallelism,
+            () => CreateWorkerPair(searchSettings),
+            (pair, gameIndex, innerCt) => PlayOneGameAsync(gameIndex, pair.Evaluator, pair.Engine, searchSettings, innerCt),
+            (completed, total, positions) => $"自我對戰 {completed}/{total}，已收集 {positions} 個局面",
+            onProgress, ct);
+    }
+
+    private WorkerPair CreateWorkerPair(SearchSettings searchSettings)
+    {
+        var evaluator = new TrainingNetworkEvaluator(network);
+        var engine    = new SearchEngine(new Application.Configuration.GameSettings(), evaluator);
+        return new WorkerPair(evaluator, engine);
     }
 
     private async Task<List<TrainingPosition>> PlayOneGameAsync(
@@ -120,4 +142,6 @@ public sealed class SelfPlayGenerator : IGameDataGenerator
             .Select(p => new TrainingPosition { Fen = p.Fen, Score = p.Score, Result = gameResult })
             .ToList();
     }
+
+    private sealed record WorkerPair(TrainingNetworkEvaluator Evaluator, IAiEngine Engine);
 }

@@ -41,10 +41,11 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
 
     // ── 設定（Generator 模式：VsHandcrafted / SelfPlay）──────────────
 
-    private int gameCount          = 50;
-    private int searchDepth        = 4;
-    private int searchTimeLimitMs  = 2000;
-    private int randomOpeningMoves = 8;
+    private int gameCount               = 50;
+    private int searchDepth             = 4;
+    private int searchTimeLimitMs       = 2000;
+    private int randomOpeningMoves      = 8;
+    private int generationThreadCount   = Math.Max(1, Environment.ProcessorCount / 2);
 
     // ── 進度顯示（訓練階段）──────────────────────────────────────────
 
@@ -186,6 +187,12 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
     {
         get => randomOpeningMoves;
         set => SetProperty(ref randomOpeningMoves, value);
+    }
+
+    public int GenerationThreadCount
+    {
+        get => generationThreadCount;
+        set => SetProperty(ref generationThreadCount, Math.Clamp(value, 1, Environment.ProcessorCount));
     }
 
     // ── 進度屬性（訓練階段，唯讀）────────────────────────────────────
@@ -399,8 +406,8 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
         else
         {
             IGameDataGenerator generator = selectedMode == TrainingMode.SelfPlay
-                ? new SelfPlayGenerator(trainNet, RandomOpeningMoves)
-                : new VsHandcraftedGenerator(trainNet);
+                ? new SelfPlayGenerator(trainNet, RandomOpeningMoves, GenerationThreadCount)
+                : new VsHandcraftedGenerator(trainNet, parallelism: GenerationThreadCount);
 
             trainer = new NnueTrainer(
                 trainNet,
