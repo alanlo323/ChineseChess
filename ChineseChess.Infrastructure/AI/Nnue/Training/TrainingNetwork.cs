@@ -3,6 +3,9 @@ using ChineseChess.Domain.Enums;
 using ChineseChess.Infrastructure.AI.Nnue.Features;
 using ChineseChess.Infrastructure.AI.Nnue.Helpers;
 using ChineseChess.Infrastructure.AI.Nnue.Network;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace ChineseChess.Infrastructure.AI.Nnue.Training;
 
@@ -428,11 +431,12 @@ public sealed class TrainingNetwork
                 gradFtBiases[n] += dFtAcc[c, n] * FtBiasScale;
 
             // Weights（稀疏：只更新活躍特徵的對應行）
+            // 快路徑：Vector512<float> 16 路並行
+            ReadOnlySpan<float> dAccRow = MemoryMarshal.CreateReadOnlySpan(ref dFtAcc[c, 0], L1);
             for (int f = 0; f < count; f++)
             {
-                long wOff = (long)feats[f] * L1;
-                for (int n = 0; n < L1; n++)
-                    gradFtWeights[wOff + n] += dFtAcc[c, n];
+                int wOff = feats[f] * L1;  // 最大 16535*1024 = 16,932,864，在 int 安全範圍內
+                AddSpanToSpan(gradFtWeights.AsSpan(wOff, L1), dAccRow);
             }
 
             // PSQT：psqt = (usSum - themSum) / 2 → d(psqt/OutputScale)/d(sum) = ±0.5/OutputScale
@@ -520,12 +524,14 @@ public sealed class TrainingNetwork
             if (c == 0) { cachedFeatCount0 = count; Array.Copy(featuresWork, cachedFeats0, count); }
             else        { cachedFeatCount1 = count; Array.Copy(featuresWork, cachedFeats1, count); }
 
+            // 累加各活躍特徵的 FT 權重（float32）
+            // 快路徑：Vector512<float>（AVX-512F）16 路並行；回退路徑：純量迴圈
+            Span<float> accRow = MemoryMarshal.CreateSpan(ref acc[c, 0], L1);
             for (int f = 0; f < count; f++)
             {
                 int featIdx = featuresWork[f];
                 int wOffset = (int)((long)featIdx * L1);
-                for (int n = 0; n < L1; n++)
-                    acc[c, n] += FtWeights[wOffset + n];
+                AddFloatVector(accRow, FtWeights, wOffset);
             }
         }
     }
@@ -594,4 +600,42 @@ public sealed class TrainingNetwork
         for (int i = 0; i < outer; i++) arr[i] = new float[innerLen(i)];
         return arr;
     }
+
+    // ── SIMD 輔助：float32 向量累加 ─────────────────────────────────
+
+    /// <summary>
+    /// 核心實作：dest[0..L1) += src[0..L1)
+    ///
+    /// 快路徑：Vector512&lt;float&gt;（AVX-512F），16 floats/週期（L1/16=64 次迭代）。
+    /// 回退路徑：純量迴圈（L1=1024，16 整除，無尾端）。
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AddFloatVectorCore(Span<float> dest, ReadOnlySpan<float> src)
+    {
+        if (Vector512.IsHardwareAccelerated)
+        {
+            int stride = Vector512<float>.Count;  // 16
+            ref float dRef = ref MemoryMarshal.GetReference(dest);
+            ref float sRef = ref MemoryMarshal.GetReference(src);
+            for (int n = 0; n <= L1 - stride; n += stride)
+            {
+                var dVec = Vector512.LoadUnsafe(ref Unsafe.Add(ref dRef, n));
+                var sVec = Vector512.LoadUnsafe(ref Unsafe.Add(ref sRef, n));
+                Vector512.StoreUnsafe(Vector512.Add(dVec, sVec), ref Unsafe.Add(ref dRef, n));
+            }
+        }
+        else
+        {
+            for (int n = 0; n < L1; n++)
+                dest[n] += src[n];
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AddFloatVector(Span<float> dest, float[] src, int srcOffset)
+        => AddFloatVectorCore(dest, src.AsSpan(srcOffset, L1));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AddSpanToSpan(Span<float> dest, ReadOnlySpan<float> src)
+        => AddFloatVectorCore(dest, src);
 }

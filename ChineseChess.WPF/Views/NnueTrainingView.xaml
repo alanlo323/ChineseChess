@@ -1,0 +1,198 @@
+<UserControl x:Class="ChineseChess.WPF.Views.NnueTrainingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:NnueTrainingViewModel}">
+
+    <GroupBox Header="本機訓練"
+              Margin="0,8,0,0"
+              Padding="8">
+        <StackPanel>
+
+            <!-- ─── 訓練設定 ─────────────────────────────────────────── -->
+            <TextBlock Text="訓練設定"
+                       Style="{StaticResource SectionTitleStyle}"
+                       Margin="0,0,0,6" />
+
+            <!-- 訓練資料路徑 -->
+            <TextBlock Text="訓練資料（.plain）："
+                       Style="{StaticResource FormLabelStyle}"
+                       Margin="0,0,0,2" />
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0"
+                         Text="{Binding TrainingDataPath, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="訓練資料檔路徑（.plain 格式：FEN | Score | Result）" />
+                <Button Grid.Column="1"
+                        Content="瀏覽…"
+                        Command="{Binding BrowseDataFileCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="4,0,0,0" />
+            </Grid>
+
+            <!-- 輸出模型路徑 -->
+            <TextBlock Text="輸出模型（.nnue）："
+                       Style="{StaticResource FormLabelStyle}"
+                       Margin="0,0,0,2" />
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0"
+                         Text="{Binding OutputModelPath, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="訓練完成後自動儲存的 .nnue 模型路徑" />
+                <Button Grid.Column="1"
+                        Content="儲存為…"
+                        Command="{Binding BrowseOutputFileCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="4,0,0,0" />
+            </Grid>
+
+            <!-- 超參數（三欄） -->
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="學習率"
+                               Style="{StaticResource FormLabelStyle}"
+                               Margin="0,0,0,2" />
+                    <TextBox Text="{Binding LearningRateText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Adam 優化器初始學習率（預設 0.001）" />
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="批次大小"
+                               Style="{StaticResource FormLabelStyle}"
+                               Margin="0,0,0,2" />
+                    <TextBox Text="{Binding BatchSize, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="每批次樣本數（預設 256）" />
+                </StackPanel>
+                <StackPanel Grid.Column="4">
+                    <TextBlock Text="Epoch 數"
+                               Style="{StaticResource FormLabelStyle}"
+                               Margin="0,0,0,2" />
+                    <TextBox Text="{Binding EpochCount, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="訓練 epoch 總數（預設 20）" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ─── 控制按鈕 ─────────────────────────────────────────── -->
+            <StackPanel Orientation="Horizontal"
+                        Margin="0,0,0,8">
+                <Button Content="開始訓練"
+                        Command="{Binding StartCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="0,0,6,0" />
+                <Button Content="{Binding PauseResumeLabel}"
+                        Command="{Binding PauseResumeCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="0,0,6,0" />
+                <Button Content="停止"
+                        Command="{Binding StopCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Margin="0,0,6,0" />
+                <Button Content="立即匯出"
+                        Command="{Binding ExportNowCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        ToolTip="將當前網路量化匯出為 .nnue（不需等待訓練完成）" />
+            </StackPanel>
+
+            <!-- ─── 進度區 ─────────────────────────────────────────────── -->
+            <ProgressBar Value="{Binding ProgressPercent}"
+                         Maximum="100"
+                         Height="8"
+                         Margin="0,0,0,4" />
+
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 左欄 -->
+                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,2">
+                    <TextBlock Text="Epoch："
+                               Style="{StaticResource FormLabelStyle}" />
+                    <TextBlock Foreground="{StaticResource InkBrush}">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0} / {1}">
+                                <Binding Path="CurrentEpoch" />
+                                <Binding Path="TotalEpochs" />
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,2">
+                    <TextBlock Text="Loss："
+                               Style="{StaticResource FormLabelStyle}" />
+                    <TextBlock Text="{Binding CurrentLoss, StringFormat={}{0:F4}}"
+                               Foreground="{StaticResource InkBrush}" />
+                </StackPanel>
+
+                <!-- 右欄 -->
+                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="最佳："
+                               Style="{StaticResource FormLabelStyle}" />
+                    <TextBlock Foreground="{StaticResource InkBrush}">
+                        <TextBlock.Text>
+                            <Binding Path="BestLoss" StringFormat="{}{0:F4}" />
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                    <TextBlock Text="預計剩餘："
+                               Style="{StaticResource FormLabelStyle}" />
+                    <TextBlock Text="{Binding EtaText}"
+                               Foreground="{StaticResource InkBrush}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ─── 狀態與日誌 ─────────────────────────────────────────── -->
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="{StaticResource InkBrush}"
+                       FontStyle="Italic"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,4" />
+
+            <ListBox ItemsSource="{Binding LogLines}"
+                     Height="130"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     FontSize="11"
+                     FontFamily="Consolas"
+                     Background="Transparent"
+                     BorderThickness="1">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="2,1" />
+                        <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}"
+                                   TextWrapping="Wrap" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+        </StackPanel>
+    </GroupBox>
+
+</UserControl>

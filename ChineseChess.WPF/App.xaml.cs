@@ -112,11 +112,17 @@ public partial class App : System.Windows.Application
         services.AddTransient<MoveHistoryViewModel>(sp => new MoveHistoryViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<IGameRecordService>()));
+        // NnueTrainingViewModel 以 Singleton 登記；Lazy<> 確保僅在首次存取時才初始化，
+        // 避免預先佔用 TrainingNetwork 的 ~200MB 記憶體。
+        // 必須使用 Singleton（非 Transient），防止 Singleton NnueViewModel 的 Lazy<> 欄位
+        // 每次解析到不同實例，導致 IDisposable 逸出（Captive Dependency 問題）。
+        services.AddSingleton<NnueTrainingViewModel>();
         services.AddSingleton<NnueViewModel>(sp =>
             new NnueViewModel(
                 sp.GetRequiredService<INnueNetwork>(),
                 sp.GetRequiredService<INnueSettingsService>(),
-                sp.GetRequiredService<IEngineProvider>()));
+                sp.GetRequiredService<IEngineProvider>(),
+                new Lazy<NnueTrainingViewModel>(() => sp.GetRequiredService<NnueTrainingViewModel>())));
         services.AddTransient<ControlPanelViewModel>(sp => new ControlPanelViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<GameSettings>(),

@@ -91,8 +91,9 @@ public sealed class NnueTrainer : IDisposable
     {
         trainCts?.Cancel();
         pauseSignal.Set();   // 確保暫停中的訓練也能退出
-        isRunning = false;
-        isPaused  = false;
+        // 注意：isRunning / isPaused 由 TrainLoop 的 finally 區塊統一重設，
+        // 此處不提前清除，避免 StartAsync() 的 IsRunning 守衛失效，
+        // 導致舊背景任務仍在執行時被允許重啟第二個訓練迴圈。
     }
 
     // ── 主訓練迴圈 ───────────────────────────────────────────────────
@@ -192,6 +193,7 @@ public sealed class NnueTrainer : IDisposable
         finally
         {
             isRunning = false;
+            isPaused  = false;
         }
     }
 

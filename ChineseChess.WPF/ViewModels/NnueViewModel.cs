@@ -14,6 +14,7 @@ namespace ChineseChess.WPF.ViewModels;
 ///   - 顯示模型元數據（路徑、大小、描述）
 ///   - 評估模式切換
 ///   - AIvsAI 每方獨立 NNUE 設定（UsePerPlayerNnue）
+///   - 本機訓練面板（Training）
 ///   - 設定持久化（nnue-user-settings.json）
 /// </summary>
 public sealed class NnueViewModel : ObservableObject
@@ -21,6 +22,7 @@ public sealed class NnueViewModel : ObservableObject
     private readonly INnueNetwork network;
     private readonly INnueSettingsService settingsService;
     private readonly IEngineProvider engineProvider;
+    private readonly Lazy<NnueTrainingViewModel> lazyTraining;
 
     private string modelPath     = string.Empty;
     private string statusMessage = "尚未載入模型";
@@ -33,11 +35,13 @@ public sealed class NnueViewModel : ObservableObject
     public NnueViewModel(
         INnueNetwork network,
         INnueSettingsService settingsService,
-        IEngineProvider engineProvider)
+        IEngineProvider engineProvider,
+        Lazy<NnueTrainingViewModel> lazyTraining)
     {
-        this.network        = network;
+        this.network         = network;
         this.settingsService = settingsService;
         this.engineProvider  = engineProvider;
+        this.lazyTraining    = lazyTraining;
 
         RedPlayer   = new NnuePlayerViewModel();
         BlackPlayer = new NnuePlayerViewModel();
@@ -133,6 +137,9 @@ public sealed class NnueViewModel : ObservableObject
 
     public NnuePlayerViewModel RedPlayer   { get; }
     public NnuePlayerViewModel BlackPlayer { get; }
+
+    /// <summary>本機訓練面板 ViewModel（首次存取時才建立，避免預先配置記憶體）。</summary>
+    public NnueTrainingViewModel Training  => lazyTraining.Value;
 
     public string PerPlayerStatusMessage
     {
