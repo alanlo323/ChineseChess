@@ -316,6 +316,18 @@ public sealed class TrainingNetwork
         return loss;
     }
 
+    /// <summary>
+    /// 純前向推論，返回 centipawn 分數（先手視角）。
+    /// 呼叫後執行 ZeroGradients() 清除快取旗標，確保後續訓練的 Backward() 不受影響。
+    /// 用於 TrainingNetworkEvaluator 在生成局面時評估局面（不進行反向傳播）。
+    /// </summary>
+    public int EvaluateToScore(IBoard board)
+    {
+        _ = ForwardAndLoss(board, 0.5f, out float predictedScore);
+        ZeroGradients();   // 清除 cachedValuesValid，避免殘留狀態污染後續訓練
+        return (int)predictedScore;
+    }
+
     // ── 反向傳播 ─────────────────────────────────────────────────────
 
     /// <summary>計算梯度並累積至 grad* 陣列（呼叫 Adam 步驟前不清除）。</summary>

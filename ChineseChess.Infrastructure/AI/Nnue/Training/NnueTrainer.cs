@@ -5,18 +5,29 @@ namespace ChineseChess.Infrastructure.AI.Nnue.Training;
 /// <summary>
 /// NNUE 訓練控制器：管理訓練生命週期，支援非同步啟動/暫停/恢復/停止。
 ///
+/// 支援兩種資料來源模式：
+///   - FromFile：從 TrainingDataLoader 載入靜態 .plain 檔案
+///   - Generator：每 epoch 透過 IGameDataGenerator 動態生成對局資料
+///     （VsHandcrafted 或 SelfPlay）
+///
 /// 訓練流程（每 epoch）：
-///   1. 打亂訓練資料
-///   2. 分批前向傳播計算損失
-///   3. 反向傳播（目前為框架實作，完整梯度留後補）
-///   4. Adam 更新
-///   5. 若損失改善則回報並觸發存檔回調
+///   1. [Generator 模式] 生成對局資料；[FromFile 模式] 使用已載入資料
+///   2. 打亂訓練資料
+///   3. 分批前向傳播計算損失
+///   4. 反向傳播
+///   5. Adam 更新
+///   6. 若損失改善則回報並觸發存檔回調
 /// </summary>
 public sealed class NnueTrainer : IDisposable
 {
     private readonly TrainingNetwork network;
-    private readonly TrainingDataLoader dataLoader;
+    private readonly TrainingDataLoader? dataLoader;
+    private readonly IGameDataGenerator? generator;
+    private readonly int gameCount;
+    private readonly int searchDepth;
+    private readonly int searchTimeLimitMs;
     private readonly Action<TrainingProgress> progressCallback;
+    private readonly Action<GameGenerationProgress>? generationProgressCallback;
     private readonly Action<TrainingNetwork>? bestModelCallback;
 
     // 訓練超參數
@@ -37,6 +48,7 @@ public sealed class NnueTrainer : IDisposable
     public bool IsPaused   => isPaused;
     public float BestLoss  => bestLoss;
 
+    /// <summary>FromFile 模式建構子：從 .plain 檔案載入靜態訓練資料。</summary>
     public NnueTrainer(
         TrainingNetwork network,
         TrainingDataLoader dataLoader,
@@ -53,6 +65,33 @@ public sealed class NnueTrainer : IDisposable
         this.learningRate     = learningRate;
         this.batchSize        = batchSize;
         this.epochCount       = epochCount;
+    }
+
+    /// <summary>Generator 模式建構子：每 epoch 透過 IGameDataGenerator 動態生成訓練資料。</summary>
+    public NnueTrainer(
+        TrainingNetwork network,
+        IGameDataGenerator generator,
+        int gameCount,
+        Action<TrainingProgress> progressCallback,
+        Action<GameGenerationProgress>? generationProgressCallback = null,
+        Action<TrainingNetwork>? bestModelCallback = null,
+        float learningRate = 1e-3f,
+        int batchSize = 256,
+        int epochCount = 20,
+        int searchDepth = 4,
+        int searchTimeLimitMs = 2000)
+    {
+        this.network                     = network;
+        this.generator                   = generator;
+        this.gameCount                   = gameCount;
+        this.progressCallback            = progressCallback;
+        this.generationProgressCallback  = generationProgressCallback;
+        this.bestModelCallback           = bestModelCallback;
+        this.learningRate                = learningRate;
+        this.batchSize                   = batchSize;
+        this.epochCount                  = epochCount;
+        this.searchDepth                 = searchDepth;
+        this.searchTimeLimitMs           = searchTimeLimitMs;
     }
 
     // ── 生命週期控制 ─────────────────────────────────────────────────
@@ -102,13 +141,18 @@ public sealed class NnueTrainer : IDisposable
     {
         try
         {
-            var data = dataLoader.LoadAllAsync(cancellationToken: ct)
-                .GetAwaiter().GetResult();
-
-            if (data.Count == 0)
+            // FromFile 模式：一次性載入全部資料
+            List<TrainingPosition>? staticData = null;
+            if (generator == null)
             {
-                ReportProgress(0, 0, 0, float.MaxValue, "訓練資料為空，請確認資料檔格式。", false);
-                return;
+                staticData = dataLoader!.LoadAllAsync(cancellationToken: ct)
+                    .GetAwaiter().GetResult();
+
+                if (staticData.Count == 0)
+                {
+                    ReportProgress(0, 0, 0, float.MaxValue, "訓練資料為空，請確認資料檔格式。", false);
+                    return;
+                }
             }
 
             var rng       = new Random(42);
@@ -117,11 +161,36 @@ public sealed class NnueTrainer : IDisposable
 
             for (int epoch = 1; epoch <= epochCount && !ct.IsCancellationRequested; epoch++)
             {
+                // Generator 模式：每 epoch 重新生成對局資料
+                List<TrainingPosition> data;
+                if (generator != null)
+                {
+                    ReportProgress(epoch, 0, 0, BestLoss,
+                        $"Epoch {epoch}/{epochCount}：生成 {gameCount} 局對局資料中…", true);
+
+                    data = generator.GenerateAsync(
+                        gameCount, searchDepth, searchTimeLimitMs,
+                        generationProgressCallback, ct).GetAwaiter().GetResult();
+
+                    if (ct.IsCancellationRequested) break;
+
+                    if (data.Count == 0)
+                    {
+                        ReportProgress(epoch, 0, 0, BestLoss, $"Epoch {epoch}：未生成任何局面，跳過。", true);
+                        continue;
+                    }
+                }
+                else
+                {
+                    data = staticData!;
+                }
+
                 // 打亂資料
                 Shuffle(data, rng);
 
                 float epochLoss = 0f;
                 int   stepInEpoch = 0;
+                long  totalStepsTarget = (long)epochCount * ((data.Count + batchSize - 1) / batchSize);
 
                 for (int batchStart = 0; batchStart < data.Count && !ct.IsCancellationRequested; batchStart += batchSize)
                 {
@@ -129,23 +198,7 @@ public sealed class NnueTrainer : IDisposable
                     pauseSignal.Wait(ct);
                     if (ct.IsCancellationRequested) break;
 
-                    int end = Math.Min(batchStart + batchSize, data.Count);
-                    float batchLoss = 0f;
-
-                    network.ZeroGradients();
-
-                    for (int k = batchStart; k < end; k++)
-                    {
-                        var pos = data[k];
-                        var board = new Board(pos.Fen);
-                        float loss = network.ForwardAndLoss(board, pos.Result, out _);
-                        batchLoss += loss;
-                        network.Backward(board, pos.Result, end - batchStart);
-                    }
-
-                    network.StepAdam(learningRate);
-
-                    batchLoss /= (end - batchStart);
+                    float batchLoss = ProcessBatch(data, batchStart);
                     epochLoss += batchLoss;
                     stepInEpoch++;
                     totalSteps++;
@@ -153,8 +206,7 @@ public sealed class NnueTrainer : IDisposable
                     // 每 100 步回報一次進度
                     if (stepInEpoch % 100 == 0)
                     {
-                        double eta = EstimateEta(sw.Elapsed.TotalSeconds, totalSteps,
-                            (long)epochCount * ((data.Count + batchSize - 1) / batchSize));
+                        double eta = EstimateEta(sw.Elapsed.TotalSeconds, totalSteps, totalStepsTarget);
                         ReportProgress(epoch, stepInEpoch, batchLoss, BestLoss,
                             $"Epoch {epoch}/{epochCount}，step {stepInEpoch}，loss={batchLoss:F4}",
                             true, lr: learningRate, eta: eta, totalSteps: totalSteps);
@@ -221,6 +273,32 @@ public sealed class NnueTrainer : IDisposable
     {
         if (done <= 0) return -1;
         return elapsedSec / done * (total - done);
+    }
+
+    /// <summary>
+    /// 執行單一 batch 的前向 + 反向傳播，並更新 Adam 優化器。
+    /// </summary>
+    /// <param name="data">全部訓練資料。</param>
+    /// <param name="batchStart">本次 batch 的起始索引。</param>
+    /// <returns>本 batch 的平均 loss。</returns>
+    private float ProcessBatch(List<TrainingPosition> data, int batchStart)
+    {
+        int end = Math.Min(batchStart + batchSize, data.Count);
+        int actualSize = end - batchStart;
+
+        network.ZeroGradients();
+
+        float batchLoss = 0f;
+        for (int k = batchStart; k < end; k++)
+        {
+            var pos = data[k];
+            var board = new Board(pos.Fen);
+            batchLoss += network.ForwardAndLoss(board, pos.Result, out _);
+            network.Backward(board, pos.Result, actualSize);
+        }
+
+        network.StepAdam(learningRate);
+        return batchLoss / actualSize;
     }
 
     private static void Shuffle<T>(List<T> list, Random rng)

@@ -1,4 +1,5 @@
 using ChineseChess.Infrastructure.AI.Nnue.Training;
+using ChineseChess.Application.Interfaces;
 using ChineseChess.WPF.Core;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
@@ -26,7 +27,11 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
 {
     private const int MaxLogLines = 200;
 
-    // ── 設定 ──────────────────────────────────────────────────────────
+    // ── 訓練模式 ──────────────────────────────────────────────────────
+
+    private TrainingMode selectedMode = TrainingMode.FromFile;
+
+    // ── 設定（FromFile 模式）──────────────────────────────────────────
 
     private string trainingDataPath = string.Empty;
     private string outputModelPath  = string.Empty;
@@ -34,7 +39,14 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
     private int    batchSize        = 256;
     private int    epochCount       = 20;
 
-    // ── 進度顯示 ──────────────────────────────────────────────────────
+    // ── 設定（Generator 模式：VsHandcrafted / SelfPlay）──────────────
+
+    private int gameCount          = 50;
+    private int searchDepth        = 4;
+    private int searchTimeLimitMs  = 2000;
+    private int randomOpeningMoves = 8;
+
+    // ── 進度顯示（訓練階段）──────────────────────────────────────────
 
     private int    currentEpoch    = 0;
     private int    totalEpochs     = 0;
@@ -45,6 +57,14 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
     private string statusMessage   = "尚未開始訓練";
     private bool   isRunning       = false;
     private bool   isPaused        = false;
+
+    // ── 進度顯示（生成階段）──────────────────────────────────────────
+
+    private int    generatedGames        = 0;
+    private int    totalGamesTarget      = 0;
+    private int    collectedPositions    = 0;
+    private string generationStatusText  = string.Empty;
+    private bool   isGenerating          = false;
 
     // ── 內部訓練物件（on-demand 建立；僅在 UI 執行緒設置/清除）──────
 
@@ -57,7 +77,11 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
 
         BrowseDataFileCommand   = new RelayCommand(_ => BrowseDataFile());
         BrowseOutputFileCommand = new RelayCommand(_ => BrowseOutputFile());
-        StartCommand            = new RelayCommand(_ => _ = StartTrainingAsync(),
+        StartCommand            = new RelayCommand(async _ =>
+                                                  {
+                                                      try { await StartTrainingAsync(); }
+                                                      catch (Exception ex) { AppendLog($"啟動失敗：{ex.Message}"); }
+                                                  },
                                                   _ => !IsRunning && CanStart());
         PauseResumeCommand      = new RelayCommand(_ => TogglePause(),
                                                   _ => IsRunning);
@@ -67,7 +91,46 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
                                                   _ => trainNet != null);
     }
 
-    // ── 設定屬性 ──────────────────────────────────────────────────────
+    // ── 模式屬性 ──────────────────────────────────────────────────────
+
+    public TrainingMode SelectedMode
+    {
+        get => selectedMode;
+        set
+        {
+            if (SetProperty(ref selectedMode, value))
+            {
+                OnPropertyChanged(nameof(IsFromFileMode));
+                OnPropertyChanged(nameof(IsVsHandcraftedMode));
+                OnPropertyChanged(nameof(IsSelfPlayMode));
+                OnPropertyChanged(nameof(IsGeneratorMode));
+            }
+        }
+    }
+
+    // 供 RadioButton 雙向綁定用（setter 觸發 SelectedMode 切換）
+    public bool IsFromFileMode
+    {
+        get => selectedMode == TrainingMode.FromFile;
+        set { if (value) SelectedMode = TrainingMode.FromFile; }
+    }
+
+    public bool IsVsHandcraftedMode
+    {
+        get => selectedMode == TrainingMode.VsHandcrafted;
+        set { if (value) SelectedMode = TrainingMode.VsHandcrafted; }
+    }
+
+    public bool IsSelfPlayMode
+    {
+        get => selectedMode == TrainingMode.SelfPlay;
+        set { if (value) SelectedMode = TrainingMode.SelfPlay; }
+    }
+
+    // 唯讀計算屬性（控制區塊可見性）
+    public bool IsGeneratorMode   => selectedMode != TrainingMode.FromFile;
+
+    // ── 設定屬性（FromFile）──────────────────────────────────────────
 
     public string TrainingDataPath
     {
@@ -96,14 +159,36 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
     public int EpochCount
     {
         get => epochCount;
-        set
-        {
-            if (SetProperty(ref epochCount, value))
-                totalEpochs = value;
-        }
+        set => SetProperty(ref epochCount, value);
     }
 
-    // ── 進度屬性（唯讀）──────────────────────────────────────────────
+    // ── 設定屬性（Generator 模式）────────────────────────────────────
+
+    public int GameCount
+    {
+        get => gameCount;
+        set => SetProperty(ref gameCount, value);
+    }
+
+    public int SearchDepth
+    {
+        get => searchDepth;
+        set => SetProperty(ref searchDepth, value);
+    }
+
+    public int SearchTimeLimitMs
+    {
+        get => searchTimeLimitMs;
+        set => SetProperty(ref searchTimeLimitMs, value);
+    }
+
+    public int RandomOpeningMoves
+    {
+        get => randomOpeningMoves;
+        set => SetProperty(ref randomOpeningMoves, value);
+    }
+
+    // ── 進度屬性（訓練階段，唯讀）────────────────────────────────────
 
     public int CurrentEpoch
     {
@@ -170,6 +255,38 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
     /// <summary>暫停/繼續按鈕的標籤文字。</summary>
     public string PauseResumeLabel => (IsRunning && !IsPaused) ? "暫停" : "繼續";
 
+    // ── 進度屬性（生成階段，唯讀）────────────────────────────────────
+
+    public int GeneratedGames
+    {
+        get => generatedGames;
+        private set => SetProperty(ref generatedGames, value);
+    }
+
+    public int TotalGamesTarget
+    {
+        get => totalGamesTarget;
+        private set => SetProperty(ref totalGamesTarget, value);
+    }
+
+    public int CollectedPositions
+    {
+        get => collectedPositions;
+        private set => SetProperty(ref collectedPositions, value);
+    }
+
+    public string GenerationStatusText
+    {
+        get => generationStatusText;
+        private set => SetProperty(ref generationStatusText, value);
+    }
+
+    public bool IsGenerating
+    {
+        get => isGenerating;
+        private set => SetProperty(ref isGenerating, value);
+    }
+
     // ── 日誌 ──────────────────────────────────────────────────────────
 
     public ObservableCollection<string> LogLines { get; }
@@ -214,14 +331,20 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
 
     private bool CanStart()
     {
-        // 使用 InvariantCulture 確保不同地區設定的小數點格式（如德文逗號）不影響解析
-        return File.Exists(TrainingDataPath)
-            && !string.IsNullOrWhiteSpace(OutputModelPath)
-            && float.TryParse(LearningRateText,
-                              NumberStyles.Float,
-                              CultureInfo.InvariantCulture,
-                              out float lr)
-            && lr > 0f;
+        if (string.IsNullOrWhiteSpace(OutputModelPath)) return false;
+        if (!float.TryParse(LearningRateText, NumberStyles.Float,
+                            CultureInfo.InvariantCulture, out float lr) || lr <= 0f)
+            return false;
+
+        if (BatchSize < 1 || EpochCount < 1) return false;
+
+        return selectedMode switch
+        {
+            TrainingMode.FromFile      => File.Exists(TrainingDataPath),
+            TrainingMode.VsHandcrafted => GameCount >= 1 && SearchDepth >= 1 && SearchTimeLimitMs >= 100,
+            TrainingMode.SelfPlay      => GameCount >= 1 && SearchDepth >= 1 && SearchTimeLimitMs >= 100,
+            _                          => false,
+        };
     }
 
     private async Task StartTrainingAsync()
@@ -235,9 +358,8 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
         if (lr <= 0f) lr = 1e-3f;
 
         trainNet = new TrainingNetwork();
-        var loader = new TrainingDataLoader(TrainingDataPath);
 
-        TotalEpochs     = EpochCount;
+        TotalEpochs     = EpochCount;   // 確保 PropertyChanged 觸發，更新進度列分母
         CurrentEpoch    = 0;
         CurrentLoss     = 0f;
         BestLoss        = float.MaxValue;
@@ -261,19 +383,45 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
             }
         }
 
-        trainer = new NnueTrainer(
-            trainNet,
-            loader,
-            progressCallback: OnProgress,
-            bestModelCallback: BestModelCallback,
-            learningRate: lr,
-            batchSize: BatchSize,
-            epochCount: EpochCount);
+        if (selectedMode == TrainingMode.FromFile)
+        {
+            var loader = new TrainingDataLoader(TrainingDataPath);
+            trainer = new NnueTrainer(
+                trainNet,
+                loader,
+                progressCallback: OnProgress,
+                bestModelCallback: BestModelCallback,
+                learningRate: lr,
+                batchSize: BatchSize,
+                epochCount: EpochCount);
+            AppendLog($"訓練開始（從檔案）：{Path.GetFileName(TrainingDataPath)}，LR={lr}，Batch={BatchSize}，Epoch={EpochCount}");
+        }
+        else
+        {
+            IGameDataGenerator generator = selectedMode == TrainingMode.SelfPlay
+                ? new SelfPlayGenerator(trainNet, RandomOpeningMoves)
+                : new VsHandcraftedGenerator(trainNet);
+
+            trainer = new NnueTrainer(
+                trainNet,
+                generator,
+                gameCount: GameCount,
+                progressCallback: OnProgress,
+                generationProgressCallback: OnGenerationProgress,
+                bestModelCallback: BestModelCallback,
+                learningRate: lr,
+                batchSize: BatchSize,
+                epochCount: EpochCount,
+                searchDepth: SearchDepth,
+                searchTimeLimitMs: SearchTimeLimitMs);
+
+            string modeName = selectedMode == TrainingMode.SelfPlay ? "自我對戰" : "對戰手工評估";
+            AppendLog($"訓練開始（{modeName}）：{GameCount} 局/Epoch，深度={SearchDepth}，LR={lr}，Epoch={EpochCount}");
+        }
 
         IsRunning = true;
         IsPaused  = false;
         StatusMessage = "訓練中…";
-        AppendLog($"訓練開始：資料={Path.GetFileName(TrainingDataPath)}，LR={lr}，Batch={BatchSize}，Epoch={EpochCount}");
 
         await trainer.StartAsync();
 
@@ -354,6 +502,18 @@ public sealed class NnueTrainingViewModel : ObservableObject, IDisposable
             }
 
             // IsRunning=false 由 StartTrainingAsync continuation 統一處理，此處不重複清理
+        });
+    }
+
+    private void OnGenerationProgress(GameGenerationProgress progress)
+    {
+        WpfApp.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            GeneratedGames      = progress.GamesCompleted;
+            TotalGamesTarget    = progress.GamesTarget;
+            CollectedPositions  = progress.PositionsCollected;
+            GenerationStatusText = progress.Message ?? string.Empty;
+            IsGenerating        = progress.IsGenerating;
         });
     }
 

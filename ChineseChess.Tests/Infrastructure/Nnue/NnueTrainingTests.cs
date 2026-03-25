@@ -3,6 +3,7 @@ using ChineseChess.Infrastructure.AI.Nnue.Training;
 
 namespace ChineseChess.Tests.Infrastructure.Nnue;
 
+
 /// <summary>
 /// 驗證 TrainingNetwork 的反向傳播正確性：
 ///   1. 梯度累積後 Adam 更新可使損失在訓練中持續下降
@@ -72,5 +73,69 @@ public class NnueTrainingTests
         network.ZeroGradients();
         Assert.True(network.AllGradientsZero(),
             "ZeroGradients() 後所有梯度陣列均應為零");
+    }
+}
+
+/// <summary>
+/// 驗證 NnueTrainer 使用 IGameDataGenerator 模式的整合行為：
+///   1. 使用 generator 的訓練迴圈，單 epoch 後損失為有限值
+///   2. generationProgressCallback 在生成階段被呼叫
+/// </summary>
+public class NnueTrainerGeneratorTests
+{
+    private const string InitialFen =
+        "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+
+    [Fact]
+    public async Task TrainWithGenerator_OneEpoch_LossIsFinite()
+    {
+        var network   = new TrainingNetwork();
+        var generator = new SelfPlayGenerator(network, randomOpeningMoves: 4);
+        TrainingProgress? lastProgress = null;
+
+        var trainer = new NnueTrainer(
+            network:                      network,
+            generator:                    generator,
+            gameCount:                    2,
+            progressCallback:             p => lastProgress = p,
+            generationProgressCallback:   null,
+            bestModelCallback:            null,
+            learningRate:                 1e-3f,
+            batchSize:                    8,
+            epochCount:                   1,
+            searchDepth:                  1,
+            searchTimeLimitMs:            3000);
+
+        await trainer.StartAsync();
+
+        Assert.NotNull(lastProgress);
+        Assert.True(float.IsFinite(lastProgress!.Loss) || float.IsFinite(lastProgress.BestLoss),
+            $"單 epoch 後損失應為有限值，但 loss={lastProgress.Loss}, bestLoss={lastProgress.BestLoss}");
+    }
+
+    [Fact]
+    public async Task TrainWithGenerator_GenerationProgress_IsReported()
+    {
+        var network   = new TrainingNetwork();
+        var generator = new SelfPlayGenerator(network, randomOpeningMoves: 4);
+        int generationCallCount = 0;
+
+        var trainer = new NnueTrainer(
+            network:                      network,
+            generator:                    generator,
+            gameCount:                    2,
+            progressCallback:             _ => { },
+            generationProgressCallback:   _ => generationCallCount++,
+            bestModelCallback:            null,
+            learningRate:                 1e-3f,
+            batchSize:                    8,
+            epochCount:                   1,
+            searchDepth:                  1,
+            searchTimeLimitMs:            3000);
+
+        await trainer.StartAsync();
+
+        Assert.True(generationCallCount >= 2,
+            $"生成 2 局應至少觸發 2 次 generationProgressCallback，但只有 {generationCallCount} 次");
     }
 }

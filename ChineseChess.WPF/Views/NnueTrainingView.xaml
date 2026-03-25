@@ -17,24 +17,97 @@
                        Style="{StaticResource SectionTitleStyle}"
                        Margin="0,0,0,6" />
 
-            <!-- 訓練資料路徑 -->
-            <TextBlock Text="訓練資料（.plain）："
+            <!-- 訓練模式選擇 -->
+            <TextBlock Text="訓練模式："
                        Style="{StaticResource FormLabelStyle}"
-                       Margin="0,0,0,2" />
-            <Grid Margin="0,0,0,6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0"
-                         Text="{Binding TrainingDataPath, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="訓練資料檔路徑（.plain 格式：FEN | Score | Result）" />
-                <Button Grid.Column="1"
-                        Content="瀏覽…"
-                        Command="{Binding BrowseDataFileCommand}"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Margin="4,0,0,0" />
-            </Grid>
+                       Margin="0,0,0,4" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <RadioButton Content="從檔案匯入"
+                             IsChecked="{Binding IsFromFileMode}"
+                             GroupName="TrainingMode"
+                             Margin="0,0,12,0"
+                             ToolTip="從 .plain 格式的靜態對局資料檔訓練" />
+                <RadioButton Content="NNUE 對戰手工評估"
+                             IsChecked="{Binding IsVsHandcraftedMode}"
+                             GroupName="TrainingMode"
+                             Margin="0,0,12,0"
+                             ToolTip="用 NNUE 對戰 HandcraftedEvaluator 動態生成訓練資料" />
+                <RadioButton Content="自我對戰"
+                             IsChecked="{Binding IsSelfPlayMode}"
+                             GroupName="TrainingMode"
+                             ToolTip="兩方皆使用當前 NNUE 自我對弈生成訓練資料" />
+            </StackPanel>
+
+            <!-- 訓練資料路徑（FromFile 模式） -->
+            <StackPanel Visibility="{Binding IsFromFileMode, Converter={StaticResource BoolToVisibilityConverter}}">
+                <TextBlock Text="訓練資料（.plain）："
+                           Style="{StaticResource FormLabelStyle}"
+                           Margin="0,0,0,2" />
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             Text="{Binding TrainingDataPath, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="訓練資料檔路徑（.plain 格式：FEN | Score | Result）" />
+                    <Button Grid.Column="1"
+                            Content="瀏覽…"
+                            Command="{Binding BrowseDataFileCommand}"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Margin="4,0,0,0" />
+                </Grid>
+            </StackPanel>
+
+            <!-- 生成設定（VsHandcrafted / SelfPlay 模式） -->
+            <StackPanel Visibility="{Binding IsGeneratorMode, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="8" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="8" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="生成局數/Epoch"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,2" />
+                        <TextBox Text="{Binding GameCount, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="每個 Epoch 生成的對局局數（建議 20~100）" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="搜尋深度"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,2" />
+                        <TextBox Text="{Binding SearchDepth, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="生成對局時每步的搜尋深度（建議 3~6）" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="4">
+                        <TextBlock Text="每步時限(ms)"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,2" />
+                        <TextBox Text="{Binding SearchTimeLimitMs, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="每步搜尋時間上限（毫秒）" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- 隨機開局（SelfPlay 模式） -->
+                <Grid Margin="0,0,0,8"
+                      Visibility="{Binding IsSelfPlayMode, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="隨機開局步數"
+                                   Style="{StaticResource FormLabelStyle}"
+                                   Margin="0,0,0,2" />
+                        <TextBox Text="{Binding RandomOpeningMoves, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="前 N 步隨機走棋，增加對局多樣性（建議 4~12）" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
 
             <!-- 輸出模型路徑 -->
             <TextBlock Text="輸出模型（.nnue）："
@@ -108,8 +181,31 @@
                         ToolTip="將當前網路量化匯出為 .nnue（不需等待訓練完成）" />
             </StackPanel>
 
-            <!-- ─── 進度區 ─────────────────────────────────────────────── -->
-            <ProgressBar Value="{Binding ProgressPercent}"
+            <!-- ─── 生成進度區（Generator 模式時顯示）────────────────────── -->
+            <StackPanel Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibilityConverter}}"
+                        Margin="0,0,0,8">
+                <TextBlock Text="生成對局中…"
+                           Style="{StaticResource FormLabelStyle}"
+                           Margin="0,0,0,2" />
+                <ProgressBar Maximum="{Binding TotalGamesTarget}"
+                             Value="{Binding GeneratedGames, Mode=OneWay}"
+                             Height="6"
+                             Margin="0,0,0,4" />
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Foreground="{StaticResource InkBrush}">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="已完成 {0}/{1} 局，共收集 {2} 個局面">
+                                <Binding Path="GeneratedGames" />
+                                <Binding Path="TotalGamesTarget" />
+                                <Binding Path="CollectedPositions" />
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- ─── 訓練進度區 ────────────────────────────────────────────── -->
+            <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}"
                          Maximum="100"
                          Height="8"
                          Margin="0,0,0,4" />
