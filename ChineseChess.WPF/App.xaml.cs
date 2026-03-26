@@ -10,6 +10,7 @@ using ChineseChess.Infrastructure.AI.Nnue.Network;
 using ChineseChess.Infrastructure.AI.Protocol;
 using ChineseChess.Infrastructure.AI.Search;
 using ChineseChess.Infrastructure.Persistence;
+using ChineseChess.Infrastructure.Tablebase;
 using ChineseChess.WPF.ViewModels;
 using MainWindowView = ChineseChess.WPF.Views.MainWindow;
 using Microsoft.Extensions.Configuration;
@@ -123,6 +124,13 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<INnueSettingsService>(),
                 sp.GetRequiredService<IEngineProvider>(),
                 new Lazy<NnueTrainingViewModel>(() => sp.GetRequiredService<NnueTrainingViewModel>())));
+        // 殘局庫服務
+        services.AddSingleton<ITablebaseService, TablebaseService>();
+        services.AddSingleton<EndgameTablebViewModel>(sp =>
+            new EndgameTablebViewModel(
+                sp.GetRequiredService<ITablebaseService>(),
+                sp.GetRequiredService<IGameService>()));
+
         services.AddTransient<ControlPanelViewModel>(sp => new ControlPanelViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<GameSettings>(),
@@ -130,7 +138,8 @@ public partial class App : System.Windows.Application
             sp.GetService<GameAnalysisSettings>(),
             sp.GetRequiredService<ExternalEngineViewModel>(),
             sp.GetRequiredService<MoveHistoryViewModel>(),
-            sp.GetRequiredService<NnueViewModel>()));
+            sp.GetRequiredService<NnueViewModel>(),
+            sp.GetRequiredService<EndgameTablebViewModel>()));
 
         // 視圖層（Views）
         services.AddTransient<MainWindowView>();

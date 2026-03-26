@@ -424,6 +424,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>棋譜側邊欄 ViewModel。</summary>
     public MoveHistoryViewModel? MoveHistory { get; }
 
+    /// <summary>殘局庫 ViewModel。</summary>
+    public EndgameTablebViewModel? EndgameTableb { get; }
+
     // ─── 外部引擎快速開關（設定頁 Tab 1）─────────────────────────────────
 
     /// <summary>直接委派至 ExternalEngine，永遠與其同步。</summary>
@@ -453,11 +456,12 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>黑方已設定引擎路徑（決定快速開關 CheckBox 是否可用）。</summary>
     public bool HasBlackEngineConfig => ExternalEngine?.HasBlackEngineConfig ?? false;
 
-    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null, NnueViewModel? nnueViewModel = null)
+    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null, NnueViewModel? nnueViewModel = null, EndgameTablebViewModel? endgameTablebViewModel = null)
     {
         ExternalEngine = externalEngineViewModel;
         MoveHistory = moveHistoryViewModel;
         Nnue = nnueViewModel;
+        EndgameTableb = endgameTablebViewModel;
         this.gameService = gameService;
         this.gameAnalysisService = gameAnalysisService;
 

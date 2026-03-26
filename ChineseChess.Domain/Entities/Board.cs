@@ -761,6 +761,26 @@ public class Board : IBoard
         return !GenerateLegalMoves().Any();
     }
 
+    /// <summary>
+    /// 判斷 color 方是否被困斃（無合法著法且未被將軍）。
+    /// 象棋規則：困斃等同輸棋（與國際象棋不同，非和棋）。
+    /// </summary>
+    public bool IsStalemate(PieceColor color)
+    {
+        Debug.Assert(color == turn, "IsStalemate 必須在目標方輪次時呼叫");
+        return !IsCheck(color) && HasNoLegalMoves(color);
+    }
+
+    /// <summary>
+    /// 判斷 color 方是否無任何合法著法（無論是否被將軍）。
+    /// 殘局庫使用：將死與困斃均屬 Loss(0)，可統一以此方法判定。
+    /// </summary>
+    public bool HasNoLegalMoves(PieceColor color)
+    {
+        Debug.Assert(color == turn, "HasNoLegalMoves 必須在目標方輪次時呼叫");
+        return !GenerateLegalMoves().Any();
+    }
+
     private int GetKingIndex(PieceColor color)
         => color == PieceColor.Red ? redKingIndex : blackKingIndex;
 

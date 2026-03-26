@@ -80,7 +80,7 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
         }
 
-        var reasoning = settings.EnableReasoning
+        var reasoningEffort = settings.EnableReasoning
             ? new ReasoningConfig(settings.ReasoningEffort)
             : null;
 
@@ -93,7 +93,10 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
             Temperature: settings.Temperature,
             MaxTokens: settings.MaxTokens,
             Stream: progress is not null,
-            Reasoning: reasoning);
+            Reasoning: settings.EnableReasoning,
+            EnableThinking: settings.EnableReasoning,
+            ReasoningEffort: reasoningEffort
+            );
 
         requestMessage.Content = new StringContent(
             JsonSerializer.Serialize(payload, JsonOptions),
@@ -560,6 +563,8 @@ public sealed class OpenAICompatibleHintExplanationService : IHintExplanationSer
         double Temperature = 0.2,
         [property: JsonPropertyName("max_tokens")] int MaxTokens = 1200,
         [property: JsonPropertyName("stream")] bool Stream = false,
-        [property: JsonPropertyName("reasoning"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ReasoningConfig? Reasoning = null);
+        [property: JsonPropertyName("enable_thinking")] bool? EnableThinking = false,
+        [property: JsonPropertyName("reasoning")] bool? Reasoning = false,
+        [property: JsonPropertyName("reasoning_effort"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ReasoningConfig? ReasoningEffort = null);
 }
 

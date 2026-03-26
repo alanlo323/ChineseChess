@@ -857,6 +857,11 @@
                 <views:MoveHistoryView DataContext="{Binding MoveHistory}" />
             </TabItem>
 
+            <!-- 殘局庫頁 -->
+            <TabItem Header="殘局庫">
+                <views:EndgameTablebView DataContext="{Binding EndgameTableb}" />
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </UserControl>
