@@ -4,9 +4,10 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             xmlns:enums="clr-namespace:ChineseChess.Domain.Enums;assembly=ChineseChess.Domain"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:BoardSetupViewModel}">
-    <StackPanel Margin="0,8,0,0">
+   <StackPanel Margin="0,8,0,0">
 
         <TextBlock Text="【擺棋模式】"
                    FontSize="14"
@@ -14,37 +15,96 @@
                    Foreground="{StaticResource InkBrush}"
                    Margin="0,0,0,8" />
 
-        <!-- 選擇顏色 -->
-        <TextBlock Text="棋子顏色："
+        <!-- 棋子調色板：上排紅方 / 下排黑方 -->
+        <TextBlock Text="選取棋子："
                    Style="{StaticResource FormLabelStyle}"
                    Margin="0,0,0,4" />
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-            <RadioButton Content="紅方" IsChecked="{Binding SelectedColor, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Red}"
-                         Margin="0,0,12,0" Foreground="#CC2200" FontWeight="SemiBold" />
-            <RadioButton Content="黑方" IsChecked="{Binding SelectedColor, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Black}"
-                         Foreground="#222222" FontWeight="SemiBold" />
-        </StackPanel>
+        <ListBox ItemsSource="{Binding PiecePalette}"
+                 SelectedItem="{Binding SelectedPiece, Mode=TwoWay}"
+                 Style="{StaticResource PiecePaletteListBoxStyle}"
+                 Margin="0,0,0,6">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="7" />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem" BasedOn="{StaticResource PiecePaletteItemStyle}" />
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid Width="40" Height="40">
+                        <Ellipse Width="40" Height="40">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <Setter Property="Fill" Value="{StaticResource RedPieceDiscBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Color}"
+                                                     Value="{x:Static enums:PieceColor.Black}">
+                                            <Setter Property="Fill" Value="{StaticResource BlackPieceDiscBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <Ellipse Width="40" Height="40" Fill="Transparent">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <Setter Property="Stroke" Value="{StaticResource RedPieceRingBrush}" />
+                                    <Setter Property="StrokeThickness" Value="2" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Color}"
+                                                     Value="{x:Static enums:PieceColor.Black}">
+                                            <Setter Property="Stroke" Value="{StaticResource BlackPieceRingBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <Ellipse Width="32" Height="32" Fill="Transparent" Opacity="0.7">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <Setter Property="Stroke" Value="{StaticResource RedPieceRingBrush}" />
+                                    <Setter Property="StrokeThickness" Value="1" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Color}"
+                                                     Value="{x:Static enums:PieceColor.Black}">
+                                            <Setter Property="Stroke" Value="{StaticResource BlackPieceRingBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock Text="{Binding Converter={StaticResource PieceTextConverter}}"
+                                   FontFamily="{StaticResource ChineseClassicFont}"
+                                   FontSize="17"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   TextAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource RedPieceTextBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Color}"
+                                                     Value="{x:Static enums:PieceColor.Black}">
+                                            <Setter Property="Foreground" Value="{StaticResource BlackPieceTextBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
 
-        <!-- 選擇棋子種類 -->
-        <TextBlock Text="棋子種類："
-                   Style="{StaticResource FormLabelStyle}"
-                   Margin="0,0,0,4" />
-        <WrapPanel Margin="0,0,0,8">
-            <RadioButton Content="帥/將" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=King}"
-                         Margin="0,0,8,4" />
-            <RadioButton Content="仕/士" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Advisor}"
-                         Margin="0,0,8,4" />
-            <RadioButton Content="相/象" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Elephant}"
-                         Margin="0,0,8,4" />
-            <RadioButton Content="馬" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Horse}"
-                         Margin="0,0,8,4" />
-            <RadioButton Content="車" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Rook}"
-                         Margin="0,0,8,4" />
-            <RadioButton Content="炮" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Cannon}"
-                         Margin="0,0,8,4" />
-            <RadioButton Content="兵/卒" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Pawn}"
-                         Margin="0,0,8,4" />
-        </WrapPanel>
+        <!-- 橡皮擦模式 -->
+        <ToggleButton Content="橡皮擦"
+                      IsChecked="{Binding IsEraseMode, Mode=TwoWay}"
+                      Style="{StaticResource EraseModeToggleStyle}"
+                      HorizontalAlignment="Stretch"
+                      Margin="0,0,0,8" />
 
         <!-- 行棋方 -->
         <TextBlock Text="行棋方："
@@ -107,8 +167,10 @@
                 <Run Text="左鍵" FontWeight="Bold" />
                 <Run Text="：放置選取棋子" />
                 <LineBreak />
-                <Run Text="右鍵" FontWeight="Bold" />
-                <Run Text="：移除格上棋子" />
+                <Run Text="橡皮擦" FontWeight="Bold" />
+                <Run Text=" + 左鍵：移除棋子" />
+                <LineBreak />
+                <Run Text="（右鍵亦可直接移除）" />
             </TextBlock>
         </Border>
 

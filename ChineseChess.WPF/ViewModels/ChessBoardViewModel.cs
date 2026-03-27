@@ -329,13 +329,13 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         {
             if (param is not SquareViewModel square) return;
 
-            // 擺棋模式：左鍵放置選取棋子
             if (gameService.IsInSetupMode)
             {
-                if (SetupViewModel != null)
-                {
+                if (SetupViewModel == null) return;
+                if (SetupViewModel.IsEraseMode)
+                    gameService.SetupRemovePiece(square.Index);
+                else
                     gameService.SetupPlacePiece(square.Index, SetupViewModel.SelectedPiece);
-                }
                 return;
             }
 

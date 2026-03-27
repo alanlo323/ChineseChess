@@ -32,6 +32,9 @@
     <Color x:Key="SmartHintPositiveColor">#2E7D32</Color>
     <Color x:Key="SmartHintNegativeColor">#B71C1C</Color>
     <Color x:Key="SmartHintNeutralColor">#37474F</Color>
+    <Color x:Key="EraseActiveColor">#C0392B</Color>
+    <Color x:Key="EraseActiveBorderColor">#922B21</Color>
+    <Color x:Key="SelectedGlowColor">#F2E08E</Color>
 
     <SolidColorBrush x:Key="PaperBrush" Color="{StaticResource PaperColor}" />
     <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource PaperColor}" />
@@ -62,6 +65,9 @@
     <SolidColorBrush x:Key="SmartHintPositiveBrush" Color="{StaticResource SmartHintPositiveColor}" />
     <SolidColorBrush x:Key="SmartHintNegativeBrush" Color="{StaticResource SmartHintNegativeColor}" />
     <SolidColorBrush x:Key="SmartHintNeutralBrush" Color="{StaticResource SmartHintNeutralColor}" />
+    <SolidColorBrush x:Key="SelectedGlowBrush" Color="{StaticResource SelectedGlowColor}" />
+    <SolidColorBrush x:Key="EraseActiveBrush" Color="{StaticResource EraseActiveColor}" />
+    <SolidColorBrush x:Key="EraseActiveBorderBrush" Color="{StaticResource EraseActiveBorderColor}" />
 
     <LinearGradientBrush x:Key="AppBackgroundGradient" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#F7F0DE" Offset="0" />
@@ -350,4 +356,129 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- 擺棋調色板：ListBox 外殼（移除預設邊框、背景、捲軸） -->
+    <Style x:Key="PiecePaletteListBoxStyle" TargetType="ListBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBox">
+                    <ItemsPresenter />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 擺棋調色板：ListBoxItem（選取時金色光暈，Hover 微放大） -->
+    <Style x:Key="PiecePaletteItemStyle" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="2" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid Width="44" Height="44">
+                        <!-- 選取光暈圓環（IsSelected = True 時顯示） -->
+                        <Ellipse x:Name="SelectionGlow"
+                                 Width="44" Height="44"
+                                 Stroke="{StaticResource SelectedGlowBrush}"
+                                 StrokeThickness="2.5"
+                                 Opacity="0">
+                            <Ellipse.Effect>
+                                <DropShadowEffect BlurRadius="8" ShadowDepth="0"
+                                                  Color="{StaticResource SelectedGlowColor}" Opacity="0.9" />
+                            </Ellipse.Effect>
+                        </Ellipse>
+                        <!-- 棋子內容（DataTemplate） -->
+                        <ContentPresenter x:Name="ContentArea"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          RenderTransformOrigin="0.5,0.5">
+                            <ContentPresenter.RenderTransform>
+                                <ScaleTransform />
+                            </ContentPresenter.RenderTransform>
+                        </ContentPresenter>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- 選取狀態：顯示金色光暈並放大 1.08x -->
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="SelectionGlow" Property="Opacity" Value="1" />
+                            <Setter TargetName="ContentArea" Property="RenderTransform">
+                                <Setter.Value>
+                                    <ScaleTransform ScaleX="1.08" ScaleY="1.08" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <!-- Hover（未選取時）：輕微放大 1.06x -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True" />
+                                <Condition Property="IsSelected" Value="False" />
+                            </MultiTrigger.Conditions>
+                            <MultiTrigger.Setters>
+                                <Setter TargetName="ContentArea" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="1.06" ScaleY="1.06" />
+                                    </Setter.Value>
+                                </Setter>
+                            </MultiTrigger.Setters>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 橡皮擦 ToggleButton：啟用時深紅色背景，清楚提示模式已開啟 -->
+    <Style x:Key="EraseModeToggleStyle" TargetType="ToggleButton">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+        <Setter Property="Background" Value="{StaticResource ButtonBaseBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource WoodDarkBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="eraseBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="10"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="eraseBorder" Property="Background" Value="{StaticResource EraseActiveBrush}" />
+                            <Setter TargetName="eraseBorder" Property="BorderBrush" Value="{StaticResource EraseActiveBorderBrush}" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True" />
+                                <Condition Property="IsChecked" Value="False" />
+                            </MultiTrigger.Conditions>
+                            <MultiTrigger.Setters>
+                                <Setter TargetName="eraseBorder" Property="Background" Value="{StaticResource ButtonHoverBrush}" />
+                            </MultiTrigger.Setters>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>
