@@ -95,6 +95,24 @@
                     Padding="10,8" />
         </UniformGrid>
 
+        <!-- 擺棋模式按鈕 -->
+        <UniformGrid DockPanel.Dock="Top"
+                     Columns="1"
+                     Margin="0,6,0,0">
+            <Button Content="進入擺棋模式"
+                    Command="{Binding EnterSetupModeCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Padding="10,8" />
+        </UniformGrid>
+
+        <!-- 擺棋模式面板（進入擺棋模式後顯示） -->
+        <Border DockPanel.Dock="Top"
+                Style="{StaticResource SubPanelCardStyle}"
+                Margin="0,6,0,0"
+                Visibility="{Binding IsInSetupMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <views:BoardSetupView DataContext="{Binding BoardSetup}" />
+        </Border>
+
         <!-- 提和操作列 -->
         <UniformGrid DockPanel.Dock="Top"
                      Columns="1"

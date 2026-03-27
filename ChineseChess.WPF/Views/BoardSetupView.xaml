@@ -1,0 +1,101 @@
+<UserControl x:Class="ChineseChess.WPF.Views.BoardSetupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:BoardSetupViewModel}">
+    <StackPanel Margin="0,8,0,0">
+
+        <TextBlock Text="【擺棋模式】"
+                   FontSize="14"
+                   FontWeight="Bold"
+                   Foreground="{StaticResource InkBrush}"
+                   Margin="0,0,0,8" />
+
+        <!-- 選擇顏色 -->
+        <TextBlock Text="棋子顏色："
+                   Style="{StaticResource FormLabelStyle}"
+                   Margin="0,0,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <RadioButton Content="紅方" IsChecked="{Binding SelectedColor, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Red}"
+                         Margin="0,0,12,0" Foreground="#CC2200" FontWeight="SemiBold" />
+            <RadioButton Content="黑方" IsChecked="{Binding SelectedColor, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Black}"
+                         Foreground="#222222" FontWeight="SemiBold" />
+        </StackPanel>
+
+        <!-- 選擇棋子種類 -->
+        <TextBlock Text="棋子種類："
+                   Style="{StaticResource FormLabelStyle}"
+                   Margin="0,0,0,4" />
+        <WrapPanel Margin="0,0,0,8">
+            <RadioButton Content="帥/將" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=King}"
+                         Margin="0,0,8,4" />
+            <RadioButton Content="仕/士" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Advisor}"
+                         Margin="0,0,8,4" />
+            <RadioButton Content="相/象" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Elephant}"
+                         Margin="0,0,8,4" />
+            <RadioButton Content="馬" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Horse}"
+                         Margin="0,0,8,4" />
+            <RadioButton Content="車" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Rook}"
+                         Margin="0,0,8,4" />
+            <RadioButton Content="炮" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Cannon}"
+                         Margin="0,0,8,4" />
+            <RadioButton Content="兵/卒" IsChecked="{Binding SelectedType, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Pawn}"
+                         Margin="0,0,8,4" />
+        </WrapPanel>
+
+        <!-- 行棋方 -->
+        <TextBlock Text="行棋方："
+                   Style="{StaticResource FormLabelStyle}"
+                   Margin="0,0,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <RadioButton Content="紅方先手" IsChecked="{Binding SetupTurn, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Red}"
+                         Margin="0,0,12,0" Foreground="#CC2200" />
+            <RadioButton Content="黑方先手" IsChecked="{Binding SetupTurn, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Black}"
+                         Foreground="#222222" />
+        </StackPanel>
+
+        <!-- 操作按鈕 -->
+        <UniformGrid Columns="2" Margin="0,0,0,8">
+            <Button Content="清空棋盤"
+                    Command="{Binding ClearBoardCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Margin="0,0,4,0"
+                    Padding="8,6" />
+            <Button Content="重置初始局"
+                    Command="{Binding ResetBoardCommand}"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Margin="4,0,0,0"
+                    Padding="8,6" />
+        </UniformGrid>
+
+        <Button Content="確認局面 / 開始對局"
+                Command="{Binding ConfirmCommand}"
+                Style="{StaticResource ActionButtonStyle}"
+                Padding="10,8"
+                Margin="0,0,0,8" />
+
+        <!-- 驗證訊息 -->
+        <TextBlock Text="{Binding ValidationMessage}"
+                   Foreground="{Binding IsValid, Converter={StaticResource BoolToValidationColorConverter}}"
+                   FontWeight="SemiBold"
+                   TextWrapping="Wrap"
+                   Visibility="{Binding ValidationMessage, Converter={StaticResource NullToVisibilityConverter}}" />
+
+        <!-- 提示說明 -->
+        <Border Background="#FFF8E7" CornerRadius="4" Padding="8,6" Margin="0,8,0,0">
+            <TextBlock TextWrapping="Wrap"
+                       FontSize="11"
+                       Foreground="#664400">
+                <Run Text="左鍵" FontWeight="Bold" />
+                <Run Text="：放置選取棋子" />
+                <LineBreak />
+                <Run Text="右鍵" FontWeight="Bold" />
+                <Run Text="：移除格上棋子" />
+            </TextBlock>
+        </Border>
+
+    </StackPanel>
+</UserControl>

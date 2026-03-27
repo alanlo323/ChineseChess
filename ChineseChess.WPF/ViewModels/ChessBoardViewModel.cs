@@ -172,6 +172,10 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
     public ObservableCollection<SquareViewModel> Squares { get; } = new ObservableCollection<SquareViewModel>();
 
     public ICommand SquareClickCommand { get; }
+    public ICommand SquareRightClickCommand { get; }
+
+    /// <summary>擺棋模式 ViewModel（由外層注入）。</summary>
+    public BoardSetupViewModel? SetupViewModel { get; set; }
 
     public ChessBoardViewModel(ICoreGameService gameService)
     {
@@ -182,6 +186,7 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         this.gameService.SmartHintReady += OnSmartHintReady;
         this.gameService.MultiPvHintReady += OnMultiPvHintReady;
         SquareClickCommand = new RelayCommand(OnSquareClick);
+        SquareRightClickCommand = new RelayCommand(OnSquareRightClick);
 
         InitializeBoard();
         RefreshBoard();
@@ -311,11 +316,29 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         selectedSquare = null;
     }
 
+    private void OnSquareRightClick(object? param)
+    {
+        if (param is not SquareViewModel square) return;
+        if (!gameService.IsInSetupMode) return;
+        gameService.SetupRemovePiece(square.Index);
+    }
+
     private async void OnSquareClick(object? param)
     {
         try
         {
             if (param is not SquareViewModel square) return;
+
+            // 擺棋模式：左鍵放置選取棋子
+            if (gameService.IsInSetupMode)
+            {
+                if (SetupViewModel != null)
+                {
+                    gameService.SetupPlacePiece(square.Index, SetupViewModel.SelectedPiece);
+                }
+                return;
+            }
+
             if (gameService.IsThinking) return;
 
             if (selectedSquare == null)

@@ -2,6 +2,7 @@ using ChineseChess.Application.Enums;
 using ChineseChess.Application.Models;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
+using ChineseChess.Domain.Validation;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -61,6 +62,17 @@ public interface ICoreGameService
 
     /// <summary>提和流程結束時觸發（接受或拒絕）。</summary>
     event Action<DrawOfferResult>? DrawOfferResolved;
+
+    // 擺棋模式
+    bool IsInSetupMode { get; }
+    event Action? SetupModeChanged;
+    Task EnterSetupModeAsync();
+    void SetupPlacePiece(int index, Piece piece);
+    void SetupRemovePiece(int index);
+    void SetupClearBoard();
+    void SetupResetBoard();
+    void SetupSetTurn(PieceColor color);
+    Task<BoardValidationResult> ConfirmSetupAsync(GameMode mode);
 
     // 控制
     Task StartGameAsync(GameMode mode);

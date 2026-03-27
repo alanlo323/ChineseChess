@@ -13,6 +13,9 @@
             <converters:PieceTextConverter x:Key="PieceTextConverter" />
             <converters:SmartHintScoreToBrushConverter x:Key="SmartHintScoreToBrushConverter" />
             <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+            <converters:EnumToBoolConverter x:Key="EnumToBoolConverter" />
+            <converters:BoolToValidationColorConverter x:Key="BoolToValidationColorConverter" />
+            <converters:NullOrEmptyToVisibilityConverter x:Key="NullToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

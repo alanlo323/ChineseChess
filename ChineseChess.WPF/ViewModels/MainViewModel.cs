@@ -33,6 +33,9 @@ public class MainViewModel : ObservableObject, IDisposable
 
         // MultiPV 走法選取橋接：ControlPanel → ChessBoard
         controlPanel.MultiPvMoveSelected += chessBoard.SelectMultiPvMove;
+
+        // 擺棋模式：串接 BoardSetupViewModel 到 ChessBoardViewModel
+        chessBoard.SetupViewModel = controlPanel.BoardSetup;
     }
 
     private void OnThinkingProgress(string progress)

@@ -57,6 +57,11 @@ public interface IBoard
     /// </summary>
     void RecordCheckAfterMove();
 
+    // 擺棋模式：直接設定棋子與行棋方（不記錄走法歷史）
+    void SetPiece(int index, Piece piece);
+    void SetTurn(PieceColor color);
+    void ClearAll();
+
     // 工具方法
     string ToFen();
     IBoard Clone();

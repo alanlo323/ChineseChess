@@ -5,6 +5,7 @@ using ChineseChess.Application.Models;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Helpers;
+using ChineseChess.Domain.Validation;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -93,6 +94,14 @@ public class GameService : IGameService, IDisposable
     public bool IsOpeningBookLoaded => aiEngine.IsOpeningBookLoaded;
     public int OpeningBookEntryCount => aiEngine.OpeningBookEntryCount;
 
+    // ─── 擺棋模式 ──────────────────────────────────────────────────────────
+    // 使用 int（0/1）搭配 Volatile，與其他旗標（isThinkingFlag、isGameOverFlag）保持一致的執行緒安全慣例
+    private int isInSetupModeFlag;
+    private const string InitialPositionFen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+
+    public bool IsInSetupMode => Volatile.Read(ref isInSetupModeFlag) != 0;
+    public event Action? SetupModeChanged;
+
     // ─── 棋鐘（限時模式） ──────────────────────────────────────────────────
     /// <summary>
     /// 棋鐘實例。僅限時模式啟動時有值，非限時模式下為 null。
@@ -148,7 +157,7 @@ public class GameService : IGameService, IDisposable
         Interlocked.Exchange(ref completedGameNodes, 0);
         Interlocked.Exchange(ref lastSearchNodes, 0);
         Interlocked.Exchange(ref lastSearchNps, 0);
-        board.ParseFen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+        board.ParseFen(InitialPositionFen);
         initialFen = board.ToFen();
         moveHistory.Clear();
         replayState = ReplayState.Live;
@@ -389,6 +398,7 @@ public class GameService : IGameService, IDisposable
 
     public async Task HumanMoveAsync(Move move)
     {
+        if (IsInSetupMode) return;
         if (isThinking) return;
         if (isGameOver) return;
         if (replayState == ReplayState.Replaying) return;
@@ -1031,6 +1041,7 @@ public class GameService : IGameService, IDisposable
 
     public void Undo()
     {
+        if (IsInSetupMode) return;
         if (isThinking) return;
         if (replayState == ReplayState.Replaying) return;
 
@@ -1088,6 +1099,100 @@ public class GameService : IGameService, IDisposable
     {
         // Minimal no-op implementation to avoid hard crash.
         GameMessage?.Invoke("Redo 功能未實作");
+    }
+
+    // ─── 擺棋模式方法 ──────────────────────────────────────────────────────
+
+    public async Task EnterSetupModeAsync()
+    {
+        if (IsInSetupMode) return;
+
+        // 停止 AI 思考
+        if (isThinking)
+        {
+            await StopGameAsync();
+        }
+
+        Interlocked.Exchange(ref isInSetupModeFlag, 1);
+        SetupModeChanged?.Invoke();
+    }
+
+    public void SetupPlacePiece(int index, Piece piece)
+    {
+        if (!IsInSetupMode) return;
+        board.SetPiece(index, piece);
+        BoardUpdated?.Invoke();
+    }
+
+    public void SetupRemovePiece(int index)
+    {
+        if (!IsInSetupMode) return;
+        board.SetPiece(index, Piece.None);
+        BoardUpdated?.Invoke();
+    }
+
+    public void SetupClearBoard()
+    {
+        if (!IsInSetupMode) return;
+        board.ClearAll();
+        BoardUpdated?.Invoke();
+    }
+
+    public void SetupResetBoard()
+    {
+        if (!IsInSetupMode) return;
+        board.ParseFen(InitialPositionFen);
+        BoardUpdated?.Invoke();
+    }
+
+    public void SetupSetTurn(PieceColor color)
+    {
+        if (!IsInSetupMode) return;
+        board.SetTurn(color);
+        BoardUpdated?.Invoke();
+    }
+
+    public async Task<BoardValidationResult> ConfirmSetupAsync(GameMode mode)
+    {
+        if (!IsInSetupMode)
+        {
+            var failResult = new BoardValidationResult(new[] { "目前不在擺棋模式，無法確認局面。" });
+            return failResult;
+        }
+
+        var validationResult = BoardValidator.Validate(board);
+        if (!validationResult.IsValid)
+        {
+            return validationResult;
+        }
+
+        // 局面合法：退出擺棋模式，重設遊戲狀態
+        Interlocked.Exchange(ref isInSetupModeFlag, 0);
+        currentMode = mode;
+        initialFen = board.ToFen();
+        moveHistory.Clear();
+        replayState = ReplayState.Live;
+        replayCurrentStep = 0;
+        ResetWxfHistory();
+        Interlocked.Exchange(ref isGameOverFlag, 0);
+        ClearLatestHint();
+        MoveHistoryChanged?.Invoke();
+        ReplayStateChanged?.Invoke();
+        SetupModeChanged?.Invoke();
+        NotifyUpdate();
+
+        // 觸發 AI 思考（模仿 StartGameAsync 的行為）
+        if (currentMode == GameMode.AiVsAi)
+        {
+            await RunAiSearchAsync(applyBestMove: true);
+        }
+        else if (currentMode == GameMode.PlayerVsAi && PlayerColor == PieceColor.Black)
+        {
+            // 玩家選黑方，AI（紅方）先手
+            await RunAiSearchAsync(applyBestMove: true);
+        }
+
+        return validationResult;
     }
 
     public void AddBookmark(string name) => bookmarkManager.AddBookmark(name, board.ToFen());

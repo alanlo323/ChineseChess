@@ -88,6 +88,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     public bool IsAiVsAiMode => selectedMode == GameMode.AiVsAi;
     public bool IsPlayerVsAiMode => selectedMode == GameMode.PlayerVsAi;
+    public bool IsInSetupMode => gameService.IsInSetupMode;
 
     public PieceColor PlayerColor
     {
@@ -414,6 +415,10 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     public ICommand RefreshTTStatsCommand { get; private set; } = null!;
     public ICommand MergeTranspositionTablesCommand { get; private set; } = null!;
     public ICommand SetDifficultyPresetCommand { get; private set; } = null!;
+    public ICommand EnterSetupModeCommand { get; private set; } = null!;
+
+    /// <summary>擺棋模式 ViewModel（側邊欄顯示用）。</summary>
+    public BoardSetupViewModel? BoardSetup { get; private set; }
 
     /// <summary>外部引擎 / 伺服器設定的 ViewModel（供 ExternalEngineView 綁定）。</summary>
     public ExternalEngineViewModel? ExternalEngine { get; }
@@ -513,6 +518,23 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             catch (Exception ex) { StatusMessage = $"開始遊戲失敗：{ex.Message}"; }
         });
         UndoCommand = new RelayCommand(_ => gameService.Undo());
+
+        EnterSetupModeCommand = new AsyncRelayCommand(async _ =>
+        {
+            try
+            {
+                await gameService.EnterSetupModeAsync();
+                StatusMessage = "已進入擺棋模式";
+                // IsInSetupMode 通知由 gameService.SetupModeChanged → OnSetupModeChanged 負責
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"進入擺棋模式失敗：{ex.Message}";
+            }
+        });
+
+        BoardSetup = new BoardSetupViewModel(gameService);
+        BoardSetup.SetupConfirmed += OnSetupConfirmed;
 
         RequestDrawCommand = new AsyncRelayCommand(async _ =>
         {
@@ -797,6 +819,7 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.DrawOfferResolved += OnDrawOfferResolved;
         gameService.MoveCompleted += OnMoveCompleted;
         gameService.MultiPvHintReady += OnMultiPvHintReady;
+        gameService.SetupModeChanged += OnSetupModeChanged;
     }
 
     // ─── GameService 事件處理（具名方法，供建構子訂閱及 Dispose 取消訂閱）──────
@@ -862,6 +885,19 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
         if (app == null) Reset();
         else app.Dispatcher.InvokeAsync(Reset);
+    }
+
+    private void OnSetupModeChanged()
+    {
+        var app = global::System.Windows.Application.Current;
+        if (app == null) OnPropertyChanged(nameof(IsInSetupMode));
+        else app.Dispatcher.InvokeAsync(() => OnPropertyChanged(nameof(IsInSetupMode)));
+    }
+
+    private void OnSetupConfirmed(GameMode mode)
+    {
+        StatusMessage = "局面確認！遊戲繼續中...";
+        // IsInSetupMode 通知由 gameService.SetupModeChanged → OnSetupModeChanged 負責
     }
 
     private void SelectMultiPvItem(MultiPvItemViewModel item)
@@ -1287,6 +1323,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         gameService.DrawOfferResolved -= OnDrawOfferResolved;
         gameService.MoveCompleted -= OnMoveCompleted;
         gameService.MultiPvHintReady -= OnMultiPvHintReady;
+        gameService.SetupModeChanged -= OnSetupModeChanged;
+        if (BoardSetup != null)
+            BoardSetup.SetupConfirmed -= OnSetupConfirmed;
 
         analysisCts?.Cancel();
         analysisCts?.Dispose();

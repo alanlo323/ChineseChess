@@ -308,6 +308,11 @@ M460,402 L470,402 M470,402 L470,412" />
                                     Height="56"
                                     Command="{Binding DataContext.SquareClickCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     CommandParameter="{Binding}">
+                                <Button.InputBindings>
+                                    <MouseBinding MouseAction="RightClick"
+                                                  Command="{Binding DataContext.SquareRightClickCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  CommandParameter="{Binding}" />
+                                </Button.InputBindings>
                                 <Grid>
                                     <Border x:Name="SelectionRing"
                                             Width="42"

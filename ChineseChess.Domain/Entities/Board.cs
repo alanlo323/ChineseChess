@@ -138,9 +138,7 @@ public class Board : IBoard
         // 維護重要子計數
         if (isCapture)
         {
-            var t = target.Type;
-            if (t == PieceType.Horse || t == PieceType.Rook ||
-                t == PieceType.Cannon || t == PieceType.Pawn)
+            if (IsMajorPiece(target.Type))
                 majorPieceCount--;
         }
 
@@ -216,9 +214,7 @@ public class Board : IBoard
         // 還原重要子計數
         if (!capturedPiece.IsNone)
         {
-            var t = capturedPiece.Type;
-            if (t == PieceType.Horse || t == PieceType.Rook ||
-                t == PieceType.Cannon || t == PieceType.Pawn)
+            if (IsMajorPiece(capturedPiece.Type))
                 majorPieceCount++;
         }
 
@@ -283,8 +279,92 @@ public class Board : IBoard
         turn = turn == PieceColor.Red ? PieceColor.Black : PieceColor.Red;
     }
 
-        // --- FEN ---
-    
+    // --- 擺棋模式：直接設定棋子與行棋方 ---
+
+    /// <summary>
+    /// 直接設定指定格的棋子（不記錄走法歷史）。
+    /// 用於擺棋模式，同步更新 Zobrist Hash、將/帥位置快取與重要子計數器。
+    /// </summary>
+    public void SetPiece(int index, Piece piece)
+    {
+        if (index < 0 || index >= BoardSize)
+            throw new ArgumentOutOfRangeException(nameof(index), $"棋格索引必須在 0~{BoardSize - 1} 之間。");
+
+        var existing = pieces[index];
+
+        // 若欲放置的棋子與現有相同，直接返回
+        if (existing == piece) return;
+
+        // 移除舊棋子的 Zobrist 貢獻
+        if (!existing.IsNone)
+        {
+            zobristKey ^= ZobristHash.GetPieceKey(index, existing.Color, existing.Type);
+
+            // 維護重要子計數器
+            if (IsMajorPiece(existing.Type))
+                majorPieceCount--;
+
+            // 若移除的是將/帥，清除快取
+            if (existing.Type == PieceType.King)
+            {
+                if (existing.Color == PieceColor.Red) redKingIndex = -1;
+                else blackKingIndex = -1;
+            }
+        }
+
+        // 放置新棋子
+        pieces[index] = piece;
+
+        if (!piece.IsNone)
+        {
+            zobristKey ^= ZobristHash.GetPieceKey(index, piece.Color, piece.Type);
+
+            // 維護重要子計數器
+            if (IsMajorPiece(piece.Type))
+                majorPieceCount++;
+
+            // 若放置的是將/帥，更新快取
+            if (piece.Type == PieceType.King)
+                UpdateKingCache(piece.Color, index);
+        }
+    }
+
+    /// <summary>
+    /// 直接設定行棋方（不記錄走法歷史）。
+    /// 用於擺棋模式，同步更新 Zobrist Hash。
+    /// </summary>
+    public void SetTurn(PieceColor color)
+    {
+        if (turn == color) return;
+
+        // 換手時 XOR SideToMoveKey（Black 代表非 Red 先手）
+        zobristKey ^= ZobristHash.SideToMoveKey;
+        turn = color;
+    }
+
+    // --- 輔助方法 ---
+
+    /// <summary>判斷棋子是否為重要子（計入 majorPieceCount）。</summary>
+    private static bool IsMajorPiece(PieceType type) =>
+        type == PieceType.Horse || type == PieceType.Rook ||
+        type == PieceType.Cannon || type == PieceType.Pawn;
+
+    /// <summary>
+    /// 清空棋盤上所有棋子（不記錄走法歷史）。
+    /// 用於擺棋模式，直接歸零 Zobrist Hash 與相關快取，比逐格清除更高效。
+    /// </summary>
+    public void ClearAll()
+    {
+        Array.Clear(pieces, 0, BoardSize);
+        zobristKey = 0;
+        majorPieceCount = 0;
+        redKingIndex = -1;
+        blackKingIndex = -1;
+        turn = PieceColor.Red;
+    }
+
+    // --- FEN ---
+
     public void ParseFen(string fen)
     {
         if (string.IsNullOrWhiteSpace(fen))
@@ -389,9 +469,7 @@ public class Board : IBoard
         majorPieceCount = 0;
         for (int i = 0; i < BoardSize; i++)
         {
-            var t = pieces[i].Type;
-            if (t == PieceType.Horse || t == PieceType.Rook ||
-                t == PieceType.Cannon || t == PieceType.Pawn)
+            if (IsMajorPiece(pieces[i].Type))
                 majorPieceCount++;
         }
 
