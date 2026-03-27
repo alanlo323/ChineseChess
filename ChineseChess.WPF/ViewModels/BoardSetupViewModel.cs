@@ -74,8 +74,14 @@ public class BoardSetupViewModel : ObservableObject
     /// <summary>確認成功後觸發，傳入目標 GameMode 讓外層決定如何啟動遊戲。</summary>
     public event Action<GameMode>? SetupConfirmed;
 
-    /// <summary>目標模式（確認時使用）。</summary>
-    public GameMode TargetMode { get; set; } = GameMode.PlayerVsPlayer;
+    private GameMode targetMode = GameMode.PlayerVsAi;
+
+    /// <summary>目標模式（確認時使用），預設 PlayerVsAi。</summary>
+    public GameMode TargetMode
+    {
+        get => targetMode;
+        set => SetProperty(ref targetMode, value);
+    }
 
     public BoardSetupViewModel(ICoreGameService gameService)
     {
@@ -122,4 +128,5 @@ public class BoardSetupViewModel : ObservableObject
         PieceColor.Black => "黑方",
         _ => color.ToString()
     };
+
 }

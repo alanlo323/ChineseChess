@@ -166,27 +166,7 @@ public class GameService : IGameService, IDisposable
         MoveHistoryChanged?.Invoke();
         ReplayStateChanged?.Invoke();
 
-        // AiVsAi：依設定初始化黑方引擎
-        if (currentMode == GameMode.AiVsAi)
-        {
-            if (engineProvider != null)
-            {
-                // engineProvider 管理引擎生命週期，GameService 不需自行克隆
-                aiEngineBlack = null;
-            }
-            else
-            {
-                aiEngineBlack = UseSharedTranspositionTable
-                    ? null                                     // Shared: reuse red engine
-                    : (CopyRedTtToBlackAtStart
-                        ? aiEngine.CloneWithCopiedTT()          // Independent: initialize with red TT snapshot
-                        : aiEngine.CloneWithEmptyTT());         // Independent: initialize with empty TT
-            }
-        }
-        else
-        {
-            aiEngineBlack = null;
-        }
+        InitializeBlackEngineForMode(currentMode);
 
         // 棋鐘：限時模式才建立，非限時模式清除舊鐘
         StopAndDisposeClock();
@@ -207,15 +187,8 @@ public class GameService : IGameService, IDisposable
         NotifyUpdate();
         GameMessage?.Invoke("Game Started");
 
-        if (currentMode == GameMode.AiVsAi)
-        {
+        if (ShouldAiMoveFirst(currentMode))
             await RunAiSearchAsync(applyBestMove: true);
-        }
-        else if (currentMode == GameMode.PlayerVsAi && PlayerColor == PieceColor.Black)
-        {
-            // 玩家選黑方，AI（紅方）先手
-            await RunAiSearchAsync(applyBestMove: true);
-        }
     }
 
     public Task StopGameAsync()
@@ -842,6 +815,36 @@ public class GameService : IGameService, IDisposable
         return redAiSettings;
     }
 
+    // 依遊戲模式初始化黑方引擎（AiVsAi 才需要獨立引擎；其他模式清除）
+    private void InitializeBlackEngineForMode(GameMode mode)
+    {
+        if (mode == GameMode.AiVsAi)
+        {
+            if (engineProvider != null)
+            {
+                // engineProvider 管理引擎生命週期，GameService 不需自行克隆
+                aiEngineBlack = null;
+            }
+            else
+            {
+                aiEngineBlack = UseSharedTranspositionTable
+                    ? null                                    // Shared: reuse red engine
+                    : (CopyRedTtToBlackAtStart
+                        ? aiEngine.CloneWithCopiedTT()        // Independent: initialize with red TT snapshot
+                        : aiEngine.CloneWithEmptyTT());       // Independent: initialize with empty TT
+            }
+        }
+        else
+        {
+            aiEngineBlack = null;
+        }
+    }
+
+    // 判斷指定模式下 AI 是否應先手（輪次不是玩家的顏色）
+    private bool ShouldAiMoveFirst(GameMode mode) =>
+        mode == GameMode.AiVsAi ||
+        (mode == GameMode.PlayerVsAi && PlayerColor != board.Turn);
+
     private int isGameOverFlag; // 使用 int（0/1）搭配 Interlocked，防止 Timer 執行緒競態
     private bool isGameOver => Volatile.Read(ref isGameOverFlag) != 0;
 
@@ -1176,21 +1179,16 @@ public class GameService : IGameService, IDisposable
         ResetWxfHistory();
         Interlocked.Exchange(ref isGameOverFlag, 0);
         ClearLatestHint();
+
+        InitializeBlackEngineForMode(currentMode);
+
         MoveHistoryChanged?.Invoke();
         ReplayStateChanged?.Invoke();
         SetupModeChanged?.Invoke();
         NotifyUpdate();
 
-        // 觸發 AI 思考（模仿 StartGameAsync 的行為）
-        if (currentMode == GameMode.AiVsAi)
-        {
+        if (ShouldAiMoveFirst(currentMode))
             await RunAiSearchAsync(applyBestMove: true);
-        }
-        else if (currentMode == GameMode.PlayerVsAi && PlayerColor == PieceColor.Black)
-        {
-            // 玩家選黑方，AI（紅方）先手
-            await RunAiSearchAsync(applyBestMove: true);
-        }
 
         return validationResult;
     }
@@ -1648,32 +1646,15 @@ public class GameService : IGameService, IDisposable
         // 重建 wxfHistory（以當前棋盤狀態為新起點）
         ResetWxfHistory();
 
-        // AiVsAi：依設定初始化黑方引擎
-        if (mode == GameMode.AiVsAi && engineProvider == null)
-        {
-            aiEngineBlack = UseSharedTranspositionTable
-                ? null
-                : (CopyRedTtToBlackAtStart
-                    ? aiEngine.CloneWithCopiedTT()
-                    : aiEngine.CloneWithEmptyTT());
-        }
-        else if (mode != GameMode.AiVsAi)
-        {
-            aiEngineBlack = null;
-        }
+        InitializeBlackEngineForMode(mode);
 
         replayState = ReplayState.Live;
         ReplayStateChanged?.Invoke();
         MoveHistoryChanged?.Invoke();
         NotifyUpdate();
 
-        // 若新模式 AI 先手，啟動搜尋
-        bool aiFirstMove = (mode == GameMode.AiVsAi) ||
-                           (mode == GameMode.PlayerVsAi && PlayerColor != board.Turn);
-        if (aiFirstMove)
-        {
+        if (ShouldAiMoveFirst(mode))
             await RunAiSearchAsync(applyBestMove: true);
-        }
     }
 
     /// <summary>載入外部 GameRecord，進入重播模式。</summary>

@@ -57,6 +57,21 @@
                          Foreground="#222222" />
         </StackPanel>
 
+        <!-- 遊戲模式 -->
+        <TextBlock Text="遊戲模式："
+                   Style="{StaticResource FormLabelStyle}"
+                   Margin="0,0,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <RadioButton Content="人 vs AI"
+                         IsChecked="{Binding TargetMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=PlayerVsAi}"
+                         Margin="0,0,12,0" />
+            <RadioButton Content="人 vs 人"
+                         IsChecked="{Binding TargetMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=PlayerVsPlayer}"
+                         Margin="0,0,12,0" />
+            <RadioButton Content="AI vs AI"
+                         IsChecked="{Binding TargetMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=AiVsAi}" />
+        </StackPanel>
+
         <!-- 操作按鈕 -->
         <UniformGrid Columns="2" Margin="0,0,0,8">
             <Button Content="清空棋盤"

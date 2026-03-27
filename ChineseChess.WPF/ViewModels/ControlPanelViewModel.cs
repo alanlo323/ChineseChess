@@ -524,6 +524,8 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             try
             {
                 await gameService.EnterSetupModeAsync();
+                // BoardSetup 在建構子已初始化，此處必然非 null
+                BoardSetup!.TargetMode = gameService.CurrentMode;
                 StatusMessage = "已進入擺棋模式";
                 // IsInSetupMode 通知由 gameService.SetupModeChanged → OnSetupModeChanged 負責
             }

@@ -25,6 +25,15 @@ public class SetupModeTests
         return service;
     }
 
+    // 最小合法局面：紅帥(85)、黑將(4)、紅兵阻擋(40)，三子直線不對臉
+    private static void SetupMinimalLegalBoard(GameService service)
+    {
+        service.SetupClearBoard();
+        service.SetupPlacePiece(85, new Piece(PieceColor.Red, PieceType.King));
+        service.SetupPlacePiece(4, new Piece(PieceColor.Black, PieceType.King));
+        service.SetupPlacePiece(40, new Piece(PieceColor.Red, PieceType.Pawn));
+    }
+
     // ─── 進入擺棋模式 ────────────────────────────────────────────────────
 
     [Fact]
@@ -200,12 +209,7 @@ public class SetupModeTests
     {
         var service = await CreateAndStartService();
         await service.EnterSetupModeAsync();
-        service.SetupClearBoard();
-
-        // 建立合法局面：紅帥(85)、黑將(4)、中間有子阻擋(40)
-        service.SetupPlacePiece(85, new Piece(PieceColor.Red, PieceType.King));
-        service.SetupPlacePiece(4, new Piece(PieceColor.Black, PieceType.King));
-        service.SetupPlacePiece(40, new Piece(PieceColor.Red, PieceType.Pawn));
+        SetupMinimalLegalBoard(service);
 
         var result = await service.ConfirmSetupAsync(GameMode.PlayerVsPlayer);
 
@@ -218,10 +222,7 @@ public class SetupModeTests
     {
         var service = await CreateAndStartService();
         await service.EnterSetupModeAsync();
-        service.SetupClearBoard();
-        service.SetupPlacePiece(85, new Piece(PieceColor.Red, PieceType.King));
-        service.SetupPlacePiece(4, new Piece(PieceColor.Black, PieceType.King));
-        service.SetupPlacePiece(40, new Piece(PieceColor.Red, PieceType.Pawn));
+        SetupMinimalLegalBoard(service);
 
         int eventCount = 0;
         service.SetupModeChanged += () => eventCount++;
@@ -308,21 +309,14 @@ public class SetupModeTests
     {
         var service = await CreateAndStartService();
         await service.EnterSetupModeAsync();
-        service.SetupClearBoard();
-
-        var redKing = new Piece(PieceColor.Red, PieceType.King);
-        var blackKing = new Piece(PieceColor.Black, PieceType.King);
-        var blocker = new Piece(PieceColor.Red, PieceType.Pawn);
-        service.SetupPlacePiece(85, redKing);
-        service.SetupPlacePiece(4, blackKing);
-        service.SetupPlacePiece(40, blocker);
+        SetupMinimalLegalBoard(service);
         service.SetupSetTurn(PieceColor.Black);
 
         await service.ConfirmSetupAsync(GameMode.PlayerVsPlayer);
 
-        // 確認棋盤保留擺棋局面
-        Assert.Equal(redKing, service.CurrentBoard.GetPiece(85));
-        Assert.Equal(blackKing, service.CurrentBoard.GetPiece(4));
+        // 確認棋盤保留擺棋局面（位置與 SetupMinimalLegalBoard 一致）
+        Assert.Equal(new Piece(PieceColor.Red, PieceType.King), service.CurrentBoard.GetPiece(85));
+        Assert.Equal(new Piece(PieceColor.Black, PieceType.King), service.CurrentBoard.GetPiece(4));
         Assert.Equal(PieceColor.Black, service.CurrentBoard.Turn);
     }
 
@@ -340,5 +334,62 @@ public class SetupModeTests
     {
         var service = await CreateAndStartService();
         Assert.False(service.IsInSetupMode);
+    }
+
+    // ─── 確認後 AI 觸發行為 ──────────────────────────────────────────────
+
+    /// <summary>
+    /// PlayerVsAi 模式，玩家=紅，局面設為黑方先手（AI 輪次）→ 確認後 AI 應走出第一步。
+    /// </summary>
+    [Fact]
+    public async Task ConfirmSetup_PlayerVsAi_AiTurn_ShouldTriggerAiAndHaveMoveInHistory()
+    {
+        var service = CreateService();
+        service.PlayerColor = PieceColor.Red;   // 玩家是紅，AI 是黑
+        // 用 PlayerVsPlayer 啟動以跳過 StartGameAsync 的 AI 先手觸發；
+        // 真正要測的是 ConfirmSetupAsync 的觸發邏輯。
+        await service.StartGameAsync(GameMode.PlayerVsPlayer);
+        await service.EnterSetupModeAsync();
+        SetupMinimalLegalBoard(service);
+        service.SetupSetTurn(PieceColor.Black); // 輪到 AI（黑）走棋
+
+        await service.ConfirmSetupAsync(GameMode.PlayerVsAi);
+
+        // AI 應已走出第一步
+        Assert.NotEmpty(service.MoveHistory);
+    }
+
+    /// <summary>
+    /// PlayerVsAi 模式，玩家=紅，局面設為紅方先手（玩家輪次）→ 確認後應等待玩家，AI 不應先走。
+    /// </summary>
+    [Fact]
+    public async Task ConfirmSetup_PlayerVsAi_PlayerTurn_ShouldNotTriggerAi()
+    {
+        var service = CreateService();
+        service.PlayerColor = PieceColor.Red;   // 玩家是紅
+        await service.StartGameAsync(GameMode.PlayerVsPlayer);
+        await service.EnterSetupModeAsync();
+        SetupMinimalLegalBoard(service);
+        service.SetupSetTurn(PieceColor.Red);   // 輪到玩家（紅）走棋
+
+        await service.ConfirmSetupAsync(GameMode.PlayerVsAi);
+
+        // 玩家尚未走棋，歷史應為空
+        Assert.Empty(service.MoveHistory);
+    }
+
+    /// <summary>
+    /// PlayerVsPlayer 模式 → 確認後不觸發 AI，歷史為空。
+    /// </summary>
+    [Fact]
+    public async Task ConfirmSetup_PlayerVsPlayer_ShouldNotTriggerAi()
+    {
+        var service = await CreateAndStartService();
+        await service.EnterSetupModeAsync();
+        SetupMinimalLegalBoard(service);
+
+        await service.ConfirmSetupAsync(GameMode.PlayerVsPlayer);
+
+        Assert.Empty(service.MoveHistory);
     }
 }
