@@ -617,6 +617,10 @@ public class SearchEngine : IAiEngine
     public IEnumerable<TTEntry> EnumerateTTEntries() => tt.EnumerateEntries();
 
     /// <inheritdoc/>
+    public void StoreTTEntry(ulong key, int score, int depth, Move bestMove) =>
+        tt.Store(key, score, Math.Clamp(depth, 0, 127), TTFlag.Exact, bestMove);
+
+    /// <inheritdoc/>
     public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6) =>
         tt.ExploreTTTree(board, maxDepth);
 }

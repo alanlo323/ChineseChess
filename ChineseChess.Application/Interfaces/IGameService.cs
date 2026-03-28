@@ -167,4 +167,12 @@ public interface IGameService : IReplayGameService
     // TT 節點探索
     IEnumerable<TTEntry> EnumerateTTEntries();
     TTTreeNode? ExploreTTTree(int maxDepth = 6);
+
+    // 殘局庫 TT 同步
+    /// <summary>
+    /// 將殘局庫中所有必勝/必負局面寫入 AI 引擎的 TT，
+    /// 使搜尋時可直接命中殘局庫步法。
+    /// 需要 <paramref name="tablebaseService"/> 已生成（非匯入）的殘局庫。
+    /// </summary>
+    void SyncTablebaseToTranspositionTable(ITablebaseService tablebaseService);
 }

@@ -1399,6 +1399,13 @@ public class GameService : IGameService, IDisposable
     public TTTreeNode? ExploreTTTree(int maxDepth = 6) =>
         aiEngine.ExploreTTTree(CurrentBoard, maxDepth);
 
+    public void SyncTablebaseToTranspositionTable(ITablebaseService tablebaseService)
+    {
+        tablebaseService.SyncToTranspositionTable(aiEngine);
+        if (aiEngineBlack is not null)
+            tablebaseService.SyncToTranspositionTable(aiEngineBlack);
+    }
+
     public async Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default)
     {
         if (!IsSmartHintEnabled) return;

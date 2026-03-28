@@ -163,6 +163,14 @@ public interface IAiEngine
     IEnumerable<TTEntry> EnumerateTTEntries();
 
     /// <summary>
+    /// 將單一殘局庫條目寫入 TT（旗標固定為 Exact）。
+    /// 深度超過 127 時自動壓縮，確保不被普通搜尋覆蓋。
+    /// 由 <see cref="ITablebaseService.SyncToTranspositionTable"/> 批次呼叫。
+    /// 不支援 TT 的模擬引擎可使用預設的空實作。
+    /// </summary>
+    void StoreTTEntry(ulong key, int score, int depth, Move bestMove) { }
+
+    /// <summary>
     /// 從 <paramref name="board"/> 當前局面出發，沿 TT 中 BestMove 連結遞迴追蹤，
     /// 建立搜尋樹節點結構。若當前局面不在 TT 中，回傳 <c>null</c>。
     /// </summary>

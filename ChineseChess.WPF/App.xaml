@@ -15,6 +15,7 @@
             <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
             <converters:EnumToBoolConverter x:Key="EnumToBoolConverter" />
             <converters:BoolToValidationColorConverter x:Key="BoolToValidationColorConverter" />
+            <converters:BoolToWarningColorConverter x:Key="BoolToWarningColorConverter" />
             <converters:NullOrEmptyToVisibilityConverter x:Key="NullToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>

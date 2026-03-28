@@ -114,6 +114,9 @@ public class OpeningBookEngineDecorator : IAiEngine
     public IEnumerable<TTEntry> EnumerateTTEntries()
         => inner.EnumerateTTEntries();
 
+    public void StoreTTEntry(ulong key, int score, int depth, Move bestMove) =>
+        inner.StoreTTEntry(key, score, depth, bestMove);
+
     public TTTreeNode? ExploreTTTree(IBoard board, int maxDepth = 6)
         => inner.ExploreTTTree(board, maxDepth);
 }

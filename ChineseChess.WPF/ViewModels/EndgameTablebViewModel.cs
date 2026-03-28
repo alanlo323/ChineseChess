@@ -19,7 +19,7 @@ public sealed class EndgameTablebViewModel : ObservableObject, IDisposable
     private readonly ITablebaseService tablebaseService;
     private readonly IGameService gameService;
 
-    private PieceConfiguration? selectedConfiguration;
+    private PieceConfiguration? selectedPreset;
     private bool isGenerating;
     private double generationProgress;
     private string generationStatusText = "尚未生成殘局庫";
@@ -37,26 +37,32 @@ public sealed class EndgameTablebViewModel : ObservableObject, IDisposable
         this.tablebaseService = tablebaseService;
         this.gameService = gameService;
 
-        AvailableConfigurations = PieceConfiguration.Presets;
-        selectedConfiguration = PieceConfiguration.RookVsKing;
+        PieceSelector = new PieceCountSelectorViewModel();
 
-        GenerateCommand        = new AsyncRelayCommand(async _ => await GenerateAsync(), _ => !isGenerating);
-        CancelGenerationCommand = new RelayCommand(_ => CancelGeneration(), _ => isGenerating);
-        QueryCurrentCommand    = new AsyncRelayCommand(async _ => await QueryCurrentPositionAsync(),
-                                                       _ => tablebaseService.HasTablebase && !isGenerating);
-        ExportCommand          = new AsyncRelayCommand(async _ => await ExportAsync(),
-                                                       _ => tablebaseService.HasTablebase && !isGenerating);
-        ImportCommand          = new AsyncRelayCommand(async _ => await ImportAsync(), _ => !isGenerating);
+        AvailableConfigurations = PieceConfiguration.Presets;
+        selectedPreset = PieceConfiguration.RookVsKing;
+        PieceSelector.LoadFromPreset(PieceConfiguration.RookVsKing);
+
+        GenerateCommand              = new AsyncRelayCommand(async _ => await GenerateAsync(),              _ => !isGenerating);
+        CancelGenerationCommand      = new RelayCommand     (_ => CancelGeneration(),                      _ => isGenerating);
+        QueryCurrentCommand          = new AsyncRelayCommand(async _ => await QueryCurrentPositionAsync(), _ => tablebaseService.HasTablebase && !isGenerating);
+        ExportCommand                = new AsyncRelayCommand(async _ => await ExportAsync(),                _ => tablebaseService.HasTablebase && !isGenerating);
+        ImportCommand                = new AsyncRelayCommand(async _ => await ImportAsync(),               _ => !isGenerating);
+        GenerateFromBoardCommand     = new AsyncRelayCommand(async _ => await GenerateFromCurrentBoardAsync(), _ => !isGenerating);
+        SyncToTTCommand              = new RelayCommand     (_ => SyncToTT(),                              _ => tablebaseService.HasTablebase && tablebaseService.HasBoardData && !isGenerating);
+        ApplyPresetCommand           = new RelayCommand     (_ => ApplyPreset(),                           _ => selectedPreset is not null && !isGenerating);
     }
 
     // ── 屬性 ────────────────────────────────────────────────────────────
 
+    public PieceCountSelectorViewModel PieceSelector { get; }
+
     public IReadOnlyList<PieceConfiguration> AvailableConfigurations { get; }
 
-    public PieceConfiguration? SelectedConfiguration
+    public PieceConfiguration? SelectedPreset
     {
-        get => selectedConfiguration;
-        set => SetProperty(ref selectedConfiguration, value);
+        get => selectedPreset;
+        set => SetProperty(ref selectedPreset, value);
     }
 
     public bool IsGenerating
@@ -113,21 +119,24 @@ public sealed class EndgameTablebViewModel : ObservableObject, IDisposable
 
     // ── 命令 ────────────────────────────────────────────────────────────
 
-    public ICommand GenerateCommand         { get; }
-    public ICommand CancelGenerationCommand { get; }
-    public ICommand QueryCurrentCommand     { get; }
-    public ICommand ExportCommand           { get; }
-    public ICommand ImportCommand           { get; }
+    public ICommand GenerateCommand             { get; }
+    public ICommand CancelGenerationCommand     { get; }
+    public ICommand GenerateFromBoardCommand    { get; }
+    public ICommand SyncToTTCommand             { get; }
+    public ICommand ApplyPresetCommand          { get; }
+    public ICommand QueryCurrentCommand         { get; }
+    public ICommand ExportCommand               { get; }
+    public ICommand ImportCommand               { get; }
 
     // ── 私有方法 ─────────────────────────────────────────────────────────
 
     private async Task GenerateAsync()
     {
-        if (selectedConfiguration is null) return;
+        var config = PieceSelector.BuildConfiguration();
 
         IsGenerating = true;
         GenerationProgress = 0;
-        GenerationStatusText = $"正在生成「{selectedConfiguration.DisplayName}」殘局庫...";
+        GenerationStatusText = $"正在生成「{config.DisplayName}」殘局庫...";
         QueryResultText = string.Empty;
         BestMoveText = string.Empty;
 
@@ -136,7 +145,7 @@ public sealed class EndgameTablebViewModel : ObservableObject, IDisposable
 
         try
         {
-            await tablebaseService.GenerateAsync(selectedConfiguration, progress, generationCts.Token);
+            await tablebaseService.GenerateAsync(config, progress, generationCts.Token);
             UpdateStats();
             GenerationStatusText = $"完成！共 {totalCount:N0} 局面";
             OnPropertyChanged(nameof(HasTablebase));
@@ -156,6 +165,63 @@ public sealed class EndgameTablebViewModel : ObservableObject, IDisposable
             generationCts?.Dispose();
             generationCts = null;
         }
+    }
+
+    private async Task GenerateFromCurrentBoardAsync()
+    {
+        // 先把當前棋盤的子力載入選擇器，讓 UI 顯示目前識別到的組合
+        PieceSelector.LoadFromBoard(gameService.CurrentBoard);
+
+        IsGenerating = true;
+        GenerationProgress = 0;
+        GenerationStatusText = "正在分析當前局面並生成殘局庫...";
+        QueryResultText = string.Empty;
+        BestMoveText = string.Empty;
+
+        generationCts = new CancellationTokenSource();
+        var progress = new Progress<TablebaseGenerationProgress>(OnGenerationProgress);
+
+        try
+        {
+            await tablebaseService.GenerateFromBoardAsync(gameService.CurrentBoard, progress, generationCts.Token);
+            UpdateStats();
+            GenerationStatusText = $"完成！共 {totalCount:N0} 局面";
+            OnPropertyChanged(nameof(HasTablebase));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        }
+        catch (OperationCanceledException)
+        {
+            GenerationStatusText = "已取消";
+        }
+        catch (Exception ex)
+        {
+            GenerationStatusText = $"生成失敗：{ex.Message}";
+        }
+        finally
+        {
+            IsGenerating = false;
+            generationCts?.Dispose();
+            generationCts = null;
+        }
+    }
+
+    private void SyncToTT()
+    {
+        try
+        {
+            gameService.SyncTablebaseToTranspositionTable(tablebaseService);
+            GenerationStatusText = $"已同步 {totalCount:N0} 個殘局庫步法至 AI 搜尋表";
+        }
+        catch (Exception ex)
+        {
+            GenerationStatusText = $"同步失敗：{ex.Message}";
+        }
+    }
+
+    private void ApplyPreset()
+    {
+        if (selectedPreset is null) return;
+        PieceSelector.LoadFromPreset(selectedPreset);
     }
 
     private void OnGenerationProgress(TablebaseGenerationProgress p)
@@ -205,7 +271,7 @@ public sealed class EndgameTablebViewModel : ObservableObject, IDisposable
             Title = "匯出殘局庫",
             Filter = "殘局庫 FEN 檔案 (*.etb)|*.etb|文字檔案 (*.txt)|*.txt|所有檔案 (*.*)|*.*",
             DefaultExt = "etb",
-            FileName = $"tablebase_{selectedConfiguration?.DisplayName ?? "unknown"}",
+            FileName = $"tablebase_{tablebaseService.CurrentConfiguration?.DisplayName ?? "unknown"}",
         };
 
         if (dialog.ShowDialog() != true) return;
