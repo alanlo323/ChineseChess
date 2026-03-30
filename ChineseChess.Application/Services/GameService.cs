@@ -2,6 +2,7 @@ using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Models;
+using ChineseChess.Domain.Constants;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Helpers;
@@ -126,15 +127,18 @@ public class GameService : IGameService, IDisposable
     public event Action<MoveCompletedEventArgs>? MoveCompleted;
 
     private readonly IEngineProvider? engineProvider;
+    private readonly ITablebaseService? tablebaseService;
 
     public GameService(
         IAiEngine aiEngine,
         IHintExplanationService? hintExplanationService = null,
-        IEngineProvider? engineProvider = null)
+        IEngineProvider? engineProvider = null,
+        ITablebaseService? tablebaseService = null)
     {
         this.aiEngine = aiEngine;
         this.hintExplanationService = hintExplanationService;
         this.engineProvider = engineProvider;
+        this.tablebaseService = tablebaseService;
         bookmarkManager = new BookmarkManager(GetDefaultBookmarkPath());
         bookmarkManager.Load();
         board = new Board(); // 初始局面
@@ -500,11 +504,16 @@ public class GameService : IGameService, IDisposable
 
         try
         {
-            result = await activeEngine.SearchAsync(
-                boardSnapshot,
-                settings,
-                cts.Token,
-                progress);
+            // 殘局庫優先：若目前局面必勝，直接回傳 ETB 最佳著法，跳過 AI 搜尋
+            result = TryProbeTablebase(boardSnapshot);
+            if (result == null)
+            {
+                result = await activeEngine.SearchAsync(
+                    boardSnapshot,
+                    settings,
+                    cts.Token,
+                    progress);
+            }
 
             if (cts.Token.IsCancellationRequested) return null;
 
@@ -513,6 +522,13 @@ public class GameService : IGameService, IDisposable
             {
                 var bookNotation = MoveNotation.ToNotation(result.BestMove, board);
                 ThinkingProgress?.Invoke($"開局庫選手：{bookNotation}");
+            }
+
+            // 殘局庫命中時發出提示訊息
+            if (result.IsFromTablebase)
+            {
+                var etbNotation = MoveNotation.ToNotation(result.BestMove, board);
+                ThinkingProgress?.Invoke($"[殘局庫] 必勝著法：{etbNotation}（剩 {result.Depth} 步）");
             }
 
             if (result.BestMove.IsNull)
@@ -555,8 +571,12 @@ public class GameService : IGameService, IDisposable
                     ClearLatestHint();
                     MoveHistoryChanged?.Invoke();
                     NotifyUpdate();
-                    var moveSource = result.IsFromOpeningBook ? "開局庫" : "AI";
-                    var scoreStr = result.IsFromOpeningBook ? "定式" : FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方");
+                    var moveSource = result.IsFromOpeningBook ? "開局庫"
+                                  : result.IsFromTablebase   ? "殘局庫"
+                                  : "AI";
+                    var scoreStr = result.IsFromOpeningBook ? "定式"
+                                 : result.IsFromTablebase   ? $"必勝（{result.Depth} 步）"
+                                 : FormatScore(result.Score, searchTurn == PieceColor.Red ? "紅方" : "黑方");
                     GameMessage?.Invoke($"{moveSource} 走了 {moveNotation}（{scoreStr}）");
                     ThinkingProgress?.Invoke(FormatHintProgress(result, searchTurn, "思考完成", moveNotation, lastElapsedMs, currentEngineLabel));
                     MoveCompleted?.Invoke(new MoveCompletedEventArgs
@@ -1406,6 +1426,54 @@ public class GameService : IGameService, IDisposable
             tablebaseService.SyncToTranspositionTable(aiEngineBlack);
     }
 
+    /// <summary>
+    /// 若殘局庫對目前局面有 Win 結論，在評估列表中找到最優著法並標記 IsFromTablebase / IsBest，
+    /// 回傳新列表（不可變模式）；其餘著法維持不變。
+    /// Loss 局面不標記：AI 可在負勢下自行搜尋最長抵抗路徑。
+    /// </summary>
+    private IReadOnlyList<MoveEvaluation> MarkTablebaseMove(
+        IBoard boardSnapshot, IReadOnlyList<MoveEvaluation> evaluations)
+    {
+        if (tablebaseService is null || !tablebaseService.HasTablebase) return evaluations;
+
+        var entry = tablebaseService.Query(boardSnapshot);
+        if (!entry.IsResolved || entry.Result != TablebaseResult.Win) return evaluations;
+
+        var etbBestMove = tablebaseService.GetBestMove(boardSnapshot);
+        if (!etbBestMove.HasValue) return evaluations;
+
+        return evaluations.Select(e =>
+            e.Move == etbBestMove.Value
+                ? new MoveEvaluation { Move = e.Move, Score = e.Score, IsBest = true, PvLine = e.PvLine, IsFromTablebase = true }
+                : e
+        ).ToList();
+    }
+
+    /// <summary>
+    /// 探查殘局庫。若目前局面有 Win 結論且能取得最佳著法，回傳對應 SearchResult；
+    /// 否則回傳 null（交由 AI 搜尋處理）。
+    /// Loss 局面不攔截：AI 自行搜尋最長抵抗路徑，不強制走殘局庫著法。
+    /// </summary>
+    private SearchResult? TryProbeTablebase(IBoard boardSnapshot)
+    {
+        if (tablebaseService is null || !tablebaseService.HasTablebase) return null;
+
+        var entry = tablebaseService.Query(boardSnapshot);
+        if (!entry.IsResolved || entry.Result != TablebaseResult.Win) return null;
+
+        var bestMove = tablebaseService.GetBestMove(boardSnapshot);
+        if (!bestMove.HasValue) return null;
+
+        return new SearchResult
+        {
+            BestMove        = bestMove.Value,
+            Score           = GameConstants.MateScore - entry.Depth,
+            Depth           = entry.Depth,
+            IsFromTablebase = true,
+            PvLine          = $"殘局庫必勝（{entry.Depth} 步）"
+        };
+    }
+
     public async Task RequestSmartHintAsync(int fromIndex, CancellationToken ct = default)
     {
         if (!IsSmartHintEnabled) return;
@@ -1436,15 +1504,19 @@ public class GameService : IGameService, IDisposable
 
             if (!linkedCts.Token.IsCancellationRequested)
             {
-                var best = evaluations.FirstOrDefault(e => e.IsBest);
+                // 殘局庫標記：若目前局面必勝，標記 ETB 最佳著法
+                var finalEvaluations = MarkTablebaseMove(boardSnapshot, evaluations);
+
+                var best = finalEvaluations.FirstOrDefault(e => e.IsBest);
                 if (best != null)
                 {
                     string scoreStr    = best.Score > 0 ? $"+{best.Score}" : best.Score.ToString();
                     string bestNotation = MoveNotation.ToNotation(best.Move, board);
                     string elapsedText = $" | 用時: {smartHintStopwatch.Elapsed.TotalSeconds:0.0}s";
-                    ThinkingProgress?.Invoke($"[{currentEngineLabel}] 智能提示完成：最佳走法 {bestNotation} | 分數 {scoreStr} | 共 {evaluations.Count} 個走法{elapsedText}");
+                    string etbLabel    = best.IsFromTablebase ? " [殘局庫必勝]" : string.Empty;
+                    ThinkingProgress?.Invoke($"[{currentEngineLabel}] 智能提示完成：最佳走法 {bestNotation}{etbLabel} | 分數 {scoreStr} | 共 {finalEvaluations.Count} 個走法{elapsedText}");
                 }
-                SmartHintReady?.Invoke(evaluations);
+                SmartHintReady?.Invoke(finalEvaluations);
             }
         }
         catch (OperationCanceledException)
@@ -1490,7 +1562,9 @@ public class GameService : IGameService, IDisposable
         }
 
         var turnLabel = searchTurn == PieceColor.Red ? "紅方" : "黑方";
-        var scoreText = FormatScore(result.Score, turnLabel);
+        var scoreText = result.IsFromTablebase
+            ? $"殘局庫必勝（{result.Depth} 步）"
+            : FormatScore(result.Score, turnLabel);
         var moveText  = notation ?? result.BestMove.ToString();
         var elapsedText = elapsedMs > 0 ? $" | 用時: {elapsedMs / 1000.0:0.0}s" : string.Empty;
 

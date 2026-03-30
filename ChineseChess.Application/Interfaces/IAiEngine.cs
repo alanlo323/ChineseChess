@@ -35,6 +35,8 @@ public class SearchResult
     public string PvLine { get; set; } = string.Empty;
     /// <summary>此結果是否來自開局庫（非 AI 搜尋）。</summary>
     public bool IsFromOpeningBook { get; set; }
+    /// <summary>此結果是否來自殘局庫必勝路（非 AI 搜尋）。</summary>
+    public bool IsFromTablebase { get; set; }
 }
 
 public class SearchSettings
@@ -76,6 +78,8 @@ public class MoveEvaluation
     public bool IsBest { get; set; }
     /// <summary>從此著法出發的主要變例序列（符號表示法，空格分隔）。</summary>
     public string PvLine { get; set; } = string.Empty;
+    /// <summary>此走法是否為殘局庫必勝著法。</summary>
+    public bool IsFromTablebase { get; set; }
 }
 
 public enum TTFlag : byte

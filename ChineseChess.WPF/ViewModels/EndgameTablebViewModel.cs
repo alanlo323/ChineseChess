@@ -253,13 +253,10 @@ public sealed class EndgameTablebViewModel : ObservableObject, IDisposable
 
         QueryResultText = $"結論：{entry}";
 
-        if (iboard is Domain.Entities.Board concreteBoard)
-        {
-            var bestMove = tablebaseService.GetBestMove(concreteBoard);
-            BestMoveText = bestMove.HasValue
-                ? $"最優著法：{MoveNotation.ToNotation(bestMove.Value, concreteBoard)}"
-                : entry.Result == TablebaseResult.Draw ? "（和棋，任意著法均可）" : string.Empty;
-        }
+        var bestMove = tablebaseService.GetBestMove(iboard);
+        BestMoveText = bestMove.HasValue
+            ? $"最優著法：{MoveNotation.ToNotation(bestMove.Value, iboard)}"
+            : entry.Result == TablebaseResult.Draw ? "（和棋，任意著法均可）" : string.Empty;
 
         return Task.CompletedTask;
     }

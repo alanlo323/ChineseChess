@@ -1,5 +1,6 @@
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Models;
+using ChineseChess.Domain.Constants;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Models;
@@ -147,8 +148,6 @@ public sealed class TablebaseService : ITablebaseService
             throw new InvalidOperationException(
                 "boardIndex 為空；請先以 GenerateAsync 或 GenerateFromBoardAsync 生成殘局庫，而非從檔案匯入。");
 
-        const int MateScore = 20000;
-
         foreach (var (hash, board) in boardIndex)
         {
             var entry = storage.Query(hash);
@@ -156,8 +155,8 @@ public sealed class TablebaseService : ITablebaseService
                 continue;
 
             int score = entry.Result == TablebaseResult.Win
-                ? MateScore - entry.Depth
-                : -(MateScore - entry.Depth);
+                ? GameConstants.MateScore - entry.Depth
+                : -(GameConstants.MateScore - entry.Depth);
 
             var bestMove = GetBestMove(board);
             engine.StoreTTEntry(hash, score, entry.Depth, bestMove ?? default);
@@ -166,7 +165,7 @@ public sealed class TablebaseService : ITablebaseService
 
     public TablebaseEntry Query(IBoard board) => storage.Query(board.ZobristKey);
 
-    public Move? GetBestMove(Board board)
+    public Move? GetBestMove(IBoard board)
     {
         var currentEntry = storage.Query(board.ZobristKey);
         if (!currentEntry.IsResolved || currentEntry.Result == TablebaseResult.Draw)
@@ -179,7 +178,7 @@ public sealed class TablebaseService : ITablebaseService
         {
             board.MakeMove(move);
             var succEntry = storage.Query(board.ZobristKey);
-            board.UndoMove();
+            board.UnmakeMove(move);
 
             if (!succEntry.IsResolved) continue;
 

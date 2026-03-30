@@ -51,8 +51,16 @@ public interface ITablebaseService
     /// <summary>查詢指定局面的殘局庫結論（僅使用 ZobristKey）。</summary>
     TablebaseEntry Query(IBoard board);
 
-    /// <summary>在已生成的殘局庫中找出最優著法（勝方選最快勝，敗方選最慢負）。</summary>
-    Move? GetBestMove(Board board);
+    /// <summary>
+    /// 在殘局庫中找出最優著法（勝方選最快勝，敗方選最慢負）。
+    /// 未找到最優著法或局面為和棋時回傳 null。
+    /// </summary>
+    /// <remarks>
+    /// 此方法內部會對 <paramref name="board"/> 執行 MakeMove / UnmakeMove 試走還原，
+    /// 呼叫端必須傳入可安全修改的棋盤物件（通常為 board.Clone() 的結果）。
+    /// 若在執行過程中拋出例外，棋盤狀態可能損毀，呼叫端應自行處理。
+    /// </remarks>
+    Move? GetBestMove(IBoard board);
 
     // ── 匯出／匯入 ──────────────────────────────────────────────────────
 

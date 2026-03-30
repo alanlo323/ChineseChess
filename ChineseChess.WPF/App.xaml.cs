@@ -95,10 +95,13 @@ public partial class App : System.Windows.Application
             new EngineProvider(
                 sp.GetRequiredService<IAiEngine>(),
                 sp.GetRequiredService<IAiEngineFactory>()));
+        // 殘局庫服務（需在 IGameService 之前注冊，因後者以 GetRequiredService 取用）
+        services.AddSingleton<ITablebaseService, TablebaseService>();
         services.AddSingleton<IGameService>(sp => new GameService(
             sp.GetRequiredService<IAiEngine>(),
             sp.GetService<IHintExplanationService>(),
-            sp.GetRequiredService<IEngineProvider>()));
+            sp.GetRequiredService<IEngineProvider>(),
+            sp.GetRequiredService<ITablebaseService>()));
         services.AddSingleton<ICoreGameService>(sp => sp.GetRequiredService<IGameService>());
         services.AddSingleton<IGameRecordService, GameRecordService>();
 
@@ -124,8 +127,6 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<INnueSettingsService>(),
                 sp.GetRequiredService<IEngineProvider>(),
                 new Lazy<NnueTrainingViewModel>(() => sp.GetRequiredService<NnueTrainingViewModel>())));
-        // 殘局庫服務
-        services.AddSingleton<ITablebaseService, TablebaseService>();
         services.AddSingleton<EndgameTablebViewModel>(sp =>
             new EndgameTablebViewModel(
                 sp.GetRequiredService<ITablebaseService>(),

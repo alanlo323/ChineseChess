@@ -2,6 +2,7 @@ using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Models;
 using ChineseChess.Application.Services;
+using ChineseChess.Domain.Constants;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Infrastructure.AI.Evaluators;
@@ -68,7 +69,7 @@ internal sealed class SearchWorker
     internal const int InfinityValue = Infinity;
     // Lazy Evaluation：EvaluateFast 與 Evaluate 的允許差距邊際
     private const int LazyMargin = 200;
-    private const int MateScore = 20000;
+    private const int MateScore = GameConstants.MateScore;
     private const int QuiescenceMaxPly = 8;
     private const int MaxSearchPly = 128;
     private const int CheckMoveBonus = 95_000;

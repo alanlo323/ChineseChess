@@ -2,6 +2,7 @@ using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Models;
+using ChineseChess.Domain.Constants;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
 using ChineseChess.Domain.Helpers;
@@ -742,7 +743,13 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
                 {
                     var turn     = gameService.CurrentBoard.Turn;
                     var notation = MoveNotation.ToNotation(hint.BestMove, gameService.CurrentBoard);
-                    StatusMessage = $"提示完成：{notation} | 分數：{FormatHintScore(hint.Score)}（{(turn == PieceColor.Red ? "紅方" : "黑方")}）";
+                    var source    = hint.IsFromTablebase   ? "[殘局庫必勝] "
+                                  : hint.IsFromOpeningBook ? "[開局庫] "
+                                  : string.Empty;
+                    var scoreText = hint.IsFromTablebase
+                        ? $"必勝（{GameConstants.MateScore - hint.Score} 步）"
+                        : FormatHintScore(hint.Score);
+                    StatusMessage = $"提示完成：{source}{notation} | 分數：{scoreText}（{(turn == PieceColor.Red ? "紅方" : "黑方")}）";
                 }
             }
             catch (Exception ex)
