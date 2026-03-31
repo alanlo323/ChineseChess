@@ -230,7 +230,7 @@
                         </Grid.ColumnDefinitions>
                         <ProgressBar Grid.Column="0"
                                      Minimum="0" Maximum="100"
-                                     Value="{Binding ProgressPercent}"
+                                     Value="{Binding ProgressPercent, Mode=OneWay}"
                                      Height="18"
                                      Foreground="{StaticResource WoodMidBrush}"
                                      Background="{StaticResource PaperBrush}" />
