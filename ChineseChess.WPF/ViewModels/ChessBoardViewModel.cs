@@ -564,6 +564,29 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// 直接從 FEN 字串更新棋盤顯示（供 Elo 評估使用，不經由 GameService）。
+    /// 必須在 UI 執行緒呼叫。
+    /// </summary>
+    public void LoadFromFen(string fen, int lastMoveFrom = -1, int lastMoveTo = -1)
+    {
+        if (string.IsNullOrWhiteSpace(fen)) return;
+
+        var board = new Board();
+        board.ParseFen(fen);
+
+        ClearAllHighlights();
+
+        for (int i = 0; i < 90; i++)
+            Squares[i].Piece = board.GetPiece(i);
+
+        this.lastMoveFrom = lastMoveFrom >= 0 ? lastMoveFrom : (int?)null;
+        this.lastMoveTo = lastMoveTo >= 0 ? lastMoveTo : (int?)null;
+        ApplyLastMoveHighlights();
+
+        selectedSquare = null;
+    }
+
     public void Dispose()
     {
         // 取消訂閱 GameService 事件，防止 ViewModel 因事件持有而無法被 GC

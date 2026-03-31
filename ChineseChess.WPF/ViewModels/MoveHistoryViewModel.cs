@@ -19,6 +19,7 @@ public class MoveHistoryViewModel : ObservableObject, IDisposable
 
     private string stepIndicator = "0 / 0";
     private bool isReplaying;
+    private bool isEloMode;
     private GameMode selectedContinueMode = GameMode.PlayerVsAi;
 
     public ObservableCollection<MoveStepViewModel> Steps { get; } = new();
@@ -110,11 +111,58 @@ public class MoveHistoryViewModel : ObservableObject, IDisposable
 
     private void OnMoveHistoryChanged()
     {
+        if (isEloMode) return; // Elo 模式下不覆蓋棋譜顯示
         var app = System.Windows.Application.Current;
         if (app != null)
             app.Dispatcher.InvokeAsync(RefreshSteps);
         else
             RefreshSteps();
+    }
+
+    /// <summary>切換至 Elo 評估模式：清空棋譜，暫停遊戲歷史同步。</summary>
+    public void StartEloMode()
+    {
+        isEloMode = true;
+        var app = System.Windows.Application.Current;
+        if (app != null)
+            app.Dispatcher.InvokeAsync(() => { Steps.Clear(); StepIndicator = "0 / 0"; });
+        else
+        { Steps.Clear(); StepIndicator = "0 / 0"; }
+    }
+
+    /// <summary>新增一步 Elo 走法記錄（在 UI 執行緒呼叫）。</summary>
+    public void AddEloMove(string notation, PieceColor turn, int stepNumber)
+    {
+        var vm = new MoveStepViewModel
+        {
+            StepNumber = stepNumber,
+            Notation = notation,
+            TurnLabel = turn == PieceColor.Red ? "紅" : "黑",
+            IsCurrent = true
+        };
+
+        var app = System.Windows.Application.Current;
+        if (app != null)
+            app.Dispatcher.InvokeAsync(() =>
+            {
+                if (Steps.Count > 0) Steps[Steps.Count - 1].IsCurrent = false;
+                Steps.Add(vm);
+                StepIndicator = $"{stepNumber} 步";
+                ScrollToCurrent?.Invoke();
+            });
+        else
+        {
+            if (Steps.Count > 0) Steps[Steps.Count - 1].IsCurrent = false;
+            Steps.Add(vm);
+            StepIndicator = $"{stepNumber} 步";
+        }
+    }
+
+    /// <summary>結束 Elo 模式，恢復顯示正常遊戲棋譜。</summary>
+    public void StopEloMode()
+    {
+        isEloMode = false;
+        OnMoveHistoryChanged();
     }
 
     private void OnReplayStateChanged()

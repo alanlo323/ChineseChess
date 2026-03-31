@@ -1,6 +1,8 @@
 using ChineseChess.Application.Interfaces;
 using ChineseChess.Application.Models;
 using ChineseChess.Application.Services;
+using ChineseChess.Domain.Entities;
+using ChineseChess.Domain.Enums;
 using ChineseChess.WPF.Core;
 using Microsoft.Win32;
 using System;
@@ -28,6 +30,29 @@ public class EloMatchViewModel : ObservableObject, IDisposable
     private readonly IEngineProvider engineProvider;
     private readonly EloMatchService matchService;
 
+    // ── 外部可觀察的 events / 屬性（MainViewModel、ControlPanelViewModel 訂閱）──
+
+    /// <summary>每步走完後觸發，攜帶 FEN 及最後走法格子供主棋盤顯示。</summary>
+    public event Action<string, int, int>? BoardPositionChanged;
+
+    /// <summary>評估開始時觸發。</summary>
+    public event Action? EloMatchStarted;
+
+    /// <summary>評估結束（完成或停止）時觸發。</summary>
+    public event Action? EloMatchEnded;
+
+    /// <summary>每步走完後觸發，攜帶記法、走子方、步號供棋譜顯示。</summary>
+    public event Action<string, PieceColor, int>? EloMoveRecorded;
+
+    /// <summary>引擎 A（被評估方），評估進行中有值，結束後為 null。</summary>
+    public IAiEngine? EloEngineA { get; private set; }
+
+    /// <summary>引擎 B（參照方），評估進行中有值，結束後為 null。</summary>
+    public IAiEngine? EloEngineB { get; private set; }
+
+    /// <summary>最近一步走完後的棋盤局面，供 TT 探索使用。</summary>
+    public IBoard? EloCurrentBoard { get; private set; }
+
     // ── 執行狀態 ──
     private CancellationTokenSource? matchCts;
     private ManualResetEventSlim pauseSignal = new(true); // 初始為 signaled（不暫停）
@@ -51,6 +76,9 @@ public class EloMatchViewModel : ObservableObject, IDisposable
     private string currentFen = string.Empty;
     private string currentColorInfo = string.Empty;
     private double progressPercent;
+
+    // ── 思考進度欄位 ──
+    private string analysisText = string.Empty;
 
     // ── 統計欄位 ──
     private int engineAWins;
@@ -201,6 +229,13 @@ public class EloMatchViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref progressPercent, value);
     }
 
+    /// <summary>AI 即時思考進度文字（格式與正常對局一致）。</summary>
+    public string AnalysisText
+    {
+        get => analysisText;
+        private set => SetProperty(ref analysisText, value);
+    }
+
     // ── 統計屬性 ──
 
     public int EngineAWins
@@ -312,6 +347,7 @@ public class EloMatchViewModel : ObservableObject, IDisposable
         WinRateText = "—";
         AverageGameLengthText = "—";
         IsLowSampleWarning = false;
+        AnalysisText = string.Empty;
 
         // 驗證：兩引擎不可同為外部引擎（會共用同一實例，TT 互相汙染）
         if (selectedEngineAType == EloEngineType.External &&
@@ -358,15 +394,19 @@ public class EloMatchViewModel : ObservableObject, IDisposable
         matchCts = new CancellationTokenSource();
         pauseSignal.Set(); // 確保未暫停
 
+        EloEngineA = engineA;
+        EloEngineB = engineB;
         IsRunning = true;
         IsPaused = false;
+        EloMatchStarted?.Invoke();
 
-        // 進度回報（在背景執行緒呼叫，需 Dispatcher 調度）
+        // 進度回報（Progress<T> 自動捕捉 SynchronizationContext，回呼在 UI 執行緒執行）
         var progress = new Progress<EloMatchProgress>(OnProgressReceived);
+        var thinkingProgress = new Progress<string>(text => AnalysisText = text);
 
         try
         {
-            await matchService.RunMatchAsync(engineA, engineB, settings, matchCts.Token, progress, pauseSignal);
+            await matchService.RunMatchAsync(engineA, engineB, settings, matchCts.Token, progress, pauseSignal, thinkingProgress);
         }
         catch (OperationCanceledException)
         {
@@ -384,6 +424,11 @@ public class EloMatchViewModel : ObservableObject, IDisposable
             pauseSignal.Set();
             matchCts?.Dispose();
             matchCts = null;
+
+            EloEngineA = null;
+            EloEngineB = null;
+            EloCurrentBoard = null;
+            EloMatchEnded?.Invoke();
 
             // 只釋放臨時建立的引擎（非 EngineProvider 管理的外部引擎）
             if (selectedEngineAType != EloEngineType.External)
@@ -449,6 +494,18 @@ public class EloMatchViewModel : ObservableObject, IDisposable
         CurrentFen = p.CurrentFen;
         CurrentColorInfo = p.EngineAPlaysRed ? "A 執紅 vs B 執黑" : "A 執黑 vs B 執紅";
         ProgressPercent = (double)p.CurrentGameNumber / p.TotalGames * 100.0;
+
+        // 通知主棋盤更新顯示（含最後走法高亮）
+        BoardPositionChanged?.Invoke(p.CurrentFen, p.LastMoveFrom, p.LastMoveTo);
+
+        // 更新 TT 探索用棋盤快照
+        var boardSnapshot = new Board();
+        boardSnapshot.ParseFen(p.CurrentFen);
+        EloCurrentBoard = boardSnapshot;
+
+        // 通知棋譜新增一步
+        if (!string.IsNullOrEmpty(p.MoveNotationText))
+            EloMoveRecorded?.Invoke(p.MoveNotationText, p.MovingColor, p.CurrentMoveCount);
 
         // 若本次回報包含完成的局，加入列表
         if (p.LastGameResult != null)

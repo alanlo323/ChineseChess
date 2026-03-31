@@ -36,6 +36,31 @@ public class MainViewModel : ObservableObject, IDisposable
 
         // 擺棋模式：串接 BoardSetupViewModel 到 ChessBoardViewModel
         chessBoard.SetupViewModel = controlPanel.BoardSetup;
+
+        // Elo 評估橋接：棋盤位置更新 + 思考進度 + 棋譜同步
+        if (controlPanel.EloMatch is { } eloMatch)
+        {
+            eloMatch.BoardPositionChanged += OnEloBoardPositionChanged;
+            eloMatch.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(EloMatchViewModel.AnalysisText))
+                    AnalysisText = eloMatch.AnalysisText;
+            };
+
+            // 棋譜同步
+            if (controlPanel.MoveHistory is { } moveHistory)
+            {
+                eloMatch.EloMatchStarted += moveHistory.StartEloMode;
+                eloMatch.EloMatchEnded += moveHistory.StopEloMode;
+                eloMatch.EloMoveRecorded += moveHistory.AddEloMove;
+            }
+        }
+    }
+
+    private void OnEloBoardPositionChanged(string fen, int lastMoveFrom, int lastMoveTo)
+    {
+        global::System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+            ChessBoard.LoadFromFen(fen, lastMoveFrom, lastMoveTo));
     }
 
     private void OnThinkingProgress(string progress)
@@ -103,5 +128,15 @@ public class MainViewModel : ObservableObject, IDisposable
         gameService.HintReady -= OnHintReady;
         gameService.ThinkingProgress -= OnThinkingProgress;
         ControlPanel.MultiPvMoveSelected -= ChessBoard.SelectMultiPvMove;
+        if (ControlPanel.EloMatch is { } eloMatch)
+        {
+            eloMatch.BoardPositionChanged -= OnEloBoardPositionChanged;
+            if (ControlPanel.MoveHistory is { } moveHistory)
+            {
+                eloMatch.EloMatchStarted -= moveHistory.StartEloMode;
+                eloMatch.EloMatchEnded -= moveHistory.StopEloMode;
+                eloMatch.EloMoveRecorded -= moveHistory.AddEloMove;
+            }
+        }
     }
 }

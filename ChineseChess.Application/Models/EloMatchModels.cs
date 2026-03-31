@@ -1,3 +1,4 @@
+using ChineseChess.Domain.Enums;
 using System.Collections.Generic;
 
 namespace ChineseChess.Application.Models;
@@ -152,6 +153,18 @@ public class EloMatchProgress
 
     /// <summary>當前局面的 FEN 字串。</summary>
     public string CurrentFen { get; init; } = string.Empty;
+
+    /// <summary>最後一步的起始格（0–89）；-1 表示無。</summary>
+    public int LastMoveFrom { get; init; } = -1;
+
+    /// <summary>最後一步的目標格（0–89）；-1 表示無。</summary>
+    public int LastMoveTo { get; init; } = -1;
+
+    /// <summary>最後一步的中文記法（如「炮二平五」）；空字串表示無記法。</summary>
+    public string MoveNotationText { get; init; } = string.Empty;
+
+    /// <summary>剛才走子的顏色。</summary>
+    public PieceColor MovingColor { get; init; }
 
     /// <summary>上一局結果。第一局開始時為 null。</summary>
     public SingleGameResult? LastGameResult { get; init; }

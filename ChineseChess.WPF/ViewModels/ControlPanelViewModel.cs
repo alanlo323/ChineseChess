@@ -1106,7 +1106,15 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     private string BuildTTExplorerText()
     {
+        // Elo 評估進行中時，改用引擎 A 的 TT（被評估方）
+        var eloEngine = EloMatch?.IsRunning == true ? EloMatch.EloEngineA : null;
+        var eloBoard = EloMatch?.EloCurrentBoard;
+        bool isEloMode = eloEngine != null;
+
         var sb = new StringBuilder();
+
+        if (isEloMode)
+            sb.AppendLine($"【Elo 評估模式】引擎 A（{eloEngine!.EngineLabel}）TT");
 
         // ── 條目分布 ────────────────────────────────────────
         sb.AppendLine("══ TT 條目分布 ══════════════════════════════");
@@ -1116,16 +1124,18 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             var flagCounts = new long[4];
             long total = 0;
 
-            foreach (var entry in gameService.EnumerateTTEntries())
+            var entries = isEloMode
+                ? eloEngine!.EnumerateTTEntries()
+                : gameService.EnumerateTTEntries();
+
+            foreach (var entry in entries)
             {
                 total++;
                 depthCounts[entry.Depth]++;
 
                 int flagIdx = (int)entry.Flag;
                 if (flagIdx >= 0 && flagIdx < flagCounts.Length)
-                {
                     flagCounts[flagIdx]++;
-                }
             }
 
             sb.AppendLine($"有效條目：{total:N0}");
@@ -1175,17 +1185,24 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         sb.AppendLine("══ 思路樹 ═══════════════════════════════════");
         try
         {
-            // 取快照以確保棋盤在整個遞迴中不被修改
-            var boardSnapshot = gameService.CurrentBoard.Clone();
-            var root = gameService.ExploreTTTree(TTExploreMaxDepth);
-            if (root == null)
+            TTTreeNode? root;
+            IBoard boardSnapshot;
+
+            if (isEloMode && eloBoard != null)
             {
-                sb.AppendLine("（當前局面不在 TT 中，尚未搜尋過此局面）");
+                boardSnapshot = eloBoard.Clone();
+                root = eloEngine!.ExploreTTTree(boardSnapshot, TTExploreMaxDepth);
             }
             else
             {
-                AppendTreeNode(sb, root, "", isRoot: true, parentBoard: boardSnapshot);
+                boardSnapshot = gameService.CurrentBoard.Clone();
+                root = gameService.ExploreTTTree(TTExploreMaxDepth);
             }
+
+            if (root == null)
+                sb.AppendLine("（當前局面不在 TT 中，尚未搜尋過此局面）");
+            else
+                AppendTreeNode(sb, root, "", isRoot: true, parentBoard: boardSnapshot);
         }
         catch (Exception ex)
         {

@@ -3,6 +3,7 @@ using ChineseChess.Application.Models;
 using ChineseChess.Domain.Constants;
 using ChineseChess.Domain.Entities;
 using ChineseChess.Domain.Enums;
+using ChineseChess.Domain.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -33,7 +34,8 @@ public class EloMatchService
         EloMatchSettings settings,
         CancellationToken ct,
         IProgress<EloMatchProgress>? progress = null,
-        ManualResetEventSlim? pauseSignal = null)
+        ManualResetEventSlim? pauseSignal = null,
+        IProgress<string>? thinkingProgress = null)
     {
         var results = new List<SingleGameResult>(settings.TotalGames);
 
@@ -49,7 +51,7 @@ public class EloMatchService
             var result = await PlaySingleGameAsync(
                 redEngine, blackEngine,
                 gameNumber, engineAPlaysRed,
-                settings, ct, progress, results, pauseSignal);
+                settings, ct, progress, results, pauseSignal, thinkingProgress);
 
             results.Add(result);
 
@@ -80,7 +82,8 @@ public class EloMatchService
         CancellationToken ct,
         IProgress<EloMatchProgress>? progress,
         IReadOnlyList<SingleGameResult> resultsSoFar,
-        ManualResetEventSlim? pauseSignal)
+        ManualResetEventSlim? pauseSignal,
+        IProgress<string>? thinkingProgress)
     {
         var board = new Board();
         board.ParseFen(GameConstants.InitialPositionFen);
@@ -106,9 +109,6 @@ public class EloMatchService
             ThreadCount = Environment.ProcessorCount,
             PauseSignal = pauseSignal
         };
-
-        // 進度節流：每 10 步回報一次（減少 UI 執行緒壓力）
-        const int progressReportInterval = 10;
 
         // 預先計算一次統計（整局共用，不在每步重算）
         var runningStats = CalculateStatistics(resultsSoFar);
@@ -139,7 +139,13 @@ public class EloMatchService
             var currentColor = board.Turn;
             var searchSettings = currentColor == PieceColor.Red ? redSettings : blackSettings;
 
-            var searchResult = await currentEngine.SearchAsync(board, searchSettings, ct);
+            // 建立即時思考進度回呼（SearchProgress → 格式化文字 → 上層 IProgress<string>）
+            IProgress<SearchProgress>? searchProgressHandler = thinkingProgress != null
+                ? new Progress<SearchProgress>(sp =>
+                    thinkingProgress.Report(FormatSearchProgress(sp, currentEngine.EngineLabel, currentColor)))
+                : null;
+
+            var searchResult = await currentEngine.SearchAsync(board, searchSettings, ct, searchProgressHandler);
 
             if (searchResult.BestMove == default)
                 return BuildDraw(gameNumber, engineAPlaysRed, TerminationReason.MaxMoves, moveCount, board.ToFen());
@@ -161,23 +167,28 @@ public class EloMatchService
                 resignLosingColor = null;
             }
 
-            board.MakeMove(searchResult.BestMove);
+            var lastMove = searchResult.BestMove;
+            var movingColor = board.Turn;
+            // 走子前計算記法（MoveNotation.ToNotation 需要走子前的棋盤狀態）
+            string notation = MoveNotation.ToNotation(lastMove, board);
+            board.MakeMove(lastMove);
             moveCount++;
 
-            // 節流進度回報
-            if (progress != null && moveCount % progressReportInterval == 0)
+            // 每步完成後即時回報進度（含當前 FEN、步數、最後走法高亮、記法）
+            progress?.Report(new EloMatchProgress
             {
-                progress.Report(new EloMatchProgress
-                {
-                    CurrentGameNumber = gameNumber,
-                    TotalGames = settings.TotalGames,
-                    EngineAPlaysRed = engineAPlaysRed,
-                    CurrentMoveCount = moveCount,
-                    CurrentFen = board.ToFen(),
-                    LastGameResult = null,
-                    RunningStats = runningStats
-                });
-            }
+                CurrentGameNumber = gameNumber,
+                TotalGames = settings.TotalGames,
+                EngineAPlaysRed = engineAPlaysRed,
+                CurrentMoveCount = moveCount,
+                CurrentFen = board.ToFen(),
+                LastMoveFrom = lastMove.From,
+                LastMoveTo = lastMove.To,
+                MoveNotationText = notation,
+                MovingColor = movingColor,
+                LastGameResult = null,
+                RunningStats = runningStats
+            });
         }
     }
 
@@ -311,6 +322,37 @@ public class EloMatchService
         double elo = -400.0 * Math.Log10(1.0 / score - 1.0);
         // 鉗位至合理範圍
         return Math.Clamp(elo, -999.0, 999.0);
+    }
+
+    // ── 思考進度格式化 ──
+
+    /// <summary>
+    /// 將 SearchProgress 格式化為人類可讀的進度字串，格式與 GameService 一致。
+    /// </summary>
+    private static string FormatSearchProgress(SearchProgress p, string engineLabel, PieceColor turn)
+    {
+        var elapsed = p.ElapsedMs > 0 ? $"{p.ElapsedMs / 1000.0:0.0}s" : "0.0s";
+        var speed = p.NodesPerSecond > 0 ? $"{p.NodesPerSecond:N0} nodes/s" : "n/a";
+        var turnLabel = turn == PieceColor.Red ? "紅方" : "黑方";
+        var scoreText = FormatScore(p.Score, turnLabel);
+        var bestMove = string.IsNullOrWhiteSpace(p.BestMove) ? "待更新" : p.BestMove;
+        var mode = p.IsHeartbeat ? "（即時）" : "（階段）";
+        var ttHitRate = p.TtHitRate > 0 ? $"，TT:{p.TtHitRate:P0}" : string.Empty;
+        var label = string.IsNullOrEmpty(engineLabel) ? "" : $"[{engineLabel}] ";
+        return $"{label}思考中{mode}：深度 {p.CurrentDepth}/{p.MaxDepth}，耗時 {elapsed}，節點 {p.Nodes:N0}（{speed}），分數 {scoreText}，建議 {bestMove}{ttHitRate}";
+    }
+
+    private static string FormatScore(int score, string turnLabel)
+    {
+        string signedScore = score switch
+        {
+            > 0 => $"+{score}",
+            < 0 => score.ToString(),
+            _ => "0"
+        };
+        return Math.Abs(score) >= 15000
+            ? $"{signedScore}（{turnLabel}，高分）"
+            : $"{signedScore}（{turnLabel}）";
     }
 
     /// <summary>

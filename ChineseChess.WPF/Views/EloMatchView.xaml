@@ -278,6 +278,23 @@
                                Visibility="{Binding CurrentFen,
                                    Converter={StaticResource NullToVisibilityConverter}}" />
 
+                    <!-- AI 即時思考進度 -->
+                    <Border Height="1"
+                            Background="{StaticResource WoodDarkBrush}"
+                            Opacity="0.15"
+                            Margin="0,8,0,6" />
+
+                    <TextBlock Text="AI 思考進度"
+                               Style="{StaticResource FormLabelStyle}"
+                               Margin="0,0,0,3" />
+
+                    <TextBlock Text="{Binding AnalysisText, Mode=OneWay}"
+                               Foreground="{StaticResource InkMutedBrush}"
+                               FontFamily="Consolas"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               MinHeight="36" />
+
                 </StackPanel>
             </Border>
 
