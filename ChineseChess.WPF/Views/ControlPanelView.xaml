@@ -886,6 +886,11 @@
                 <views:EndgameTablebView DataContext="{Binding EndgameTableb}" />
             </TabItem>
 
+            <!-- Elo 評估頁 -->
+            <TabItem Header="Elo 評估">
+                <views:EloMatchView DataContext="{Binding EloMatch}" />
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </UserControl>

@@ -424,6 +424,8 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>外部引擎 / 伺服器設定的 ViewModel（供 ExternalEngineView 綁定）。</summary>
     public ExternalEngineViewModel? ExternalEngine { get; }
 
+    public EloMatchViewModel? EloMatch { get; }
+
     /// <summary>NNUE 設定的 ViewModel（供 NnueView 綁定）。</summary>
     public NnueViewModel? Nnue { get; }
 
@@ -462,12 +464,13 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>黑方已設定引擎路徑（決定快速開關 CheckBox 是否可用）。</summary>
     public bool HasBlackEngineConfig => ExternalEngine?.HasBlackEngineConfig ?? false;
 
-    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null, NnueViewModel? nnueViewModel = null, EndgameTablebViewModel? endgameTablebViewModel = null)
+    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null, NnueViewModel? nnueViewModel = null, EndgameTablebViewModel? endgameTablebViewModel = null, EloMatchViewModel? eloMatchViewModel = null)
     {
         ExternalEngine = externalEngineViewModel;
         MoveHistory = moveHistoryViewModel;
         Nnue = nnueViewModel;
         EndgameTableb = endgameTablebViewModel;
+        EloMatch = eloMatchViewModel;
         this.gameService = gameService;
         this.gameAnalysisService = gameAnalysisService;
 

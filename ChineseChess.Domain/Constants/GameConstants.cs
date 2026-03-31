@@ -8,4 +8,7 @@ public static class GameConstants
     /// 必負局面為 <c>-(MateScore - Depth)</c>。
     /// </summary>
     public const int MateScore = 20000;
+
+    /// <summary>標準初始局面的 FEN 字串。</summary>
+    public const string InitialPositionFen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
 }

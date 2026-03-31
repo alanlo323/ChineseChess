@@ -132,6 +132,17 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<ITablebaseService>(),
                 sp.GetRequiredService<IGameService>()));
 
+        // Elo 評估服務（純邏輯，無外部依賴）
+        services.AddSingleton<EloMatchService>();
+
+        // EloMatchViewModel：Singleton，確保評估狀態在切換 Tab 時不遺失
+        services.AddSingleton<EloMatchViewModel>(sp =>
+            new EloMatchViewModel(
+                sp.GetRequiredService<IAiEngine>(),
+                sp.GetRequiredService<IAiEngineFactory>(),
+                sp.GetRequiredService<IEngineProvider>(),
+                sp.GetRequiredService<EloMatchService>()));
+
         services.AddTransient<ControlPanelViewModel>(sp => new ControlPanelViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<GameSettings>(),
@@ -140,7 +151,8 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<ExternalEngineViewModel>(),
             sp.GetRequiredService<MoveHistoryViewModel>(),
             sp.GetRequiredService<NnueViewModel>(),
-            sp.GetRequiredService<EndgameTablebViewModel>()));
+            sp.GetRequiredService<EndgameTablebViewModel>(),
+            sp.GetRequiredService<EloMatchViewModel>()));
 
         // 視圖層（Views）
         services.AddTransient<MainWindowView>();

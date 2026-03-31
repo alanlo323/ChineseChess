@@ -98,7 +98,7 @@ public class GameService : IGameService, IDisposable
     // ─── 擺棋模式 ──────────────────────────────────────────────────────────
     // 使用 int（0/1）搭配 Volatile，與其他旗標（isThinkingFlag、isGameOverFlag）保持一致的執行緒安全慣例
     private int isInSetupModeFlag;
-    private const string InitialPositionFen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+    // 使用 GameConstants.InitialPositionFen 共用常數
 
     public bool IsInSetupMode => Volatile.Read(ref isInSetupModeFlag) != 0;
     public event Action? SetupModeChanged;
@@ -161,7 +161,7 @@ public class GameService : IGameService, IDisposable
         Interlocked.Exchange(ref completedGameNodes, 0);
         Interlocked.Exchange(ref lastSearchNodes, 0);
         Interlocked.Exchange(ref lastSearchNps, 0);
-        board.ParseFen(InitialPositionFen);
+        board.ParseFen(GameConstants.InitialPositionFen);
         initialFen = board.ToFen();
         moveHistory.Clear();
         replayState = ReplayState.Live;
@@ -1169,7 +1169,7 @@ public class GameService : IGameService, IDisposable
     public void SetupResetBoard()
     {
         if (!IsInSetupMode) return;
-        board.ParseFen(InitialPositionFen);
+        board.ParseFen(GameConstants.InitialPositionFen);
         BoardUpdated?.Invoke();
     }
 
