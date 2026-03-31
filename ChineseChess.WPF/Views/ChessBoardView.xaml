@@ -7,7 +7,7 @@
              xmlns:enums="clr-namespace:ChineseChess.Domain.Enums;assembly=ChineseChess.Domain"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ChessBoardViewModel}"
-             Height="616" Width="540">
+             Height="560" Width="540">
     <UserControl.Resources>
         <SolidColorBrush x:Key="BoardHoverBrush" Color="#B58F5F" />
         <SolidColorBrush x:Key="BoardPressedBrush" Color="#8D6A3A" />
@@ -124,7 +124,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Width="540" Height="616">
+    <Grid Width="540" Height="560">
         <Border Background="{StaticResource BoardOuterBrush}"
                 BorderBrush="{StaticResource BoardOuterBrush}"
                 BorderThickness="0"
@@ -134,7 +134,7 @@
 
                 <Canvas IsHitTestVisible="False">
                     <Rectangle Width="480"
-                               Height="560"
+                               Height="504"
                                Stroke="{StaticResource BoardLineBrush}"
                                StrokeThickness="2.8"
                                RadiusX="2"
@@ -146,15 +146,15 @@
                           StrokeLineJoin="Miter">
                         <Path.Data>
                             <PathGeometry Figures="
-M0,0 L0,224 M0,336 L0,560
-M60,0 L60,224 M60,336 L60,560
-M120,0 L120,224 M120,336 L120,560
-M180,0 L180,224 M180,336 L180,560
-M240,0 L240,224 M240,336 L240,560
-M300,0 L300,224 M300,336 L300,560
-M360,0 L360,224 M360,336 L360,560
-M420,0 L420,224 M420,336 L420,560
-M480,0 L480,224 M480,336 L480,560" />
+M0,0 L0,224 M0,280 L0,504
+M60,0 L60,224 M60,280 L60,504
+M120,0 L120,224 M120,280 L120,504
+M180,0 L180,224 M180,280 L180,504
+M240,0 L240,224 M240,280 L240,504
+M300,0 L300,224 M300,280 L300,504
+M360,0 L360,224 M360,280 L360,504
+M420,0 L420,224 M420,280 L420,504
+M480,0 L480,224 M480,280 L480,504" />
                         </Path.Data>
                     </Path>
 
@@ -168,11 +168,11 @@ M0,56 L480,56
 M0,112 L480,112
 M0,168 L480,168
 M0,224 L480,224
+M0,280 L480,280
 M0,336 L480,336
 M0,392 L480,392
 M0,448 L480,448
-M0,504 L480,504
-M0,560 L480,560" />
+M0,504 L480,504" />
                         </Path.Data>
                     </Path>
 
@@ -182,8 +182,8 @@ M0,560 L480,560" />
                             <PathGeometry Figures="
 M180,0 L300,112
 M300,0 L180,112
-M180,448 L300,560
-M300,448 L180,560" />
+M180,392 L300,504
+M300,392 L180,504" />
                         </Path.Data>
                     </Path>
 
@@ -203,15 +203,15 @@ M430,102 L440,102 M430,102 L430,92
 M400,122 L410,122 M410,122 L410,132
 M430,122 L440,122 M430,122 L430,132
 
-M40,438 L50,438 M50,438 L50,428
-M70,438 L80,438 M70,438 L70,428
-M40,458 L50,458 M50,458 L50,468
-M70,458 L80,458 M70,458 L70,468
+M40,382 L50,382 M50,382 L50,372
+M70,382 L80,382 M70,382 L70,372
+M40,402 L50,402 M50,402 L50,412
+M70,402 L80,402 M70,402 L70,412
 
-M400,438 L410,438 M410,438 L410,428
-M430,438 L440,438 M430,438 L430,428
-M400,458 L410,458 M410,458 L410,468
-M430,458 L440,458 M430,458 L430,468
+M400,382 L410,382 M410,382 L410,372
+M430,382 L440,382 M430,382 L430,372
+M400,402 L410,402 M410,402 L410,412
+M430,402 L440,402 M430,402 L430,412
 
 M10,158 L20,158 M10,158 L10,148
 M10,178 L20,178 M10,178 L10,188
@@ -230,22 +230,22 @@ M370,178 L380,178 M370,178 L370,188
 M460,158 L470,158 M470,158 L470,148
 M460,178 L470,178 M470,178 L470,188
 
-M10,382 L20,382 M10,382 L10,372
-M10,402 L20,402 M10,402 L10,412
-M100,382 L110,382 M110,382 L110,372
-M130,382 L140,382 M130,382 L130,372
-M100,402 L110,402 M110,402 L110,412
-M130,402 L140,402 M130,402 L130,412
-M220,382 L230,382 M230,382 L230,372
-M250,382 L260,382 M250,382 L250,372
-M220,402 L230,402 M230,402 L230,412
-M250,402 L260,402 M250,402 L250,412
-M340,382 L350,382 M350,382 L350,372
-M370,382 L380,382 M370,382 L370,372
-M340,402 L350,402 M350,402 L350,412
-M370,402 L380,402 M370,402 L370,412
-M460,382 L470,382 M470,382 L470,372
-M460,402 L470,402 M470,402 L470,412" />
+M10,326 L20,326 M10,326 L10,316
+M10,346 L20,346 M10,346 L10,356
+M100,326 L110,326 M110,326 L110,316
+M130,326 L140,326 M130,326 L130,316
+M100,346 L110,346 M110,346 L110,356
+M130,346 L140,346 M130,346 L130,356
+M220,326 L230,326 M230,326 L230,316
+M250,326 L260,326 M250,326 L250,316
+M220,346 L230,346 M230,346 L230,356
+M250,346 L260,346 M250,346 L250,356
+M340,326 L350,326 M350,326 L350,316
+M370,326 L380,326 M370,326 L370,316
+M340,346 L350,346 M350,346 L350,356
+M370,346 L380,346 M370,346 L370,356
+M460,326 L470,326 M470,326 L470,316
+M460,346 L470,346 M470,346 L470,356" />
                         </Path.Data>
                     </Path>
 
@@ -263,7 +263,7 @@ M460,402 L470,402 M470,402 L470,412" />
                             <DropShadowEffect BlurRadius="3" ShadowDepth="0" Opacity="0.2" />
                         </TextBlock.Effect>
                         <TextBlock.Margin>
-                            <Thickness>148,267,0,0</Thickness>
+                            <Thickness>148,232,0,0</Thickness>
                         </TextBlock.Margin>
                     </TextBlock>
 
@@ -281,7 +281,7 @@ M460,402 L470,402 M470,402 L470,412" />
                             <DropShadowEffect BlurRadius="3" ShadowDepth="0" Opacity="0.2" />
                         </TextBlock.Effect>
                         <TextBlock.Margin>
-                            <Thickness>250,267,0,0</Thickness>
+                            <Thickness>250,232,0,0</Thickness>
                         </TextBlock.Margin>
                     </TextBlock>
                 </Canvas>
@@ -291,7 +291,7 @@ M460,402 L470,402 M470,402 L470,412" />
                               VerticalAlignment="Stretch">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <Canvas Width="480" Height="560" />
+                            <Canvas Width="480" Height="504" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemContainerStyle>

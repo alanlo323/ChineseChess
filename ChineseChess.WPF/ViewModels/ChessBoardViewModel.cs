@@ -14,7 +14,6 @@ public class SquareViewModel : ObservableObject
 {
     private const double ColumnSpacing = 60.0;
     private const double RowSpacing = 56.0;
-    private const double RiverGap = 56.0;
     private const double HitBoxHalfWidth = 30.0;
     private const double HitBoxHalfHeight = 28.0;
 
@@ -150,7 +149,7 @@ public class SquareViewModel : ObservableObject
         Row = row;
         Col = col;
         BoardX = col * ColumnSpacing;
-        BoardY = row * RowSpacing + (row >= 5 ? RiverGap : 0.0);
+        BoardY = row * RowSpacing;
         HitBoxLeft = BoardX - HitBoxHalfWidth;
         HitBoxTop = BoardY - HitBoxHalfHeight;
         piece = Piece.None;
