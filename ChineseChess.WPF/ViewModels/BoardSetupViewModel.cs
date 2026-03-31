@@ -106,6 +106,21 @@ public class BoardSetupViewModel : ObservableObject
         ConfirmCommand = new AsyncRelayCommand(async _ => await ConfirmAsync());
     }
 
+    /// <summary>顯示放置驗證結果：null 表成功（清除訊息），否則顯示錯誤。</summary>
+    public void ShowValidation(string? error)
+    {
+        if (error == null)
+        {
+            ValidationMessage = string.Empty;
+            IsValid = true;
+        }
+        else
+        {
+            ValidationMessage = error;
+            IsValid = false;
+        }
+    }
+
     private async Task ConfirmAsync()
     {
         try

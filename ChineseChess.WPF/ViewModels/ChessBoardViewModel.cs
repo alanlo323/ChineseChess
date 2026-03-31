@@ -332,9 +332,15 @@ public class ChessBoardViewModel : ObservableObject, IDisposable
             {
                 if (SetupViewModel == null) return;
                 if (SetupViewModel.IsEraseMode)
+                {
                     gameService.SetupRemovePiece(square.Index);
+                    SetupViewModel.ShowValidation(null);
+                }
                 else
-                    gameService.SetupPlacePiece(square.Index, SetupViewModel.SelectedPiece);
+                {
+                    var error = gameService.SetupPlacePiece(square.Index, SetupViewModel.SelectedPiece);
+                    SetupViewModel.ShowValidation(error);
+                }
                 return;
             }
 

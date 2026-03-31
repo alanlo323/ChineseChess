@@ -67,7 +67,7 @@ public interface ICoreGameService
     bool IsInSetupMode { get; }
     event Action? SetupModeChanged;
     Task EnterSetupModeAsync();
-    void SetupPlacePiece(int index, Piece piece);
+    string? SetupPlacePiece(int index, Piece piece);
     void SetupRemovePiece(int index);
     void SetupClearBoard();
     void SetupResetBoard();

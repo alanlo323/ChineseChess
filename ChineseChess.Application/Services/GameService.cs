@@ -1140,11 +1140,16 @@ public class GameService : IGameService, IDisposable
         SetupModeChanged?.Invoke();
     }
 
-    public void SetupPlacePiece(int index, Piece piece)
+    public string? SetupPlacePiece(int index, Piece piece)
     {
-        if (!IsInSetupMode) return;
+        if (!IsInSetupMode) return null;
+
+        var error = BoardValidator.ValidatePlacement(index, piece);
+        if (error != null) return error;
+
         board.SetPiece(index, piece);
         BoardUpdated?.Invoke();
+        return null;
     }
 
     public void SetupRemovePiece(int index)
