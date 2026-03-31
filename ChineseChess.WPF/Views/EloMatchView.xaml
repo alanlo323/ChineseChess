@@ -182,7 +182,7 @@
                                TextWrapping="Wrap"
                                Margin="0,8,0,0">
                         <Run Text="外部引擎：" />
-                        <Run Text="{Binding ExternalEngineLabel}" />
+                        <Run Text="{Binding ExternalEngineLabel, Mode=OneWay}" />
                         <LineBreak />
                         <Run Text="（如需使用外部引擎，請先至「外部引擎」Tab 設定）" />
                     </TextBlock>
@@ -239,7 +239,7 @@
                                    VerticalAlignment="Center"
                                    Foreground="{StaticResource InkBrush}"
                                    FontSize="12">
-                            <Run Text="{Binding CurrentGameNumber}" />
+                            <Run Text="{Binding CurrentGameNumber, Mode=OneWay}" />
                             <Run Text="/" />
                             <Run Text="{Binding TotalGames}" />
                         </TextBlock>
@@ -255,16 +255,16 @@
                         <TextBlock Grid.Column="0"
                                    Style="{StaticResource FormLabelStyle}">
                             <Run Text="第 " />
-                            <Run Text="{Binding CurrentGameNumber}" FontWeight="SemiBold" />
+                            <Run Text="{Binding CurrentGameNumber, Mode=OneWay}" FontWeight="SemiBold" />
                             <Run Text=" 局 │ " />
-                            <Run Text="{Binding CurrentColorInfo}" />
+                            <Run Text="{Binding CurrentColorInfo, Mode=OneWay}" />
                         </TextBlock>
 
                         <TextBlock Grid.Column="1"
                                    Style="{StaticResource FormLabelStyle}"
                                    HorizontalAlignment="Right">
                             <Run Text="當前步數：" />
-                            <Run Text="{Binding CurrentMoveCount}" FontWeight="SemiBold" />
+                            <Run Text="{Binding CurrentMoveCount, Mode=OneWay}" FontWeight="SemiBold" />
                         </TextBlock>
                     </Grid>
 
