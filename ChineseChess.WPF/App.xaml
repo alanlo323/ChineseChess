@@ -17,6 +17,7 @@
             <converters:BoolToValidationColorConverter x:Key="BoolToValidationColorConverter" />
             <converters:BoolToWarningColorConverter x:Key="BoolToWarningColorConverter" />
             <converters:NullOrEmptyToVisibilityConverter x:Key="NullToVisibilityConverter" />
+            <converters:GameModeDisplayConverter x:Key="GameModeDisplayConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>
