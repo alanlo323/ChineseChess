@@ -23,6 +23,7 @@ internal sealed class SearchWorker
     private readonly IBoard board;
     private readonly IEvaluator evaluator;
     private readonly TranspositionTable tt;
+    private readonly EvalCache evalCache;
     private readonly CancellationToken ct;         // 時間限制 + 使用者停止（合併）
     private readonly CancellationToken hardStopCt; // 僅使用者明確停止（暫停等待用）
     private readonly ManualResetEventSlim pauseSignal;
@@ -122,11 +123,12 @@ internal sealed class SearchWorker
     /// </summary>
     internal int ProbCutFalseCount { get; private set; }
 
-    public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, CancellationToken ct, CancellationToken hardStopCt, ManualResetEventSlim pauseSignal, IProbCutDataCollector? collector = null)
+    public SearchWorker(IBoard board, IEvaluator evaluator, TranspositionTable tt, EvalCache evalCache, CancellationToken ct, CancellationToken hardStopCt, ManualResetEventSlim pauseSignal, IProbCutDataCollector? collector = null)
     {
         this.board = board;
         this.evaluator = evaluator;
         this.tt = tt;
+        this.evalCache = evalCache;
         this.ct = ct;
         this.hardStopCt = hardStopCt;
         this.pauseSignal = pauseSignal;
@@ -783,7 +785,13 @@ internal sealed class SearchWorker
         CheckPauseOrCancellation();
         Interlocked.Increment(ref nodesVisited);
 
-        int eval = evaluator.Evaluate(board);
+        // 評估快取查詢：相同局面（含行棋方）直接取用，跳過完整評估計算
+        ulong evalKey = board.ZobristKey;
+        if (!evalCache.TryGet(evalKey, out int eval))
+        {
+            eval = evaluator.Evaluate(board);
+            evalCache.Store(evalKey, eval);
+        }
         if (eval >= beta) return beta;
 
         // Delta Pruning（整體）：若靜態評估加上最大可能收益仍低於 alpha，

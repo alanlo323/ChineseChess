@@ -93,6 +93,7 @@ public class TriangularPvTableTests
             board,
             new HandcraftedEvaluator(),
             new TranspositionTable(sizeMb: 4),
+            new EvalCache(),
             CancellationToken.None,
             CancellationToken.None,
             new ManualResetEventSlim(true));
@@ -104,6 +105,7 @@ public class TriangularPvTableTests
             board,
             new HandcraftedEvaluator(),
             tt,
+            new EvalCache(),
             CancellationToken.None,
             CancellationToken.None,
             new ManualResetEventSlim(true));

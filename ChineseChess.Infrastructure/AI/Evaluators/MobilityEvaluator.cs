@@ -64,20 +64,51 @@ public static class MobilityEvaluator
     /// </summary>
     public static int CalculateHorseMobility(IBoard board, int horseIndex)
     {
+        return CalculateHorseMobility(board, horseIndex, out _);
+    }
+
+    /// <summary>
+    /// 計算馬的活動格數及被封堵腳位數（合併版，單次掃描）。
+    /// 先快取 4 個腳位狀態，再以快取結果判斷 8 個跳躍目標是否可達。
+    /// 比分開呼叫 CalculateHorseMobility + CountHorseLegsBlocked 減少約 67% 的棋盤存取。
+    /// </summary>
+    public static int CalculateHorseMobility(IBoard board, int horseIndex, out int legsBlocked)
+    {
         int r = horseIndex / BoardWidth;
         int c = horseIndex % BoardWidth;
-        int mobility = 0;
 
+        // 快取 4 個腳位狀態（各一次 GetPiece）
+        bool upOnBoard    = r > 0;
+        bool downOnBoard  = r < BoardHeight - 1;
+        bool leftOnBoard  = c > 0;
+        bool rightOnBoard = c < BoardWidth - 1;
+
+        bool upFree    = upOnBoard    && board.GetPiece((r - 1) * BoardWidth + c).IsNone;
+        bool downFree  = downOnBoard  && board.GetPiece((r + 1) * BoardWidth + c).IsNone;
+        bool leftFree  = leftOnBoard  && board.GetPiece(r * BoardWidth + (c - 1)).IsNone;
+        bool rightFree = rightOnBoard && board.GetPiece(r * BoardWidth + (c + 1)).IsNone;
+
+        // 被封堵 = 腳位在棋盤內但被佔據
+        legsBlocked = 0;
+        if (upOnBoard    && !upFree)    legsBlocked++;
+        if (downOnBoard  && !downFree)  legsBlocked++;
+        if (leftOnBoard  && !leftFree)  legsBlocked++;
+        if (rightOnBoard && !rightFree) legsBlocked++;
+
+        // 以快取結果計算可達目標數
+        int mobility = 0;
         foreach (var (legDr, legDc, tgtDr, tgtDc) in HorseMoves)
         {
-            int legR = r + legDr;
-            int legC = c + legDc;
+            bool legFree = (legDr, legDc) switch
+            {
+                (-1, 0) => upFree,
+                (+1, 0) => downFree,
+                (0, -1) => leftFree,
+                (0, +1) => rightFree,
+                _ => false
+            };
+            if (!legFree) continue;
 
-            // 腳位必須在棋盤內且不被佔據
-            if (legR < 0 || legR >= BoardHeight || legC < 0 || legC >= BoardWidth) continue;
-            if (!board.GetPiece(legR * BoardWidth + legC).IsNone) continue;
-
-            // 目標格必須在棋盤內
             int tgtR = r + tgtDr;
             int tgtC = c + tgtDc;
             if (tgtR < 0 || tgtR >= BoardHeight || tgtC < 0 || tgtC >= BoardWidth) continue;
@@ -134,39 +165,4 @@ public static class MobilityEvaluator
         return mobility;
     }
 
-    /// <summary>
-    /// 計算所有棋子的總活動力差值（紅方 - 黑方）。
-    /// 用於在 HandcraftedEvaluator 中替換 EstimatePotentialMobility。
-    /// </summary>
-    public static int CalculateTotalMobility(IBoard board)
-    {
-        int redMobility = 0;
-        int blackMobility = 0;
-
-        for (int i = 0; i < 90; i++)
-        {
-            var piece = board.GetPiece(i);
-            if (piece.IsNone) continue;
-
-            int mob = piece.Type switch
-            {
-                PieceType.Rook   => CalculateRookMobility(board, i),
-                PieceType.Horse  => CalculateHorseMobility(board, i),
-                PieceType.Cannon => CalculateCannonMobility(board, i),
-                // 其他棋子使用固定估算值（輕量）
-                PieceType.King     => 4,
-                PieceType.Advisor  => 4,
-                PieceType.Elephant => 4,
-                PieceType.Pawn     => 3,
-                _ => 0
-            };
-
-            if (piece.Color == PieceColor.Red)
-                redMobility += mob;
-            else
-                blackMobility += mob;
-        }
-
-        return redMobility - blackMobility;
-    }
 }

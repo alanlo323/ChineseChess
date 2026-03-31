@@ -76,6 +76,7 @@ public class StagedMoveGenerationSearchTests
             board,
             new HandcraftedEvaluator(),
             new TranspositionTable(sizeMb: 4),
+            new EvalCache(),
             CancellationToken.None,
             CancellationToken.None,
             new ManualResetEventSlim(true));

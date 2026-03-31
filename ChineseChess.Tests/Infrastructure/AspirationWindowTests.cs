@@ -33,8 +33,8 @@ public class AspirationWindowTests
         using var pause1 = new ManualResetEventSlim(true);
         using var pause2 = new ManualResetEventSlim(true);
 
-        var worker1 = new SearchWorker(board1, new HandcraftedEvaluator(), tt, CancellationToken.None, CancellationToken.None, pause1);
-        var worker2 = new SearchWorker(board2, new HandcraftedEvaluator(), new TranspositionTable(sizeMb: 4), CancellationToken.None, CancellationToken.None, pause2);
+        var worker1 = new SearchWorker(board1, new HandcraftedEvaluator(), tt, new EvalCache(), CancellationToken.None, CancellationToken.None, pause1);
+        var worker2 = new SearchWorker(board2, new HandcraftedEvaluator(), new TranspositionTable(sizeMb: 4), new EvalCache(), CancellationToken.None, CancellationToken.None, pause2);
 
         // depth=1 全窗口
         int scoreFullWindow = worker1.SearchSingleDepth(1, -Infinity, Infinity);
@@ -60,8 +60,8 @@ public class AspirationWindowTests
         var tt1 = new TranspositionTable(sizeMb: 4);
         var tt2 = new TranspositionTable(sizeMb: 4);
 
-        var worker1 = new SearchWorker(board1, new HandcraftedEvaluator(), tt1, CancellationToken.None, CancellationToken.None, pause1);
-        var worker2 = new SearchWorker(board2, new HandcraftedEvaluator(), tt2, CancellationToken.None, CancellationToken.None, pause2);
+        var worker1 = new SearchWorker(board1, new HandcraftedEvaluator(), tt1, new EvalCache(), CancellationToken.None, CancellationToken.None, pause1);
+        var worker2 = new SearchWorker(board2, new HandcraftedEvaluator(), tt2, new EvalCache(), CancellationToken.None, CancellationToken.None, pause2);
 
         // 全窗口搜尋 depth=2
         int prevScore = worker1.SearchSingleDepth(1);
@@ -187,6 +187,7 @@ public class AspirationWindowTests
             board,
             new HandcraftedEvaluator(),
             tt ?? new TranspositionTable(sizeMb: 4),
+            new EvalCache(),
             CancellationToken.None,
             CancellationToken.None,
             new ManualResetEventSlim(true));

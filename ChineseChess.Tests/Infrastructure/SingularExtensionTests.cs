@@ -194,6 +194,7 @@ public class SingularExtensionTests
             board,
             new HandcraftedEvaluator(),
             tt ?? new TranspositionTable(sizeMb: 4),
+            new EvalCache(),
             CancellationToken.None,
             CancellationToken.None,
             new ManualResetEventSlim(true));

@@ -26,6 +26,9 @@ public static class PawnStructure
     // 過河兵協同加成：過河兵 >= 2 時每個過河兵額外加分
     private const int CrossedPawnCoordinationBonus = 10;
 
+    // 疊兵懲罰：同列兵超過 1 個時，每多一個的懲罰分
+    private const int DoubledPawnPenalty = 8;
+
     /// <summary>
     /// 計算指定顏色方的兵型結構分數。
     /// </summary>
@@ -45,6 +48,14 @@ public static class PawnStructure
         }
 
         if (pawnPositions.Count == 0) return 0;
+
+        // 疊兵懲罰：統計每列兵數，超過 1 個時每多一個扣 DoubledPawnPenalty 分
+        var pawnsByColumn = new int[BoardWidth];
+        foreach (int pos in pawnPositions)
+            pawnsByColumn[pos % BoardWidth]++;
+        for (int col = 0; col < BoardWidth; col++)
+            if (pawnsByColumn[col] > 1)
+                score -= (pawnsByColumn[col] - 1) * DoubledPawnPenalty;
 
         // 找出過河兵：紅方在 row < 5（row 0-4）；黑方在 row > 4（row 5-9）
         int crossedCount = 0;

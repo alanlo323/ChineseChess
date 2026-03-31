@@ -28,7 +28,7 @@ public class SearchIirTests
 
         // 有 IIR 的搜尋（TT 為空）
         using var pause = new ManualResetEventSlim(true);
-        var workerWithIir = new SearchWorker(board, new HandcraftedEvaluator(), tt, CancellationToken.None, CancellationToken.None, pause);
+        var workerWithIir = new SearchWorker(board, new HandcraftedEvaluator(), tt, new EvalCache(), CancellationToken.None, CancellationToken.None, pause);
         int scoreWithIir = workerWithIir.SearchSingleDepth(4);
         long nodesWithIir = workerWithIir.NodesVisited;
 
@@ -36,14 +36,14 @@ public class SearchIirTests
         var ttFull = new TranspositionTable(sizeMb: 4);
         var boardFull = new Board(InitialFen);
         using var pause2 = new ManualResetEventSlim(true);
-        var workerFull = new SearchWorker(boardFull, new HandcraftedEvaluator(), ttFull, CancellationToken.None, CancellationToken.None, pause2);
+        var workerFull = new SearchWorker(boardFull, new HandcraftedEvaluator(), ttFull, new EvalCache(), CancellationToken.None, CancellationToken.None, pause2);
         // 先搜尋填充 TT
         workerFull.SearchSingleDepth(4);
         // 重新搜尋（TT 命中，不觸發 IIR）
         long nodesFullFull = workerFull.NodesVisited;
         var boardFull2 = new Board(InitialFen);
         using var pause3 = new ManualResetEventSlim(true);
-        var workerNoIir = new SearchWorker(boardFull2, new HandcraftedEvaluator(), ttFull, CancellationToken.None, CancellationToken.None, pause3);
+        var workerNoIir = new SearchWorker(boardFull2, new HandcraftedEvaluator(), ttFull, new EvalCache(), CancellationToken.None, CancellationToken.None, pause3);
         workerNoIir.SearchSingleDepth(4);
         long nodesNoIir = workerNoIir.NodesVisited;
 
@@ -61,7 +61,7 @@ public class SearchIirTests
         var tt = new TranspositionTable(sizeMb: 4);
         var board = new Board(InitialFen);
         using var pause = new ManualResetEventSlim(true);
-        var worker = new SearchWorker(board, new HandcraftedEvaluator(), tt, CancellationToken.None, CancellationToken.None, pause);
+        var worker = new SearchWorker(board, new HandcraftedEvaluator(), tt, new EvalCache(), CancellationToken.None, CancellationToken.None, pause);
 
         // 第一次搜尋填充 TT
         int firstScore = worker.SearchSingleDepth(4);
@@ -69,7 +69,7 @@ public class SearchIirTests
         // 第二次搜尋：TT 命中，不觸發 IIR
         var board2 = new Board(InitialFen);
         using var pause2 = new ManualResetEventSlim(true);
-        var worker2 = new SearchWorker(board2, new HandcraftedEvaluator(), tt, CancellationToken.None, CancellationToken.None, pause2);
+        var worker2 = new SearchWorker(board2, new HandcraftedEvaluator(), tt, new EvalCache(), CancellationToken.None, CancellationToken.None, pause2);
         int secondScore = worker2.SearchSingleDepth(4);
         long nodesWithTtHit = worker2.NodesVisited;
 
@@ -77,7 +77,7 @@ public class SearchIirTests
         var ttEmpty = new TranspositionTable(sizeMb: 4);
         var board3 = new Board(InitialFen);
         using var pause3 = new ManualResetEventSlim(true);
-        var worker3 = new SearchWorker(board3, new HandcraftedEvaluator(), ttEmpty, CancellationToken.None, CancellationToken.None, pause3);
+        var worker3 = new SearchWorker(board3, new HandcraftedEvaluator(), ttEmpty, new EvalCache(), CancellationToken.None, CancellationToken.None, pause3);
         int scoreEmpty = worker3.SearchSingleDepth(4);
         long nodesWithoutTtHit = worker3.NodesVisited;
 
@@ -95,7 +95,7 @@ public class SearchIirTests
         var ttEmpty = new TranspositionTable(sizeMb: 4);
         var board = new Board(InitialFen);
         using var pause = new ManualResetEventSlim(true);
-        var worker = new SearchWorker(board, new HandcraftedEvaluator(), ttEmpty, CancellationToken.None, CancellationToken.None, pause);
+        var worker = new SearchWorker(board, new HandcraftedEvaluator(), ttEmpty, new EvalCache(), CancellationToken.None, CancellationToken.None, pause);
 
         // depth=3 搜尋（不應觸發 IIR）
         int score3 = worker.SearchSingleDepth(3);
@@ -106,7 +106,7 @@ public class SearchIirTests
         var ttEmpty2 = new TranspositionTable(sizeMb: 4);
         var board2 = new Board(InitialFen);
         using var pause2 = new ManualResetEventSlim(true);
-        var worker2 = new SearchWorker(board2, new HandcraftedEvaluator(), ttEmpty2, CancellationToken.None, CancellationToken.None, pause2);
+        var worker2 = new SearchWorker(board2, new HandcraftedEvaluator(), ttEmpty2, new EvalCache(), CancellationToken.None, CancellationToken.None, pause2);
         int score2 = worker2.SearchSingleDepth(2);
         long nodes2 = worker2.NodesVisited;
 
@@ -128,7 +128,7 @@ public class SearchIirTests
 
         // 先搜尋 depth=1 以便取得一個合法走法作為 excludedMove
         using var pause = new ManualResetEventSlim(true);
-        var primeWorker = new SearchWorker(board, new HandcraftedEvaluator(), tt, CancellationToken.None, CancellationToken.None, pause);
+        var primeWorker = new SearchWorker(board, new HandcraftedEvaluator(), tt, new EvalCache(), CancellationToken.None, CancellationToken.None, pause);
         primeWorker.SearchSingleDepth(1);
         var excludedMove = primeWorker.ProbeBestMove();
 
@@ -136,7 +136,7 @@ public class SearchIirTests
         var ttEmpty = new TranspositionTable(sizeMb: 4);
         var board2 = new Board(InitialFen);
         using var pause2 = new ManualResetEventSlim(true);
-        var worker = new SearchWorker(board2, new HandcraftedEvaluator(), ttEmpty, CancellationToken.None, CancellationToken.None, pause2);
+        var worker = new SearchWorker(board2, new HandcraftedEvaluator(), ttEmpty, new EvalCache(), CancellationToken.None, CancellationToken.None, pause2);
 
         // SearchWithExcludedMove 在排除搜尋中，不應因 IIR 再額外減量（避免雙重減量）
         // 搜尋應能完成而不拋出例外
@@ -147,7 +147,7 @@ public class SearchIirTests
         var ttEmpty2 = new TranspositionTable(sizeMb: 4);
         var board3 = new Board(InitialFen);
         using var pause3 = new ManualResetEventSlim(true);
-        var worker3 = new SearchWorker(board3, new HandcraftedEvaluator(), ttEmpty2, CancellationToken.None, CancellationToken.None, pause3);
+        var worker3 = new SearchWorker(board3, new HandcraftedEvaluator(), ttEmpty2, new EvalCache(), CancellationToken.None, CancellationToken.None, pause3);
         int scoreNormal = worker3.SearchSingleDepth(4);
         long nodesNormal = worker3.NodesVisited;
 
@@ -163,6 +163,7 @@ public class SearchIirTests
             board,
             new HandcraftedEvaluator(),
             tt ?? new TranspositionTable(sizeMb: 4),
+            new EvalCache(),
             CancellationToken.None,
             CancellationToken.None,
             new ManualResetEventSlim(true));

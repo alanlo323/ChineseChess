@@ -357,6 +357,7 @@ public class SearchProbCutTests
             board,
             new HandcraftedEvaluator(),
             new TranspositionTable(sizeMb: 4),
+            new EvalCache(),
             CancellationToken.None,
             CancellationToken.None,
             new ManualResetEventSlim(true));
@@ -370,6 +371,7 @@ public class SearchProbCutTests
             board,
             new HandcraftedEvaluator(),
             tt,
+            new EvalCache(),
             CancellationToken.None,
             CancellationToken.None,
             new ManualResetEventSlim(true));

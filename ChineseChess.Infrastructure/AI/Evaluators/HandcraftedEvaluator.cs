@@ -12,6 +12,33 @@ public class HandcraftedEvaluator : IEvaluator
     // 馬腳封堵懲罰：每個被封堵的腳位扣除的分數
     private const int HorseLegBlockedPenalty = 10;
 
+    // 被困棋子懲罰（Trapped Piece Penalty）：
+    //   馬的所有腳位都被封堵（0 mobility）時的額外懲罰。
+    //   與腳位封堵懲罰（HorseLegBlockedPenalty）堆疊計算：
+    //     完全被困 = 4×10（腳封） + 50（被困） = 90 cp 總懲罰。
+    private const int TrappedHorsePenalty = 50;
+
+    // 馬前哨陣地加分（C1）：跨河且機動力 ≥ 2 的馬，反映進攻威脅
+    private const int HorseOutpostBonus = 15;
+
+    // 車入底線加分（C2）：車深入對方底部兩排，反映終殺威脅
+    private const int RookPenetrationBonus = 12;
+
+    // 殘局帥/將趨中宮加分（B1）
+    private const int KingCentralityBonusPerStep   = 4;  // 每靠近中心一格的加分
+    private const int KingCentralityMaxDist        = 4;  // 超過此距離不加分
+    // 相位範圍 0–256（256=完整開局材料，0=僅剩帥將）。80/256 ≈ 31% 為中後盤啟動門檻
+    private const int KingCentralityPhaseThreshold = 80;
+
+    // 雙象雙士完整防守加分（plan C1）
+    private const int FullDefenseBonus    = 20; // 雙象+雙士俱在
+    private const int DoubleAdvisorBonus  = 8;  // 僅雙士
+    private const int DoubleElephantBonus = 8;  // 僅雙象
+
+    // 炮台品質加分（plan C2）
+    private const int CannonScreenStrongBonus = 10; // 友方象/士作炮台（難被拆除）
+    private const int CannonScreenWeakBonus   = 5;  // 友方馬/炮作炮台
+
     // 炮威脅加分：炮透過炮台瞄準對方棋子的加分
     private const int CannonKingThreatBonus  = 40; // 直接打將/帥
     private const int CannonPieceThreatBonus = 10; // 打其他棋子
@@ -19,6 +46,13 @@ public class HandcraftedEvaluator : IEvaluator
     // 敵車壓制懲罰：敵方車在帥/將列上直接瞄準
     private const int EnemyRookOpenColumnPenalty     = 60; // 無阻隔（直接壓制）
     private const int EnemyRookSemiOpenColumnPenalty = 20; // 一子阻隔（半開放）
+
+    // 殘局棋子價值調整（Tapered Evaluation）：
+    //   炮在殘局因缺乏炮台而威力下降；馬/象/士在殘局防守和機動更重要
+    private const int EndgameCannonAdjust   = 20; // 殘局炮 -20
+    private const int EndgameHorseAdjust    = 20; // 殘局馬 +20
+    private const int EndgameElephantAdjust = 15; // 殘局象 +15
+    private const int EndgameAdvisorAdjust  = 15; // 殘局士 +15
 
     private static readonly int[] PieceValues =
     {
@@ -45,6 +79,8 @@ public class HandcraftedEvaluator : IEvaluator
         int redRookCount = 0, blackRookCount = 0;
         int redRook1 = -1, redRook2 = -1;
         int blackRook1 = -1, blackRook2 = -1;
+        // 機動力累加器：整合至主迴圈，避免二次全棋盤掃描
+        int redMobility = 0, blackMobility = 0;
 
         for (int i = 0; i < BoardSize; i++)
         {
@@ -56,8 +92,12 @@ public class HandcraftedEvaluator : IEvaluator
             // 材料分
             score += sign * PieceValues[(int)p.Type];
 
+            // 殘局棋子價值調整（Tapered）：開局無調整，殘局漸增
+            int endgameAdj = GetEndgameAdjustment(p.Type);
+            if (endgameAdj != 0)
+                score += sign * GamePhase.Interpolate(0, endgameAdj, phase);
+
             // PST（位置分）：根據棋局相位插值
-            // 開局（phase=256）：完整 PST；殘局（phase=0）：PST 減半（材料更重要）
             int pstFull = PieceSquareTables.GetScore(p.Type, p.Color, i);
             int pstHalf = pstFull / 2;
             int pstValue = GamePhase.Interpolate(pstFull, pstHalf, phase);
@@ -66,36 +106,64 @@ public class HandcraftedEvaluator : IEvaluator
             switch (p.Type)
             {
                 case PieceType.King:
-                    if (p.Color == PieceColor.Red) redKingIndex = i;
-                    else blackKingIndex = i;
+                    if (p.Color == PieceColor.Red) { redKingIndex = i; redMobility += 4; }
+                    else { blackKingIndex = i; blackMobility += 4; }
                     break;
                 case PieceType.Advisor:
-                    if (p.Color == PieceColor.Red) redAdvisors++;
-                    else blackAdvisors++;
+                    if (p.Color == PieceColor.Red) { redAdvisors++; redMobility += 4; }
+                    else { blackAdvisors++; blackMobility += 4; }
                     break;
                 case PieceType.Elephant:
-                    if (p.Color == PieceColor.Red) redElephants++;
-                    else blackElephants++;
+                    if (p.Color == PieceColor.Red) { redElephants++; redMobility += 4; }
+                    else { blackElephants++; blackMobility += 4; }
                     break;
                 case PieceType.Horse:
+                {
+                    // 合併計算：活動格數 + 被封堵腳位數（單次掃描，減少 67% 棋盤存取）
+                    int horseMob = MobilityEvaluator.CalculateHorseMobility(board, i, out int horseLegsBlocked);
+                    // 被困馬懲罰：所有腳位封堵導致 0 mobility 時的一次性額外懲罰
+                    if (horseMob == 0)
+                        score -= sign * TrappedHorsePenalty;
                     // 馬腳封堵懲罰：每個被佔據的腳位扣除固定分數
-                    score -= sign * CountHorseLegsBlocked(board, i) * HorseLegBlockedPenalty;
+                    score -= sign * horseLegsBlocked * HorseLegBlockedPenalty;
+                    // 前哨加分（C1）：跨河且機動力充足的馬
+                    if (IsHorseOutpost(i, p.Color, horseMob))
+                        score += sign * HorseOutpostBonus;
+                    if (p.Color == PieceColor.Red) redMobility += horseMob;
+                    else blackMobility += horseMob;
                     break;
+                }
                 case PieceType.Cannon:
+                {
                     // 炮威脅加分：炮透過炮台瞄準對方棋子
                     score += sign * EvaluateCannonThreats(board, i, p.Color);
+                    int cannonMob = MobilityEvaluator.CalculateCannonMobility(board, i);
+                    if (p.Color == PieceColor.Red) redMobility += cannonMob;
+                    else blackMobility += cannonMob;
                     break;
+                }
                 case PieceType.Rook:
+                {
+                    int rookMob = MobilityEvaluator.CalculateRookMobility(board, i);
+                    // 入底線加分（C2）：車深入對方底部兩排
+                    score += sign * EvaluateRookPenetration(i, p.Color);
                     if (p.Color == PieceColor.Red)
                     {
                         if (redRookCount == 0) redRook1 = i; else redRook2 = i;
                         redRookCount++;
+                        redMobility += rookMob;
                     }
                     else
                     {
                         if (blackRookCount == 0) blackRook1 = i; else blackRook2 = i;
                         blackRookCount++;
+                        blackMobility += rookMob;
                     }
+                    break;
+                }
+                default: // Pawn（固定估算值）
+                    if (p.Color == PieceColor.Red) redMobility += 3;
+                    else blackMobility += 3;
                     break;
             }
         }
@@ -112,9 +180,21 @@ public class HandcraftedEvaluator : IEvaluator
         score += EvaluateRookStructure(board, PieceColor.Red, redRook1, redRook2, redRookCount);
         score -= EvaluateRookStructure(board, PieceColor.Black, blackRook1, blackRook2, blackRookCount);
 
-        // --- 機動力（M2：實算車/馬/炮步數，其他棋子沿用固定估算） ---
-        int mobility = MobilityEvaluator.CalculateTotalMobility(board);
-        score += (board.Turn == PieceColor.Red ? 1 : -1) * mobility;
+        // --- 機動力（已在主迴圈計算，避免二次全棋盤掃描） ---
+        // 車/馬/炮：實算可達格數；帥/將/士/象/兵：沿用固定估算值
+        // B2：相位加權機動力，殘局時機動力更重要（×1.5）
+        // mobility 已是紅-黑差值（正=紅方優勢），最終 return 時依 Turn 翻轉觀點
+        int mobility = redMobility - blackMobility;
+        int mobilityWeight = GamePhase.Interpolate(10, 15, phase);
+        score += mobility * mobilityWeight / 10;
+
+        // --- 殘局帥/將趨中宮加分（B1）---
+        score += EvaluateKingCentrality(redKingIndex, PieceColor.Red, phase);
+        score -= EvaluateKingCentrality(blackKingIndex, PieceColor.Black, phase);
+
+        // --- 雙象雙士完整防守加分（plan C1）---
+        score += EvaluateDefenseFormation(redAdvisors, redElephants);
+        score -= EvaluateDefenseFormation(blackAdvisors, blackElephants);
 
         // --- 兵型結構（M3）---
         score += PawnStructure.Evaluate(board, PieceColor.Red);
@@ -151,6 +231,11 @@ public class HandcraftedEvaluator : IEvaluator
             // 材料分
             score += sign * PieceValues[(int)p.Type];
 
+            // 殘局棋子價值調整（與 Evaluate() 共用 GetEndgameAdjustment）
+            int endgameAdjFast = GetEndgameAdjustment(p.Type);
+            if (endgameAdjFast != 0)
+                score += sign * GamePhase.Interpolate(0, endgameAdjFast, phase);
+
             // PST（位置分）：根據棋局相位插值
             int pstFull = PieceSquareTables.GetScore(p.Type, p.Color, i);
             int pstHalf = pstFull / 2;
@@ -160,25 +245,6 @@ public class HandcraftedEvaluator : IEvaluator
 
         // 以輪到行動的一方為觀點回傳分數
         return board.Turn == PieceColor.Red ? score : -score;
-    }
-
-    /// <summary>
-    /// 計算馬在 <paramref name="horseIndex"/> 位置被封堵的腳位數量。
-    /// 馬的四個腳位為：上(r-1,c)、下(r+1,c)、左(r,c-1)、右(r,c+1)。
-    /// 任何棋子（友方或敵方）佔據腳位均視為封堵。
-    /// </summary>
-    private static int CountHorseLegsBlocked(IBoard board, int horseIndex)
-    {
-        int r = horseIndex / BoardWidth;
-        int c = horseIndex % BoardWidth;
-        int blocked = 0;
-
-        if (r > 0              && !board.GetPiece((r - 1) * BoardWidth + c).IsNone) blocked++;
-        if (r < BoardHeight - 1 && !board.GetPiece((r + 1) * BoardWidth + c).IsNone) blocked++;
-        if (c > 0              && !board.GetPiece(r * BoardWidth + (c - 1)).IsNone) blocked++;
-        if (c < BoardWidth - 1  && !board.GetPiece(r * BoardWidth + (c + 1)).IsNone) blocked++;
-
-        return blocked;
     }
 
     /// <summary>
@@ -209,6 +275,15 @@ public class HandcraftedEvaluator : IEvaluator
                     if (!foundScreen)
                     {
                         foundScreen = true; // 找到炮台，繼續掃描找目標
+                        // 炮台品質加分（plan C2）：友方穩固棋子作炮台更優
+                        if (piece.Color == cannonColor)
+                        {
+                            bonus += piece.Type is PieceType.Elephant or PieceType.Advisor
+                                ? CannonScreenStrongBonus
+                                : piece.Type is PieceType.Horse or PieceType.Cannon
+                                    ? CannonScreenWeakBonus
+                                    : 0;
+                        }
                     }
                     else
                     {
@@ -294,6 +369,72 @@ public class HandcraftedEvaluator : IEvaluator
         if (exposed) bonus -= 40;
 
         return bonus;
+    }
+
+    /// <summary>
+    /// 殘局棋子價值調整量（Evaluate/EvaluateFast 共用）。
+    /// 殘局時炮威力下降（-20），馬/象/士防守更重要（+20/+15/+15）。
+    /// </summary>
+    private static int GetEndgameAdjustment(PieceType type) => type switch
+    {
+        PieceType.Cannon   => -EndgameCannonAdjust,
+        PieceType.Horse    => +EndgameHorseAdjust,
+        PieceType.Elephant => +EndgameElephantAdjust,
+        PieceType.Advisor  => +EndgameAdvisorAdjust,
+        _ => 0
+    };
+
+    /// <summary>
+    /// 雙象雙士完整防守加分（plan C1）。
+    /// 雙象+雙士俱在 → +20；僅雙士或僅雙象 → +8。
+    /// </summary>
+    private static int EvaluateDefenseFormation(int advisorCount, int elephantCount)
+    {
+        bool doubleAdvisor = advisorCount >= 2;
+        bool doubleElephant = elephantCount >= 2;
+
+        if (doubleAdvisor && doubleElephant) return FullDefenseBonus;
+        if (doubleAdvisor) return DoubleAdvisorBonus;
+        if (doubleElephant) return DoubleElephantBonus;
+        return 0;
+    }
+
+    /// <summary>
+    /// 殘局帥/將趨中宮加分（B1）。
+    /// 相位低於 <see cref="KingCentralityPhaseThreshold"/> 時，
+    /// 帥/將距本宮中心（紅:row8,col4; 黑:row1,col4）越近加分越多。
+    /// </summary>
+    private static int EvaluateKingCentrality(int kingIndex, PieceColor color, int phase)
+    {
+        if (kingIndex < 0 || phase >= KingCentralityPhaseThreshold) return 0;
+        int centerRow = color == PieceColor.Red ? 8 : 1;
+        int r = kingIndex / BoardWidth;
+        int c = kingIndex % BoardWidth;
+        int dist = Math.Abs(r - centerRow) + Math.Abs(c - 4);
+        int rawBonus = Math.Max(0, KingCentralityMaxDist - dist) * KingCentralityBonusPerStep;
+        return rawBonus * (KingCentralityPhaseThreshold - phase) / KingCentralityPhaseThreshold;
+    }
+
+    /// <summary>
+    /// 判斷馬是否位於前哨陣地（C1）：跨過河界且機動力 ≥ 2。
+    /// 紅方跨河條件：row &lt; 5；黑方：row &gt; 4。
+    /// </summary>
+    private static bool IsHorseOutpost(int horseIndex, PieceColor color, int mobility)
+    {
+        if (mobility < 2) return false;
+        int row = horseIndex / BoardWidth;
+        return color == PieceColor.Red ? row < 5 : row > 4;
+    }
+
+    /// <summary>
+    /// 計算車入底線加分（C2）：車深入對方底部兩排時給予加分。
+    /// 紅方條件：row ≤ 1；黑方：row ≥ 8。
+    /// </summary>
+    private static int EvaluateRookPenetration(int rookIndex, PieceColor color)
+    {
+        int row = rookIndex / BoardWidth;
+        bool penetrating = color == PieceColor.Red ? row <= 1 : row >= 8;
+        return penetrating ? RookPenetrationBonus : 0;
     }
 
     private static int EvaluateRookStructure(IBoard board, PieceColor color,
