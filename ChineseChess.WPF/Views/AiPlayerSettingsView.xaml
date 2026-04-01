@@ -1,0 +1,392 @@
+<UserControl x:Class="ChineseChess.WPF.Views.AiPlayerSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:AiPlayerSettingsViewModel}">
+
+    <Border BorderBrush="{StaticResource WoodDarkBrush}"
+            BorderThickness="1"
+            CornerRadius="4"
+            Background="{StaticResource PanelBackgroundBrush}"
+            Padding="8"
+            Margin="0,0,0,8">
+        <StackPanel>
+
+            <!-- ─── 標題 ─────────────────────────────────────────── -->
+            <TextBlock Text="{Binding DisplayName}"
+                       Style="{StaticResource SectionTitleStyle}"
+                       Margin="0,0,0,6" />
+
+            <!-- ─── 引擎類型選擇 ─────────────────────────────────── -->
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="引擎類型："
+                           Style="{StaticResource FormLabelStyle}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding EngineTypes}"
+                          SelectedItem="{Binding EngineType}"
+                          Style="{StaticResource InputControlStyle}" />
+            </Grid>
+
+            <!-- ═══════════════════════════════════════════════════ -->
+            <!-- 內部引擎設定（EngineType == Internal 時顯示）       -->
+            <!-- ═══════════════════════════════════════════════════ -->
+            <StackPanel Visibility="{Binding IsInternalEngine, Converter={StaticResource BooleanToVisibilityConverter}}">
+
+                <!-- 搜索深度 -->
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="30" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="搜索深度："
+                               Style="{StaticResource FormLabelStyle}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <Slider Grid.Column="1"
+                            Value="{Binding SearchDepth}"
+                            Minimum="1" Maximum="10"
+                            TickFrequency="1"
+                            IsSnapToTickEnabled="True"
+                            VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding SearchDepth}"
+                               Style="{StaticResource FormLabelStyle}"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Right" />
+                </Grid>
+
+                <!-- 評估器類型 -->
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="評估函式："
+                               Style="{StaticResource FormLabelStyle}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding EvaluatorTypes}"
+                              SelectedItem="{Binding EvaluatorType}"
+                              Style="{StaticResource InputControlStyle}" />
+                </Grid>
+
+                <!-- NNUE 模型路徑（EvaluatorType == Nnue 時顯示） -->
+                <StackPanel Visibility="{Binding IsNnueEvaluator, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            Margin="16,0,0,4">
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding NnueModelPath, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,6,0" />
+                        <Button Grid.Column="1"
+                                Content="瀏覽..."
+                                Command="{Binding BrowseNnueModelCommand}"
+                                Style="{StaticResource CompactButtonStyle}"
+                                Width="50" />
+                    </Grid>
+                    <TextBlock Text="模型檔不存在"
+                               Foreground="#C0392B"
+                               FontSize="11"
+                               Visibility="{Binding NnueModelFileExists, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                               Margin="0,0,0,2" />
+                </StackPanel>
+
+            </StackPanel>
+
+            <!-- ═══════════════════════════════════════════════════ -->
+            <!-- 外部引擎設定（EngineType == External 時顯示）       -->
+            <!-- ═══════════════════════════════════════════════════ -->
+            <StackPanel Visibility="{Binding IsExternalEngine, Converter={StaticResource BooleanToVisibilityConverter}}">
+
+                <!-- 協議選擇 -->
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="協議："
+                               Style="{StaticResource FormLabelStyle}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding EngineProtocols}"
+                              SelectedItem="{Binding Protocol}"
+                              Style="{StaticResource InputControlStyle}" />
+                </Grid>
+
+                <!-- 引擎路徑 -->
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             Text="{Binding EnginePath, UpdateSourceTrigger=PropertyChanged}"
+                             Margin="0,0,6,0" />
+                    <Button Grid.Column="1"
+                            Content="瀏覽..."
+                            Command="{Binding BrowseEngineCommand}"
+                            Style="{StaticResource CompactButtonStyle}"
+                            Width="50" />
+                </Grid>
+
+                <!-- 連接 / 中斷 / 狀態 -->
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0"
+                            Content="連接引擎"
+                            Command="{Binding ApplyEngineCommand}"
+                            Style="{StaticResource CompactButtonStyle}"
+                            Width="70"
+                            Margin="0,0,6,0" />
+                    <Button Grid.Column="1"
+                            Content="中斷"
+                            Command="{Binding DisconnectEngineCommand}"
+                            Style="{StaticResource CompactButtonStyle}"
+                            Width="44"
+                            Margin="0,0,8,0" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding EngineStatus}"
+                               Style="{StaticResource StatusTextStyle}"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap" />
+                </Grid>
+
+                <!-- ─── Pikafish 進階設定 ──────────────────────── -->
+                <GroupBox Header="Pikafish 進階設定"
+                          Visibility="{Binding IsPikafish, Converter={StaticResource BooleanToVisibilityConverter}}"
+                          Margin="0,6,0,0">
+                    <StackPanel Margin="4">
+
+                        <Button Content="清除哈希（Clear Hash）"
+                                Command="{Binding ClearHashCommand}"
+                                Style="{StaticResource CompactButtonStyle}"
+                                HorizontalAlignment="Left"
+                                Margin="0,0,0,6" />
+
+                        <!-- MultiPV -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="MultiPV（1-500）："
+                                       Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding MultiPv, UpdateSourceTrigger=LostFocus}" />
+                        </Grid>
+
+                        <!-- Skill Level -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="技能等級（0-20）："
+                                       Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding SkillLevel, UpdateSourceTrigger=LostFocus}" />
+                        </Grid>
+
+                        <!-- UCI_LimitStrength -->
+                        <CheckBox Content="限制強度（UCI_LimitStrength）"
+                                  IsChecked="{Binding UciLimitStrength}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,0,0,4" />
+
+                        <!-- UCI_Elo -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="ELO（1280-3133）："
+                                       Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding UciElo, UpdateSourceTrigger=LostFocus}"
+                                     IsEnabled="{Binding UciEloEnabled}" />
+                        </Grid>
+
+                        <!-- Sixty Move Rule -->
+                        <CheckBox Content="六十步和棋規則"
+                                  IsChecked="{Binding SixtyMoveRule}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,0,0,4" />
+
+                        <!-- Rule60MaxPly -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="六十步最大半步（1-150）："
+                                       Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding Rule60MaxPly, UpdateSourceTrigger=LostFocus}"
+                                     IsEnabled="{Binding Rule60MaxPlyEnabled}" />
+                        </Grid>
+
+                        <!-- MateThreatDepth -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="將殺威脅深度（0-10）："
+                                       Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding MateThreatDepth, UpdateSourceTrigger=LostFocus}" />
+                        </Grid>
+
+                        <!-- ScoreType -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="評分顯示方式："
+                                       Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding ScoreTypes}"
+                                      SelectedItem="{Binding ScoreType}"
+                                      Style="{StaticResource InputControlStyle}" />
+                        </Grid>
+
+                        <!-- LU_Output -->
+                        <CheckBox Content="LU 輸出格式（LU_Output）"
+                                  IsChecked="{Binding LuOutput}"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Margin="0,0,0,4" />
+
+                        <!-- DrawRule -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="和棋規則："
+                                       Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding DrawRules}"
+                                      SelectedItem="{Binding DrawRule}"
+                                      Style="{StaticResource InputControlStyle}" />
+                        </Grid>
+
+                        <!-- EvalFile -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="評估檔（EvalFile）："
+                                       Style="{StaticResource FormLabelStyle}" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding EvalFile, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,6,0" />
+                            <Button Grid.Column="2"
+                                    Content="瀏覽..."
+                                    Command="{Binding BrowseEvalFileCommand}"
+                                    Style="{StaticResource CompactButtonStyle}"
+                                    Width="50" />
+                        </Grid>
+
+                        <!-- 套用 Pikafish 設定 -->
+                        <Button Content="套用 Pikafish 設定"
+                                Command="{Binding ApplyPikafishCommand}"
+                                Style="{StaticResource CompactButtonStyle}"
+                                HorizontalAlignment="Left"
+                                Margin="0,6,0,0" />
+
+                    </StackPanel>
+                </GroupBox>
+
+            </StackPanel>
+
+            <!-- ═══════════════════════════════════════════════════ -->
+            <!-- 通用設定：搜索時間                                  -->
+            <!-- ═══════════════════════════════════════════════════ -->
+            <TextBlock Text="搜索時間"
+                       Style="{StaticResource SectionTitleStyle}"
+                       FontSize="13"
+                       Margin="0,8,0,4" />
+
+            <!-- 非限時模式：可調滑桿 -->
+            <Grid Visibility="{Binding IsSearchTimeEditable, Converter={StaticResource BooleanToVisibilityConverter}}"
+                  Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="40" />
+                </Grid.ColumnDefinitions>
+                <Slider Grid.Column="0"
+                        Value="{Binding SearchTimeSeconds}"
+                        Minimum="1" Maximum="120"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Style="{StaticResource FormLabelStyle}"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right">
+                    <Run Text="{Binding SearchTimeSeconds, Mode=OneWay}" /><Run Text="s" />
+                </TextBlock>
+            </Grid>
+
+            <!-- 限時模式：唯讀顯示軟/硬時限 -->
+            <StackPanel Visibility="{Binding IsTimedMode, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Margin="0,0,0,4">
+                <Grid Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="軟時限："
+                               Style="{StaticResource FormLabelStyle}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding SoftTimeLimitDisplay}"
+                               Style="{StaticResource StatusTextStyle}"
+                               VerticalAlignment="Center" />
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="硬時限："
+                               Style="{StaticResource FormLabelStyle}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding HardTimeLimitDisplay}"
+                               Style="{StaticResource StatusTextStyle}"
+                               VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="（限時模式下由系統自動計算）"
+                           FontSize="11"
+                           Foreground="{StaticResource InkMutedBrush}"
+                           Margin="0,2,0,0" />
+            </StackPanel>
+
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -26,12 +26,6 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     private readonly IGameService gameService;
     private GameMode selectedMode = GameMode.PlayerVsAi;
     private string statusMessage = "Ready";
-    private int searchDepth;
-    private int searchThinkingTime;
-    private int redSearchDepth;
-    private int redSearchThinkingTime;
-    private int blackSearchDepth;
-    private int blackSearchThinkingTime;
     private bool useSharedTT;
     private bool copyRedTtToBlackAtStart;
     private bool isSmartHintEnabled;
@@ -73,6 +67,21 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
     public IEnumerable<GameMode> GameModes => Enum.GetValues<GameMode>();
 
+    // ─── Per-player AI 設定子 ViewModel ──────────────────────────────────
+    public AiPlayerSettingsViewModel? RedAiSettings { get; private set; }
+    public AiPlayerSettingsViewModel? BlackAiSettings { get; private set; }
+
+    /// <summary>是否顯示紅方 AI 設定面板。</summary>
+    public bool ShowRedAiSettings => selectedMode == GameMode.AiVsAi
+        || (selectedMode == GameMode.PlayerVsAi && playerColor == PieceColor.Black);
+
+    /// <summary>是否顯示黑方 AI 設定面板。</summary>
+    public bool ShowBlackAiSettings => selectedMode == GameMode.AiVsAi
+        || (selectedMode == GameMode.PlayerVsAi && playerColor == PieceColor.Red);
+
+    /// <summary>是否顯示任何 AI 設定面板。</summary>
+    public bool ShowAnyAiSettings => selectedMode != GameMode.PlayerVsPlayer;
+
     public GameMode SelectedMode
     {
         get => selectedMode;
@@ -83,6 +92,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(IsAiVsAiMode));
                 OnPropertyChanged(nameof(IsPlayerVsAiMode));
                 OnPropertyChanged(nameof(ShowDualTTStats));
+                OnPropertyChanged(nameof(ShowRedAiSettings));
+                OnPropertyChanged(nameof(ShowBlackAiSettings));
+                OnPropertyChanged(nameof(ShowAnyAiSettings));
             }
         }
     }
@@ -97,7 +109,11 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         set
         {
             if (SetProperty(ref playerColor, value))
+            {
                 gameService.PlayerColor = value;
+                OnPropertyChanged(nameof(ShowRedAiSettings));
+                OnPropertyChanged(nameof(ShowBlackAiSettings));
+            }
         }
     }
 
@@ -117,84 +133,6 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     {
         get => selectedTabIndex;
         set => SetProperty(ref selectedTabIndex, value);
-    }
-
-    // ─── 全域設定（非 AiVsAi 模式使用）────────────────────────────────────
-
-    public int SearchDepth
-    {
-        get => searchDepth;
-        set
-        {
-            if (SetProperty(ref searchDepth, value))
-            {
-                gameService.SetDifficulty(value, searchThinkingTime * 1000);
-            }
-        }
-    }
-
-    public int SearchThinkingTime
-    {
-        get => searchThinkingTime;
-        set
-        {
-            if (SetProperty(ref searchThinkingTime, value))
-            {
-                gameService.SetDifficulty(searchDepth, value * 1000);
-            }
-        }
-    }
-
-    // ─── AiVsAi 紅方設定 ────────────────────────────────────────────────
-
-    public int RedSearchDepth
-    {
-        get => redSearchDepth;
-        set
-        {
-            if (SetProperty(ref redSearchDepth, value))
-            {
-                gameService.SetRedAiDifficulty(value, redSearchThinkingTime * 1000);
-            }
-        }
-    }
-
-    public int RedSearchThinkingTime
-    {
-        get => redSearchThinkingTime;
-        set
-        {
-            if (SetProperty(ref redSearchThinkingTime, value))
-            {
-                gameService.SetRedAiDifficulty(redSearchDepth, value * 1000);
-            }
-        }
-    }
-
-    // ─── AiVsAi 黑方設定 ────────────────────────────────────────────────
-
-    public int BlackSearchDepth
-    {
-        get => blackSearchDepth;
-        set
-        {
-            if (SetProperty(ref blackSearchDepth, value))
-            {
-                gameService.SetBlackAiDifficulty(value, blackSearchThinkingTime * 1000);
-            }
-        }
-    }
-
-    public int BlackSearchThinkingTime
-    {
-        get => blackSearchThinkingTime;
-        set
-        {
-            if (SetProperty(ref blackSearchThinkingTime, value))
-            {
-                gameService.SetBlackAiDifficulty(blackSearchDepth, value * 1000);
-            }
-        }
     }
 
     // ─── TT 共用設定 ─────────────────────────────────────────────────────
@@ -293,6 +231,8 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
                 gameService.IsTimedModeEnabled = value;
                 OnPropertyChanged(nameof(IsTimedModeSettingsVisible));
                 OnPropertyChanged(nameof(IsTimeLimitControlVisible));
+                RedAiSettings?.UpdateTimedMode(value);
+                BlackAiSettings?.UpdateTimedMode(value);
             }
         }
     }
@@ -435,48 +375,75 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     /// <summary>殘局庫 ViewModel。</summary>
     public EndgameTablebViewModel? EndgameTableb { get; }
 
-    // ─── 外部引擎快速開關（設定頁 Tab 1）─────────────────────────────────
+    private readonly IUserSettingsService? userSettingsService;
 
-    /// <summary>直接委派至 ExternalEngine，永遠與其同步。</summary>
-    public bool IsRedExternalEngineEnabled
-    {
-        get => ExternalEngine?.UseRedExternalEngine ?? false;
-        set
-        {
-            if (ExternalEngine != null && value != ExternalEngine.UseRedExternalEngine)
-                _ = ToggleExternalEngineAsync(isRed: true, value);
-        }
-    }
-
-    public bool IsBlackExternalEngineEnabled
-    {
-        get => ExternalEngine?.UseBlackExternalEngine ?? false;
-        set
-        {
-            if (ExternalEngine != null && value != ExternalEngine.UseBlackExternalEngine)
-                _ = ToggleExternalEngineAsync(isRed: false, value);
-        }
-    }
-
-    /// <summary>紅方已設定引擎路徑（決定快速開關 CheckBox 是否可用）。</summary>
-    public bool HasRedEngineConfig => ExternalEngine?.HasRedEngineConfig ?? false;
-
-    /// <summary>黑方已設定引擎路徑（決定快速開關 CheckBox 是否可用）。</summary>
-    public bool HasBlackEngineConfig => ExternalEngine?.HasBlackEngineConfig ?? false;
-
-    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null, NnueViewModel? nnueViewModel = null, EndgameTablebViewModel? endgameTablebViewModel = null, EloMatchViewModel? eloMatchViewModel = null)
+    public ControlPanelViewModel(IGameService gameService, GameSettings settings, IGameAnalysisService? gameAnalysisService = null, GameAnalysisSettings? analysisSettings = null, ExternalEngineViewModel? externalEngineViewModel = null, MoveHistoryViewModel? moveHistoryViewModel = null, NnueViewModel? nnueViewModel = null, EndgameTablebViewModel? endgameTablebViewModel = null, EloMatchViewModel? eloMatchViewModel = null, AiPlayerSettingsViewModel? redAiSettings = null, AiPlayerSettingsViewModel? blackAiSettings = null, IUserSettingsService? userSettingsService = null)
     {
         ExternalEngine = externalEngineViewModel;
         MoveHistory = moveHistoryViewModel;
         Nnue = nnueViewModel;
         EndgameTableb = endgameTablebViewModel;
         EloMatch = eloMatchViewModel;
+        RedAiSettings = redAiSettings;
+        BlackAiSettings = blackAiSettings;
         this.gameService = gameService;
         this.gameAnalysisService = gameAnalysisService;
+        this.userSettingsService = userSettingsService;
 
         InitializeSettings(settings, analysisSettings);
+        InitializeAiPlayerSettings();
         InitializeCommands();
         SubscribeToEvents();
+    }
+
+    /// <summary>還原 per-player AI 設定並訂閱自動儲存。</summary>
+    private void InitializeAiPlayerSettings()
+    {
+        if (userSettingsService == null) return;
+
+        // 從持久化設定還原
+        var saved = userSettingsService.LoadEngineSettings();
+        RedAiSettings?.RestoreFromSettings(saved);
+        BlackAiSettings?.RestoreFromSettings(saved);
+
+        // 訂閱 SettingsChanged 事件，任一設定變更時自動儲存
+        if (RedAiSettings != null)
+            RedAiSettings.SettingsChanged += PersistAiPlayerSettings;
+        if (BlackAiSettings != null)
+            BlackAiSettings.SettingsChanged += PersistAiPlayerSettings;
+
+        // 自動連接已設定的外部引擎（在背景執行）
+        _ = AutoConnectAiEnginesAsync();
+    }
+
+    private void PersistAiPlayerSettings()
+    {
+        if (userSettingsService == null) return;
+
+        var snapshot = new ExternalEngineSettings();
+        RedAiSettings?.CaptureToSettings(snapshot);
+        BlackAiSettings?.CaptureToSettings(snapshot);
+
+        // 保留伺服器設定
+        if (ExternalEngine != null)
+            snapshot.ServerPort = ExternalEngine.ServerPort;
+
+        userSettingsService.SaveEngineSettings(snapshot);
+    }
+
+    private async Task AutoConnectAiEnginesAsync()
+    {
+        try
+        {
+            var tasks = new List<Task>();
+            if (RedAiSettings != null) tasks.Add(RedAiSettings.AutoConnectIfNeededAsync());
+            if (BlackAiSettings != null) tasks.Add(BlackAiSettings.AutoConnectIfNeededAsync());
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"AI 引擎自動連接失敗：{ex.Message}");
+        }
     }
 
     // ─── 建構子輔助方法 ────────────────────────────────────────────────────────
@@ -486,12 +453,6 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         isGameAnalysisEnabled   = analysisSettings?.IsEnabled ?? false;
         gameAnalysisDisclaimer  = analysisSettings?.Disclaimer ?? "以下分析由 AI 產生，僅供參考，不代表最終結論。";
 
-        searchDepth            = settings.SearchDepth;
-        searchThinkingTime     = settings.SearchThinkingTimeSeconds;
-        redSearchDepth         = settings.RedSearchDepth;
-        redSearchThinkingTime  = settings.RedSearchThinkingTimeSeconds;
-        blackSearchDepth       = settings.BlackSearchDepth;
-        blackSearchThinkingTime = settings.BlackSearchThinkingTimeSeconds;
         useSharedTT            = settings.UseSharedTranspositionTable;
         copyRedTtToBlackAtStart = settings.CopyRedTtToBlackAtStart;
         isSmartHintEnabled     = settings.IsSmartHintEnabled;
@@ -713,22 +674,18 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
 
         SetDifficultyPresetCommand = new RelayCommand(param =>
         {
-            // 根據預設等級快速填入深度與思考時間
-            // 直接設定 backing fields 再呼叫一次 SetDifficulty，避免透過 property setter
-            // 觸發兩次 SetDifficulty（第一次會帶入「新深度＋舊時間」的中間狀態）
             (int depth, int timeSec) = (param as string) switch
             {
                 "beginner" => (2, 3),
                 "casual"   => (4, 8),
                 "advanced" => (6, 15),
                 "expert"   => (9, 25),
-                _          => (searchDepth, searchThinkingTime)
+                _          => (6, 3)
             };
-            searchDepth        = depth;
-            searchThinkingTime = timeSec;
-            gameService.SetDifficulty(depth, timeSec * 1000);
-            OnPropertyChanged(nameof(SearchDepth));
-            OnPropertyChanged(nameof(SearchThinkingTime));
+
+            // 透過 AiPlayerSettingsViewModel 子 VM 套用預設
+            if (ShowRedAiSettings)  RedAiSettings?.ApplyPreset(depth, timeSec);
+            if (ShowBlackAiSettings) BlackAiSettings?.ApplyPreset(depth, timeSec);
         });
 
         HintCommand = new AsyncRelayCommand(async _ =>
@@ -813,15 +770,14 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         clockDisplayTimer.Elapsed += (_, _) => UpdateClockDisplay();
         clockDisplayTimer.Start();
 
-        gameService.SetDifficulty(searchDepth, searchThinkingTime * 1000);
+        // 透過 per-player sub-VM 同步各方獨立難度設定
+        RedAiSettings?.SyncToService();
+        BlackAiSettings?.SyncToService();
         RefreshTTStats();
     }
 
     private void SubscribeToEvents()
     {
-        if (ExternalEngine != null)
-            ExternalEngine.PropertyChanged += OnExternalEnginePropertyChanged;
-
         gameService.GameMessage += OnGameMessage;
         gameService.ThinkingProgress += OnThinkingProgress;
         gameService.HintReady += OnHintReady;
@@ -1251,44 +1207,6 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             AppendTreeNode(sb, child, indent + "  ", isRoot: false, parentBoard: boardAtNode);
     }
 
-    /// <summary>
-    /// ExternalEngine 屬性變更時，通知 UI 重新讀取本 ViewModel 的計算屬性。
-    /// </summary>
-    private void OnExternalEnginePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        string? localName = e.PropertyName switch
-        {
-            nameof(ExternalEngineViewModel.UseRedExternalEngine)   => nameof(IsRedExternalEngineEnabled),
-            nameof(ExternalEngineViewModel.UseBlackExternalEngine) => nameof(IsBlackExternalEngineEnabled),
-            nameof(ExternalEngineViewModel.HasRedEngineConfig)     => nameof(HasRedEngineConfig),
-            nameof(ExternalEngineViewModel.HasBlackEngineConfig)   => nameof(HasBlackEngineConfig),
-            _ => null
-        };
-
-        if (localName == null) return;
-
-        var app = global::System.Windows.Application.Current;
-        if (app == null) OnPropertyChanged(localName);
-        else app.Dispatcher.InvokeAsync(() => OnPropertyChanged(localName));
-    }
-
-    /// <summary>
-    /// 設定頁快速開關外部引擎：失敗時觸發計算屬性重讀（CheckBox 自動恢復）並提示。
-    /// </summary>
-    private async Task ToggleExternalEngineAsync(bool isRed, bool enable)
-    {
-        if (ExternalEngine == null) return;
-
-        bool success = await ExternalEngine.ToggleEngineAsync(isRed, enable);
-
-        if (!success)
-        {
-            // ExternalEngine 未變動，通知 UI 重讀計算屬性讓 CheckBox 恢復原狀
-            OnPropertyChanged(isRed ? nameof(IsRedExternalEngineEnabled) : nameof(IsBlackExternalEngineEnabled));
-            StatusMessage = "請先至「外部引擎」頁設定引擎路徑";
-        }
-    }
-
     private static string FormatHintScore(int score)
     {
         return score switch
@@ -1340,8 +1258,6 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         disposed = true; // 先設定 guard，防止背景執行緒繼續更新 UI
-        if (ExternalEngine != null)
-            ExternalEngine.PropertyChanged -= OnExternalEnginePropertyChanged;
 
         // 取消訂閱所有 GameService 事件，防止 ViewModel 被 Service 持有引用而無法被 GC
         gameService.GameMessage -= OnGameMessage;
@@ -1366,6 +1282,12 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         clockDisplayTimer?.Stop();
         clockDisplayTimer?.Dispose();
         MoveHistory?.Dispose();
+
+        // 取消訂閱 per-player AI 設定事件
+        if (RedAiSettings != null)
+            RedAiSettings.SettingsChanged -= PersistAiPlayerSettings;
+        if (BlackAiSettings != null)
+            BlackAiSettings.SettingsChanged -= PersistAiPlayerSettings;
     }
 }
 

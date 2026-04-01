@@ -110,7 +110,6 @@ public partial class App : System.Windows.Application
         services.AddTransient<ChessBoardViewModel>();
         services.AddSingleton<ExternalEngineViewModel>(sp =>
             new ExternalEngineViewModel(
-                sp.GetRequiredService<IEngineProvider>(),
                 sp.GetRequiredService<IChessEngineServer>(),
                 sp.GetRequiredService<IUserSettingsService>()));
         services.AddTransient<MoveHistoryViewModel>(sp => new MoveHistoryViewModel(
@@ -143,16 +142,36 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<IEngineProvider>(),
                 sp.GetRequiredService<EloMatchService>()));
 
-        services.AddTransient<ControlPanelViewModel>(sp => new ControlPanelViewModel(
-            sp.GetRequiredService<IGameService>(),
-            sp.GetRequiredService<GameSettings>(),
-            sp.GetService<IGameAnalysisService>(),
-            sp.GetService<GameAnalysisSettings>(),
-            sp.GetRequiredService<ExternalEngineViewModel>(),
-            sp.GetRequiredService<MoveHistoryViewModel>(),
-            sp.GetRequiredService<NnueViewModel>(),
-            sp.GetRequiredService<EndgameTablebViewModel>(),
-            sp.GetRequiredService<EloMatchViewModel>()));
+        // Per-player AI 設定 ViewModel（紅方 / 黑方各一個實例，透過 Holder 包裝以便 DI 解析）
+        services.AddSingleton(sp =>
+        {
+            var gameService = sp.GetRequiredService<IGameService>();
+            var engineProvider = sp.GetRequiredService<IEngineProvider>();
+            var engineFactory = sp.GetRequiredService<IAiEngineFactory>();
+            return new AiPlayerSettingsHolder(
+                new AiPlayerSettingsViewModel(
+                    Domain.Enums.PieceColor.Red, gameService, engineProvider, engineFactory),
+                new AiPlayerSettingsViewModel(
+                    Domain.Enums.PieceColor.Black, gameService, engineProvider, engineFactory));
+        });
+
+        services.AddTransient<ControlPanelViewModel>(sp =>
+        {
+            var aiHolder = sp.GetRequiredService<AiPlayerSettingsHolder>();
+            return new ControlPanelViewModel(
+                sp.GetRequiredService<IGameService>(),
+                sp.GetRequiredService<GameSettings>(),
+                sp.GetService<IGameAnalysisService>(),
+                sp.GetService<GameAnalysisSettings>(),
+                sp.GetRequiredService<ExternalEngineViewModel>(),
+                sp.GetRequiredService<MoveHistoryViewModel>(),
+                sp.GetRequiredService<NnueViewModel>(),
+                sp.GetRequiredService<EndgameTablebViewModel>(),
+                sp.GetRequiredService<EloMatchViewModel>(),
+                aiHolder.Red,
+                aiHolder.Black,
+                sp.GetRequiredService<IUserSettingsService>());
+        });
 
         // 視圖層（Views）
         services.AddTransient<MainWindowView>();
