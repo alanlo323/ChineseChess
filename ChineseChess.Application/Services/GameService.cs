@@ -1384,10 +1384,21 @@ public class GameService : IGameService, IDisposable
         latestMultiPvEvaluations = null;
     }
 
-    public TTStatistics GetTTStatistics() => aiEngine.GetTTStatistics();
+    public TTStatistics GetTTStatistics()
+    {
+        var engine = engineProvider?.GetRedEngine() ?? aiEngine;
+        return engine.GetTTStatistics();
+    }
 
     public TTStatistics? GetBlackTTStatistics()
     {
+        if (engineProvider != null)
+        {
+            var blackEngine = engineProvider.GetBlackEngine();
+            var redEngine = engineProvider.GetRedEngine();
+            if (ReferenceEquals(blackEngine, redEngine)) return null;
+            return blackEngine.GetTTStatistics();
+        }
         if (aiEngineBlack == null) return null;
         return aiEngineBlack.GetTTStatistics();
     }
@@ -1419,10 +1430,17 @@ public class GameService : IGameService, IDisposable
         }
     }
 
-    public IEnumerable<TTEntry> EnumerateTTEntries() => aiEngine.EnumerateTTEntries();
+    public IEnumerable<TTEntry> EnumerateTTEntries()
+    {
+        var engine = GetCurrentEngine();
+        return engine.EnumerateTTEntries();
+    }
 
-    public TTTreeNode? ExploreTTTree(int maxDepth = 6) =>
-        aiEngine.ExploreTTTree(CurrentBoard, maxDepth);
+    public TTTreeNode? ExploreTTTree(int maxDepth = 6)
+    {
+        var engine = GetCurrentEngine();
+        return engine.ExploreTTTree(CurrentBoard, maxDepth);
+    }
 
     public void SyncTablebaseToTranspositionTable(ITablebaseService tablebaseService)
     {
