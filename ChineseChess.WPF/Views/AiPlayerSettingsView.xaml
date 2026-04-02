@@ -148,24 +148,11 @@
                            Margin="0,0,0,4"
                            Visibility="{Binding HasNoEngines, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                <!-- 中斷 / 狀態（選取引擎後自動連線）-->
-                <Grid Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0"
-                            Content="中斷"
-                            Command="{Binding DisconnectEngineCommand}"
-                            Style="{StaticResource CompactButtonStyle}"
-                            Width="44"
-                            Margin="0,0,8,0" />
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding EngineStatus}"
-                               Style="{StaticResource StatusTextStyle}"
-                               VerticalAlignment="Center"
-                               TextWrapping="Wrap" />
-                </Grid>
+                <!-- 連線狀態（全自動，選取即連線，移除即斷線）-->
+                <TextBlock Text="{Binding EngineStatus}"
+                           Style="{StaticResource StatusTextStyle}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,4" />
 
                 <!-- ─── Pikafish 進階設定 ──────────────────────── -->
                 <GroupBox Header="Pikafish 進階設定"
