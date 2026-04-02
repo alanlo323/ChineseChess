@@ -9,7 +9,7 @@ namespace ChineseChess.WPF.ViewModels;
 /// 改為從已載入模型列表（ILoadedNnueModelRegistry）以 ComboBox 選取，
 /// 不再直接輸入檔案路徑。
 /// </summary>
-public sealed class NnuePlayerViewModel : ObservableObject
+public sealed class NnuePlayerViewModel : ObservableObject, IDisposable
 {
     private readonly ILoadedNnueModelRegistry registry;
     private string? selectedModelId;

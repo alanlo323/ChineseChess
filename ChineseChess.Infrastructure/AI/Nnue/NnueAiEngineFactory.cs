@@ -59,7 +59,10 @@ public sealed class NnueAiEngineFactory : IAiEngineFactory
             }
         }
 
-        // 退化路徑：直接從檔案載入
+        // 退化路徑：weights 尚未快取或未提供 ModelId，直接從檔案載入（可能產生額外記憶體）
+        if (!string.IsNullOrEmpty(config.ModelId))
+            System.Diagnostics.Trace.TraceWarning(
+                $"NnueAiEngineFactory: ModelId={config.ModelId} 的 weights 未就緒，退化到讀檔路徑");
         await network.LoadFromFileAsync(config.ModelFilePath, ct).ConfigureAwait(false);
 
         var evaluator   = new CompositeEvaluator(network);

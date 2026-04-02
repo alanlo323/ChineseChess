@@ -57,6 +57,10 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
     {
         var canonical = Path.GetFullPath(filePath);
 
+        // 防止路徑遍歷：僅接受 .nnue 副檔名（OpenFileDialog 過濾器無法保護持久化路徑）
+        if (!canonical.EndsWith(".nnue", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"僅接受 .nnue 檔案，拒絕：{Path.GetFileName(canonical)}");
+
         lock (modelsLock)
         {
             if (models.Values.Any(m => string.Equals(

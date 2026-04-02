@@ -17,7 +17,7 @@ namespace ChineseChess.WPF.ViewModels;
 ///   - NNUE 模型管理（LoadedNnueModelList）
 ///   - 設定持久化（nnue-user-settings.json）
 /// </summary>
-public sealed class NnueViewModel : ObservableObject
+public sealed class NnueViewModel : ObservableObject, IDisposable
 {
     private readonly INnueNetwork network;
     private readonly INnueSettingsService settingsService;
@@ -215,7 +215,7 @@ public sealed class NnueViewModel : ObservableObject
 
     private async Task TryAutoLoadModelAsync()
     {
-        // 等待 registry 背景載入完成（最多重試幾次）
+        // 等待 registry 背景載入完成（先檢查再延遲，快速載入時立即返回）
         for (int retry = 0; retry < 5; retry++)
         {
             if (!string.IsNullOrEmpty(selectedGlobalModelId)
@@ -224,7 +224,7 @@ public sealed class NnueViewModel : ObservableObject
                 await ApplyGlobalModelAsync(selectedGlobalModelId);
                 return;
             }
-            await Task.Delay(500);
+            if (retry < 4) await Task.Delay(500);
         }
         // 最後嘗試：即使 weights 未就緒也嘗試套用（會退化到讀檔）
         if (!string.IsNullOrEmpty(selectedGlobalModelId))
@@ -335,5 +335,12 @@ public sealed class NnueViewModel : ObservableObject
             RedPlayerSettings   = usePerPlayerNnue ? RedPlayer.ToSettings()   : null,
             BlackPlayerSettings = usePerPlayerNnue ? BlackPlayer.ToSettings() : null,
         });
+    }
+
+    public void Dispose()
+    {
+        nnueModelRegistry.ModelsChanged -= OnModelsChanged;
+        RedPlayer.Dispose();
+        BlackPlayer.Dispose();
     }
 }
