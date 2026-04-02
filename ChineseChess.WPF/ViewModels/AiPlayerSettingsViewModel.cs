@@ -501,9 +501,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
         adapter = activeAdapter;
 
-        OnPropertyChanged(nameof(IsPikafish));
-        OnPropertyChanged(nameof(UciEloEnabled));
-        OnPropertyChanged(nameof(Rule60MaxPlyEnabled));
+        NotifyEngineTypePropertiesChanged();
 
         var info = registry.GetEngineInfo(selectedEngineId);
         EngineStatus = $"已連接：{info?.DisplayName ?? activeAdapter.EngineName}";
@@ -530,9 +528,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
         adapter = null;  // 不 Dispose，由 Registry 管理
         EngineStatus = "已中斷連線";
-        OnPropertyChanged(nameof(IsPikafish));
-        OnPropertyChanged(nameof(UciEloEnabled));
-        OnPropertyChanged(nameof(Rule60MaxPlyEnabled));
+        NotifyEngineTypePropertiesChanged();
 
         // 切換回內部引擎模式
         engineType = AiEngineType.Internal;
@@ -651,6 +647,14 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     /// <summary>通知所有屬性已變更（WPF 慣例：傳入空字串表示全部重新綁定）。</summary>
     private void NotifyAllPropertiesChanged() => OnPropertyChanged(string.Empty);
+
+    /// <summary>通知與引擎類型相關的計算屬性（IsPikafish、UciEloEnabled、Rule60MaxPlyEnabled）。</summary>
+    private void NotifyEngineTypePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(IsPikafish));
+        OnPropertyChanged(nameof(UciEloEnabled));
+        OnPropertyChanged(nameof(Rule60MaxPlyEnabled));
+    }
 
     /// <summary>啟動時自動連接已設定的外部引擎。</summary>
     public async Task AutoConnectIfNeededAsync()

@@ -18,11 +18,7 @@ public class JsonUserSettingsService : IUserSettingsService
     private static readonly string SettingsFilePath =
         Path.Combine(AppContext.BaseDirectory, "engine-user-settings.json");
 
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
+    private static readonly JsonSerializerOptions SerializerOptions = PersistenceJsonOptions.Default;
 
     public ExternalEngineSettings LoadEngineSettings()
     {

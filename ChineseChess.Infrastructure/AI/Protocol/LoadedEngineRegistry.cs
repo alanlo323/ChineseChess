@@ -59,6 +59,14 @@ public sealed class LoadedEngineRegistry : ILoadedEngineRegistry
     /// </summary>
     public async Task<LoadedEngineInfo> AddEngineAsync(string executablePath, CancellationToken ct = default)
     {
+        // 防止重複載入相同路徑的引擎
+        lock (enginesLock)
+        {
+            if (engines.Values.Any(e => string.Equals(
+                    e.info.ExecutablePath, executablePath, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"引擎已載入：{Path.GetFileName(executablePath)}");
+        }
+
         var adapter = await ExternalEngineAdapter.DetectAndConnectAsync(executablePath, ct);
 
         var info = new LoadedEngineInfo
@@ -230,6 +238,7 @@ public sealed class LoadedEngineRegistry : ILoadedEngineRegistry
                 .Select(kv => (kv.Key, kv.Value.info))
                 .ToList();
 
+        bool anyConnected = false;
         foreach (var (id, info) in toConnect)
         {
             try
@@ -240,11 +249,13 @@ public sealed class LoadedEngineRegistry : ILoadedEngineRegistry
                 {
                     // 確認此 id 仍在列表中（可能已被移除）
                     if (engines.ContainsKey(id))
+                    {
                         engines[id] = (info, adapter);
+                        anyConnected = true;
+                    }
                     else
                         adapter.Dispose();
                 }
-                EnginesChanged?.Invoke();
             }
             catch (Exception ex)
             {
@@ -252,5 +263,9 @@ public sealed class LoadedEngineRegistry : ILoadedEngineRegistry
                 // 保留 info，adapter 維持 null，下次手動重載可重試
             }
         }
+
+        // 批次完成後觸發一次事件，避免每個引擎各自觸發多次 UI 刷新
+        if (anyConnected)
+            EnginesChanged?.Invoke();
     }
 }

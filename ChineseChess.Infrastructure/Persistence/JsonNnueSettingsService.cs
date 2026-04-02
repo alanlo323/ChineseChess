@@ -2,7 +2,6 @@ using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Interfaces;
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace ChineseChess.Infrastructure.Persistence;
 
@@ -16,11 +15,7 @@ public class JsonNnueSettingsService : INnueSettingsService
     private static readonly string SettingsFilePath =
         Path.Combine(AppContext.BaseDirectory, "nnue-user-settings.json");
 
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
+    private static readonly JsonSerializerOptions SerializerOptions = PersistenceJsonOptions.Default;
 
     public NnueSettings LoadNnueSettings()
     {
