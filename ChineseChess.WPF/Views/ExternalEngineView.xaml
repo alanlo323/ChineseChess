@@ -13,19 +13,17 @@
         <StackPanel Margin="0,8">
 
             <!-- ─── 外部引擎管理 ──────────────────────────────── -->
-            <Expander Header="外部引擎管理"
-                      IsExpanded="True"
-                      Foreground="{StaticResource InkBrush}"
-                      Margin="0,0,0,8">
-                <Border Margin="0,4,0,0"
-                        BorderBrush="{StaticResource WoodDarkBrush}"
-                        BorderThickness="1"
-                        CornerRadius="3"
-                        Background="{StaticResource PanelBackgroundBrush}"
-                        Padding="8,6">
-                    <views:LoadedEngineListView DataContext="{Binding LoadedEngineList}" />
-                </Border>
-            </Expander>
+            <TextBlock Text="外部引擎管理"
+                       Style="{StaticResource SectionTitleStyle}"
+                       Margin="0,0,0,6" />
+            <Border BorderBrush="{StaticResource WoodDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Background="{StaticResource PanelBackgroundBrush}"
+                    Padding="8,6"
+                    Margin="0,0,0,8">
+                <views:LoadedEngineListView DataContext="{Binding LoadedEngineList}" />
+            </Border>
 
             <Separator Margin="0,0,0,8" />
 
