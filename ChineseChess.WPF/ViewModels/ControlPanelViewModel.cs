@@ -771,8 +771,9 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
         clockDisplayTimer.Start();
 
         // 透過 per-player sub-VM 同步各方獨立難度設定
-        RedAiSettings?.SyncToService();
-        BlackAiSettings?.SyncToService();
+        // 初始化時外部引擎尚未連線（背景 AutoConnect 尚未完成），忽略未就緒例外
+        TrySyncToService(RedAiSettings);
+        TrySyncToService(BlackAiSettings);
         RefreshTTStats();
     }
 
@@ -1003,6 +1004,16 @@ public class ControlPanelViewModel : ObservableObject, IDisposable
             ? $"和棋成立！{result.Reason}"
             : $"提和遭拒。{result.Reason}";
         app.Dispatcher.InvokeAsync(() => StatusMessage = message);
+    }
+
+    private static void TrySyncToService(AiPlayerSettingsViewModel? vm)
+    {
+        try { vm?.SyncToService(); }
+        catch (InvalidOperationException ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"TrySyncToService 忽略例外（啟動時外部引擎尚未就緒）：{ex.Message}");
+        }
     }
 
     private void RefreshTTStats()

@@ -39,6 +39,9 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     private string engineStatus = "未啟用";
     private IExternalEngineAdapter? adapter;
 
+    // ─── NNUE 套用任務取消控制 ─────────────────────────────────────────
+    private CancellationTokenSource? nnueCts;
+
     // ─── Pikafish 設定 ─────────────────────────────────────────────────────
     private int multiPv = 1;
     private int skillLevel = 20;
@@ -111,7 +114,20 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(IsInternalEngine));
                 OnPropertyChanged(nameof(IsExternalEngine));
-                SyncToService();
+                try
+                {
+                    SyncToService();
+                }
+                catch (InvalidOperationException ex)
+                {
+                    EngineStatus = ex.Message;
+                    // 外部引擎尚未就緒時退回內部引擎，不讓 SyncToService 再拋
+                    engineType = AiEngineType.Internal;
+                    OnPropertyChanged(nameof(EngineType));
+                    OnPropertyChanged(nameof(IsInternalEngine));
+                    OnPropertyChanged(nameof(IsExternalEngine));
+                    SyncToService();
+                }
                 SettingsChanged?.Invoke();
             }
         }
@@ -147,6 +163,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
             if (SetProperty(ref evaluatorType, value))
             {
                 OnPropertyChanged(nameof(IsNnueEvaluator));
+                _ = ApplyNnueToServiceAsync();
                 SettingsChanged?.Invoke();
             }
         }
@@ -168,7 +185,10 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         set
         {
             if (SetProperty(ref selectedNnueModelId, value))
+            {
+                _ = ApplyNnueToServiceAsync();
                 SettingsChanged?.Invoke();
+            }
         }
     }
 
@@ -379,12 +399,16 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>將所有引擎設定同步至 GameService 和 EngineProvider。</summary>
+    /// <exception cref="InvalidOperationException">選擇外部引擎但 adapter 尚未就緒時拋出。</exception>
     public void SyncToService()
     {
         SyncDifficultyToService();
 
-        if (engineType == AiEngineType.External && adapter != null)
+        if (engineType == AiEngineType.External)
         {
+            if (adapter == null)
+                throw new InvalidOperationException(
+                    $"外部引擎尚未連線，請至「外部引擎」Tab 確認引擎已載入。");
             if (Color == PieceColor.Red)
                 engineProvider.SetRedExternalEngine(adapter);
             else
@@ -452,6 +476,8 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         RestorePikafishSettings(pf);
 
         NotifyAllPropertiesChanged();
+        if (engineType == AiEngineType.Internal && evaluatorType == InternalEvaluatorType.Nnue)
+            _ = ApplyNnueToServiceAsync();
     }
 
     /// <summary>將目前完整狀態快照至設定物件（供持久化使用）。</summary>
@@ -504,6 +530,30 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
             gameService.SetRedAiDifficulty(searchDepth, timeMs);
         else
             gameService.SetBlackAiDifficulty(searchDepth, timeMs);
+    }
+
+    private async Task ApplyNnueToServiceAsync()
+    {
+        // 取消並釋放上一個未完成的套用任務，防止並發導致 engine 被 dispose 後又被指派
+        nnueCts?.Cancel();
+        nnueCts?.Dispose();
+        nnueCts = new CancellationTokenSource();
+        var ct = nnueCts.Token;
+
+        if (engineType == AiEngineType.External) return;
+        var config = BuildNnueConfig();
+        try
+        {
+            if (Color == PieceColor.Red)
+                await engineProvider.ApplyRedNnueAsync(config, ct);
+            else
+                await engineProvider.ApplyBlackNnueAsync(config, ct);
+        }
+        catch (OperationCanceledException) { /* 被後續呼叫取代，忽略 */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"{DisplayName} 套用 NNUE 失敗：{ex.Message}");
+        }
     }
 
     private async Task ApplyEngineAsync()
@@ -564,7 +614,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     private void OnRegistryEnginesChanged()
     {
         // EnginesChanged 可能由背景執行緒觸發，dispatch 至 UI 執行緒
-        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
             // 若選取的引擎已被移除，自動清除選取並斷線
             if (selectedEngineId != null && registry.GetEngineInfo(selectedEngineId) == null)
@@ -583,6 +633,20 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(AvailableEngines));
                 OnPropertyChanged(nameof(HasNoEngines));
+
+                // 背景 AutoConnect 完成後，若選取的引擎的 adapter 剛就緒，自動套用
+                if (engineType == AiEngineType.External
+                    && selectedEngineId != null
+                    && adapter == null
+                    && registry.GetActiveAdapter(selectedEngineId) != null)
+                {
+                    try { await ApplyEngineAsync(); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            $"{DisplayName} AutoConnect 後套用引擎失敗：{ex.Message}");
+                    }
+                }
             }
         });
     }
@@ -725,5 +789,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         registry.EnginesChanged    -= OnRegistryEnginesChanged;
         nnueRegistry.ModelsChanged -= OnNnueModelsChanged;
         adapter = null;  // adapter 由 Registry 管理，不在此 Dispose
+        nnueCts?.Cancel();
+        nnueCts?.Dispose();
     }
 }

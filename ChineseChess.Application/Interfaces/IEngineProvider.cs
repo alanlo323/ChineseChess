@@ -44,6 +44,16 @@ public interface IEngineProvider
         NnueEngineConfig? blackConfig,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// 套用紅方獨立 NNUE 設定。傳入 null 表示清除（回復使用全域內建引擎）。
+    /// </summary>
+    Task ApplyRedNnueAsync(NnueEngineConfig? config, CancellationToken ct = default);
+
+    /// <summary>
+    /// 套用黑方獨立 NNUE 設定。傳入 null 表示清除（回復使用全域內建引擎）。
+    /// </summary>
+    Task ApplyBlackNnueAsync(NnueEngineConfig? config, CancellationToken ct = default);
+
     /// <summary>清除每方獨立 NNUE 設定，回復使用內建（全域）引擎。</summary>
     void ClearPerPlayerNnue();
 

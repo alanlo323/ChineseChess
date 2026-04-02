@@ -78,6 +78,26 @@ public sealed class EngineProvider : IEngineProvider, IDisposable
     }
 
     /// <inheritdoc/>
+    public async Task ApplyRedNnueAsync(NnueEngineConfig? config, CancellationToken ct = default)
+    {
+        // DisposeIfDifferent(old, null) 在 old != null 時無條件 Dispose，此處即「清除舊引擎」語意
+        DisposeIfDifferent(redNnueBuiltin, null);
+        redNnueBuiltin = null;
+        // 前提：config == null 時回落至 builtinEngine，該引擎永遠是 Handcrafted，語意正確
+        if (engineFactory == null || config == null) return;
+        redNnueBuiltin = await engineFactory.CreateWithNnueAsync(config, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task ApplyBlackNnueAsync(NnueEngineConfig? config, CancellationToken ct = default)
+    {
+        DisposeIfDifferent(blackNnueBuiltin, null);
+        blackNnueBuiltin = null;
+        if (engineFactory == null || config == null) return;
+        blackNnueBuiltin = await engineFactory.CreateWithNnueAsync(config, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public void ClearPerPlayerNnue()
     {
         DisposeIfDifferent(redNnueBuiltin, null);
