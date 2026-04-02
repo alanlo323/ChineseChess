@@ -140,10 +140,10 @@ public sealed class NnueViewModel : ObservableObject
     public NnuePlayerViewModel RedPlayer   { get; }
     public NnuePlayerViewModel BlackPlayer { get; }
 
-    /// <summary>本機訓練面板 ViewModel（首次存取時才建立，避免預先配置記憶體）。</summary>
     /// <summary>引擎管理面板 ViewModel（在 NNUE Tab 上方顯示）。</summary>
     public LoadedEngineListViewModel LoadedEngineList { get; }
 
+    /// <summary>本機訓練面板 ViewModel（首次存取時才建立，避免預先配置記憶體）。</summary>
     public NnueTrainingViewModel Training  => lazyTraining.Value;
 
     public string PerPlayerStatusMessage

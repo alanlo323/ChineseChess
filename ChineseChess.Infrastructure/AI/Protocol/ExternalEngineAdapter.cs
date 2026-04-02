@@ -87,9 +87,11 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
             ucciAdapter.Dispose();
         }
 
-        // 嘗試 UCI
+        // 嘗試 UCI（附加獨立超時，避免非引擎 .exe 導致無限等待）
         var uciAdapter = new ExternalEngineAdapter(executablePath, EngineProtocol.Uci);
-        await uciAdapter.InitializeAsync(ct);
+        using var uciCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        uciCts.CancelAfter(TimeSpan.FromSeconds(10));
+        await uciAdapter.InitializeAsync(uciCts.Token);
         return uciAdapter;
     }
 

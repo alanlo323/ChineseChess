@@ -38,8 +38,10 @@ public sealed class LoadedEngineRegistry : ILoadedEngineRegistry
                 engines[info.Id] = (info, null);
         }
 
-        // 背景自動連接
-        _ = AutoConnectAllAsync();
+        // 背景自動連接（記錄頂層未預期例外，避免靜默吞掉）
+        _ = AutoConnectAllAsync().ContinueWith(
+            t => Trace.TraceError($"AutoConnectAllAsync 發生未預期錯誤：{t.Exception}"),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     public IReadOnlyList<LoadedEngineInfo> Engines
@@ -105,7 +107,15 @@ public sealed class LoadedEngineRegistry : ILoadedEngineRegistry
         };
 
         lock (enginesLock)
+        {
+            // 若 async 連線期間此引擎已被 RemoveEngine 移除，捨棄新 adapter 並停止
+            if (!engines.ContainsKey(engineId))
+            {
+                newAdapter.Dispose();
+                return;
+            }
             engines[engineId] = (newInfo, newAdapter);
+        }
 
         PersistEngines();
         EnginesChanged?.Invoke();
@@ -148,6 +158,17 @@ public sealed class LoadedEngineRegistry : ILoadedEngineRegistry
     {
         if (disposed) return;
         disposed = true;
+
+        // 先從 EngineProvider 清除參考，避免 provider 在 shutdown 期間使用已 disposed adapter
+        try
+        {
+            engineProvider.SetRedExternalEngine(null);
+            engineProvider.SetBlackExternalEngine(null);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Dispose 時清除 EngineProvider 失敗：{ex.Message}");
+        }
 
         List<ExternalEngineAdapter?> adapters;
         lock (enginesLock)
