@@ -543,6 +543,10 @@ public class GameService : IGameService, IDisposable
             {
                 if (applyBestMove)
                 {
+                    // 開局庫命中時模擬真人思考延遲，避免 AI 瞬間落子
+                    if (result.IsFromOpeningBook)
+                        await Task.Delay(250, cts.Token);
+
                     var searchTurn     = board.Turn;
                     var moveNotation   = MoveNotation.ToNotation(result.BestMove, board);
                     var aiMovedPiece   = board.GetPiece(result.BestMove.From);
