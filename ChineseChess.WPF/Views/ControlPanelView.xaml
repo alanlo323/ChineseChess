@@ -721,8 +721,8 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- 引擎伺服器頁 -->
-            <TabItem Header="引擎伺服器">
+            <!-- 外部引擎頁 -->
+            <TabItem Header="外部引擎">
                 <views:ExternalEngineView DataContext="{Binding ExternalEngine}" />
             </TabItem>
 

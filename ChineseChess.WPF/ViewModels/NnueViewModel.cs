@@ -13,7 +13,7 @@ namespace ChineseChess.WPF.ViewModels;
 ///   - 顯示模型元數據（路徑、大小、描述）
 ///   - 評估模式切換
 ///   - AIvsAI 每方獨立 NNUE 設定（UsePerPlayerNnue）
-///   - 外部引擎管理（LoadedEngineList）
+
 ///   - NNUE 模型管理（LoadedNnueModelList）
 ///   - 設定持久化（nnue-user-settings.json）
 /// </summary>
@@ -37,7 +37,6 @@ public sealed class NnueViewModel : ObservableObject, IDisposable
         INnueSettingsService settingsService,
         IEngineProvider engineProvider,
         Lazy<NnueTrainingViewModel> lazyTraining,
-        LoadedEngineListViewModel loadedEngineList,
         LoadedNnueModelListViewModel loadedNnueModelList,
         LoadedNnueModelRegistry nnueModelRegistry)
     {
@@ -46,7 +45,6 @@ public sealed class NnueViewModel : ObservableObject, IDisposable
         this.engineProvider    = engineProvider;
         this.nnueModelRegistry = nnueModelRegistry;
         this.lazyTraining      = lazyTraining;
-        LoadedEngineList     = loadedEngineList    ?? throw new ArgumentNullException(nameof(loadedEngineList));
         LoadedNnueModelList  = loadedNnueModelList ?? throw new ArgumentNullException(nameof(loadedNnueModelList));
 
         RedPlayer   = new NnuePlayerViewModel(nnueModelRegistry);
@@ -144,9 +142,6 @@ public sealed class NnueViewModel : ObservableObject, IDisposable
 
     public NnuePlayerViewModel RedPlayer   { get; }
     public NnuePlayerViewModel BlackPlayer { get; }
-
-    /// <summary>外部引擎管理面板（在 NNUE Tab 顯示）。</summary>
-    public LoadedEngineListViewModel LoadedEngineList { get; }
 
     /// <summary>NNUE 模型管理面板（在 NNUE Tab 顯示）。</summary>
     public LoadedNnueModelListViewModel LoadedNnueModelList { get; }

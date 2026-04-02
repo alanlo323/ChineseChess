@@ -122,7 +122,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ExternalEngineViewModel>(sp =>
             new ExternalEngineViewModel(
                 sp.GetRequiredService<IChessEngineServer>(),
-                sp.GetRequiredService<IUserSettingsService>()));
+                sp.GetRequiredService<IUserSettingsService>(),
+                sp.GetRequiredService<LoadedEngineListViewModel>()));
         services.AddTransient<MoveHistoryViewModel>(sp => new MoveHistoryViewModel(
             sp.GetRequiredService<IGameService>(),
             sp.GetRequiredService<IGameRecordService>()));
@@ -146,7 +147,6 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<INnueSettingsService>(),
                 sp.GetRequiredService<IEngineProvider>(),
                 new Lazy<NnueTrainingViewModel>(() => sp.GetRequiredService<NnueTrainingViewModel>()),
-                sp.GetRequiredService<LoadedEngineListViewModel>(),
                 sp.GetRequiredService<LoadedNnueModelListViewModel>(),
                 sp.GetRequiredService<LoadedNnueModelRegistry>()));
         services.AddSingleton<EndgameTablebViewModel>(sp =>

@@ -27,20 +27,6 @@
                 </Border>
             </Expander>
 
-            <!-- ─── 外部引擎管理 ─────────────────────────────────────── -->
-            <Expander Header="外部引擎管理"
-                      IsExpanded="False"
-                      Foreground="{StaticResource InkBrush}"
-                      Margin="0,0,0,8">
-                <Border Margin="0,4,0,0"
-                        BorderBrush="{StaticResource WoodDarkBrush}"
-                        BorderThickness="1"
-                        CornerRadius="3"
-                        Background="{StaticResource PanelBackgroundBrush}"
-                        Padding="8,6">
-                    <views:LoadedEngineListView DataContext="{Binding LoadedEngineList}" />
-                </Border>
-            </Expander>
             <Separator Margin="0,0,0,8" />
 
             <!-- ─── 全域 NNUE 模型選取 ──────────────────────────────── -->

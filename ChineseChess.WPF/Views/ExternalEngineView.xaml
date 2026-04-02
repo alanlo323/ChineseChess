@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             xmlns:views="clr-namespace:ChineseChess.WPF.Views"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ExternalEngineViewModel}">
 
@@ -11,12 +12,22 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="0,8">
 
-            <TextBlock Text="外部引擎設定已移至「設定」頁的 AI 設定面板"
-                       Style="{StaticResource FormLabelStyle}"
-                       TextWrapping="Wrap"
-                       Margin="0,0,0,10" />
+            <!-- ─── 外部引擎管理 ──────────────────────────────── -->
+            <Expander Header="外部引擎管理"
+                      IsExpanded="True"
+                      Foreground="{StaticResource InkBrush}"
+                      Margin="0,0,0,8">
+                <Border Margin="0,4,0,0"
+                        BorderBrush="{StaticResource WoodDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Background="{StaticResource PanelBackgroundBrush}"
+                        Padding="8,6">
+                    <views:LoadedEngineListView DataContext="{Binding LoadedEngineList}" />
+                </Border>
+            </Expander>
 
-            <Border Height="1" Background="{StaticResource WoodDarkBrush}" Opacity="0.20" Margin="0,0,0,10" />
+            <Separator Margin="0,0,0,8" />
 
             <!-- ─── 雙協議伺服器 ───────────────────────────────── -->
             <TextBlock Text="UCI / UCCI 伺服器"

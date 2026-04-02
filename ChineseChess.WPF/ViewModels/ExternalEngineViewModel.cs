@@ -6,7 +6,7 @@ using System.Windows.Input;
 namespace ChineseChess.WPF.ViewModels;
 
 /// <summary>
-/// 引擎伺服器 ViewModel（僅保留 UCI/UCCI 雙協議伺服器功能）。
+/// 外部引擎 ViewModel：管理已載入引擎列表與 UCI/UCCI 雙協議伺服器。
 /// 外部引擎的 per-player 設定已遷移至 AiPlayerSettingsViewModel。
 /// </summary>
 public class ExternalEngineViewModel : ObservableObject, IDisposable
@@ -17,9 +17,13 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
     private int serverPort = 23333;
     private string serverStatus = "伺服器已停止";
 
-    public ExternalEngineViewModel(IChessEngineServer engineServer, IUserSettingsService userSettingsService)
+    public ExternalEngineViewModel(
+        IChessEngineServer engineServer,
+        IUserSettingsService userSettingsService,
+        LoadedEngineListViewModel loadedEngineList)
     {
         this.engineServer = engineServer ?? throw new ArgumentNullException(nameof(engineServer));
+        LoadedEngineList  = loadedEngineList ?? throw new ArgumentNullException(nameof(loadedEngineList));
         this.engineServer.StatusChanged += OnServerStatusChanged;
 
         StartServerCommand = new RelayCommand(async _ => await StartServerAsync(), _ => !IsServerRunning);
@@ -33,6 +37,8 @@ public class ExternalEngineViewModel : ObservableObject, IDisposable
         }
         catch { /* 載入失敗使用預設值 */ }
     }
+
+    public LoadedEngineListViewModel LoadedEngineList { get; }
 
     public bool IsServerRunning
     {
