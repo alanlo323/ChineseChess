@@ -16,13 +16,13 @@ public interface IEngineProvider
 
     /// <summary>
     /// 設定紅方外部引擎；傳入 <c>null</c> 表示恢復使用內建引擎。
-    /// 若已有舊的外部引擎，呼叫此方法時會先 Dispose 舊引擎。
+    /// 引擎生命週期由呼叫端（LoadedEngineRegistry）負責，此方法不 Dispose 舊引擎。
     /// </summary>
     void SetRedExternalEngine(IAiEngine? engine);
 
     /// <summary>
     /// 設定黑方外部引擎；傳入 <c>null</c> 表示恢復使用內建引擎。
-    /// 若已有舊的外部引擎，呼叫此方法時會先 Dispose 舊引擎。
+    /// 引擎生命週期由呼叫端（LoadedEngineRegistry）負責，此方法不 Dispose 舊引擎。
     /// </summary>
     void SetBlackExternalEngine(IAiEngine? engine);
 

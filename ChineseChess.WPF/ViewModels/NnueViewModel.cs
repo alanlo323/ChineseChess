@@ -36,12 +36,14 @@ public sealed class NnueViewModel : ObservableObject
         INnueNetwork network,
         INnueSettingsService settingsService,
         IEngineProvider engineProvider,
-        Lazy<NnueTrainingViewModel> lazyTraining)
+        Lazy<NnueTrainingViewModel> lazyTraining,
+        LoadedEngineListViewModel loadedEngineList)
     {
         this.network         = network;
         this.settingsService = settingsService;
         this.engineProvider  = engineProvider;
         this.lazyTraining    = lazyTraining;
+        LoadedEngineList     = loadedEngineList ?? throw new ArgumentNullException(nameof(loadedEngineList));
 
         RedPlayer   = new NnuePlayerViewModel();
         BlackPlayer = new NnuePlayerViewModel();
@@ -139,6 +141,9 @@ public sealed class NnueViewModel : ObservableObject
     public NnuePlayerViewModel BlackPlayer { get; }
 
     /// <summary>本機訓練面板 ViewModel（首次存取時才建立，避免預先配置記憶體）。</summary>
+    /// <summary>引擎管理面板 ViewModel（在 NNUE Tab 上方顯示）。</summary>
+    public LoadedEngineListViewModel LoadedEngineList { get; }
+
     public NnueTrainingViewModel Training  => lazyTraining.Value;
 
     public string PerPlayerStatusMessage

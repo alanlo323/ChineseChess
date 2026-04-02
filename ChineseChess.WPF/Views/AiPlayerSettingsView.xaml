@@ -112,37 +112,30 @@
             <!-- ═══════════════════════════════════════════════════ -->
             <StackPanel Visibility="{Binding IsExternalEngine, Converter={StaticResource BooleanToVisibilityConverter}}">
 
-                <!-- 協議選擇 -->
+                <!-- 已載入引擎選取 -->
                 <Grid Margin="0,0,0,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="協議："
+                    <TextBlock Grid.Column="0" Text="選擇引擎："
                                Style="{StaticResource FormLabelStyle}"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
                     <ComboBox Grid.Column="1"
-                              ItemsSource="{Binding EngineProtocols}"
-                              SelectedItem="{Binding Protocol}"
+                              ItemsSource="{Binding AvailableEngines}"
+                              SelectedValue="{Binding SelectedEngineId}"
+                              SelectedValuePath="Id"
+                              DisplayMemberPath="DisplayName"
                               Style="{StaticResource InputControlStyle}" />
                 </Grid>
 
-                <!-- 引擎路徑 -->
-                <Grid Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0"
-                             Text="{Binding EnginePath, UpdateSourceTrigger=PropertyChanged}"
-                             Margin="0,0,6,0" />
-                    <Button Grid.Column="1"
-                            Content="瀏覽..."
-                            Command="{Binding BrowseEngineCommand}"
-                            Style="{StaticResource CompactButtonStyle}"
-                            Width="50" />
-                </Grid>
+                <!-- 無可用引擎時的提示 -->
+                <TextBlock Text="請先至 NNUE Tab 載入引擎"
+                           FontSize="11"
+                           Foreground="#C0392B"
+                           Margin="0,0,0,4"
+                           Visibility="{Binding HasNoEngines, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                 <!-- 連接 / 中斷 / 狀態 -->
                 <Grid Margin="0,0,0,4">

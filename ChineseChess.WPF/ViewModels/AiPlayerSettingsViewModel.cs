@@ -1,13 +1,13 @@
 using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Enums;
 using ChineseChess.Application.Interfaces;
-using ChineseChess.Infrastructure.AI.Protocol;
 using ChineseChess.Domain.Enums;
 using ChineseChess.WPF.Core;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -22,6 +22,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 {
     private readonly IGameService gameService;
     private readonly IEngineProvider engineProvider;
+    private readonly ILoadedEngineRegistry registry;
     private readonly IAiEngineFactory? engineFactory;
 
     // ─── 引擎類型 ─────────────────────────────────────────────────────────
@@ -32,9 +33,8 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     private InternalEvaluatorType evaluatorType = InternalEvaluatorType.Handcrafted;
     private string nnueModelPath = string.Empty;
 
-    // ─── 外部引擎設定 ──────────────────────────────────────────────────────
-    private string enginePath = string.Empty;
-    private EngineProtocol protocol = EngineProtocol.Ucci;
+    // ─── 外部引擎設定（從 Registry 選取）─────────────────────────────────
+    private string? selectedEngineId;
     private string engineStatus = "未啟用";
     private IExternalEngineAdapter? adapter;
 
@@ -63,15 +63,16 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         PieceColor color,
         IGameService gameService,
         IEngineProvider engineProvider,
+        ILoadedEngineRegistry loadedEngineRegistry,
         IAiEngineFactory? engineFactory = null)
     {
         Color = color;
         this.gameService = gameService ?? throw new ArgumentNullException(nameof(gameService));
         this.engineProvider = engineProvider ?? throw new ArgumentNullException(nameof(engineProvider));
+        this.registry = loadedEngineRegistry ?? throw new ArgumentNullException(nameof(loadedEngineRegistry));
         this.engineFactory = engineFactory;
 
-        BrowseEngineCommand = new RelayCommand(_ => BrowseEngine());
-        ApplyEngineCommand = new AsyncRelayCommand(async _ => await ApplyEngineAsync());
+        ApplyEngineCommand    = new AsyncRelayCommand(async _ => await ApplyEngineAsync());
         DisconnectEngineCommand = new RelayCommand(_ => DisconnectEngine());
         BrowseNnueModelCommand = new RelayCommand(_ => BrowseNnueModel());
         ApplyPikafishCommand = new AsyncRelayCommand(async _ =>
@@ -81,6 +82,8 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         });
         ClearHashCommand = new AsyncRelayCommand(async _ => await ClearHashAsync());
         BrowseEvalFileCommand = new RelayCommand(_ => BrowseEvalFile());
+
+        registry.EnginesChanged += OnRegistryEnginesChanged;
     }
 
     // ─── 唯讀識別 ─────────────────────────────────────────────────────────
@@ -167,28 +170,28 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     public bool NnueModelFileExists => !string.IsNullOrEmpty(nnueModelPath) && File.Exists(nnueModelPath);
 
-    // ─── 外部引擎：路徑與協議 ─────────────────────────────────────────────
+    // ─── 外部引擎：從 Registry 選取 ──────────────────────────────────────
 
-    public string EnginePath
+    /// <summary>可選的已載入引擎列表（由 Registry 提供）。</summary>
+    public IReadOnlyList<LoadedEngineInfo> AvailableEngines => registry.Engines;
+
+    /// <summary>是否沒有任何可選引擎（供「請至 NNUE Tab 載入引擎」提示用）。</summary>
+    public bool HasNoEngines => registry.Engines.Count == 0;
+
+    /// <summary>目前選取的引擎 ID（綁定 ComboBox SelectedValue）。</summary>
+    public string? SelectedEngineId
     {
-        get => enginePath;
+        get => selectedEngineId;
         set
         {
-            if (SetProperty(ref enginePath, value))
+            if (SetProperty(ref selectedEngineId, value))
             {
+                OnPropertyChanged(nameof(IsPikafish));
+                OnPropertyChanged(nameof(UciEloEnabled));
+                OnPropertyChanged(nameof(Rule60MaxPlyEnabled));
                 OnPropertyChanged(nameof(HasEngineConfig));
                 SettingsChanged?.Invoke();
             }
-        }
-    }
-
-    public EngineProtocol Protocol
-    {
-        get => protocol;
-        set
-        {
-            if (SetProperty(ref protocol, value))
-                SettingsChanged?.Invoke();
         }
     }
 
@@ -198,10 +201,14 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         set => SetProperty(ref engineStatus, value);
     }
 
-    public bool HasEngineConfig => !string.IsNullOrWhiteSpace(enginePath);
-    public bool IsPikafish => adapter?.IsPikafish ?? false;
+    /// <summary>是否已選取引擎（即可嘗試連接）。</summary>
+    public bool HasEngineConfig => !string.IsNullOrEmpty(selectedEngineId);
 
-    public IEnumerable<EngineProtocol> EngineProtocols => Enum.GetValues<EngineProtocol>();
+    /// <summary>目前選取的引擎是否為 Pikafish（影響 Pikafish 設定面板顯示）。</summary>
+    public bool IsPikafish => registry
+        .GetEngineInfo(selectedEngineId ?? string.Empty)
+        ?.EngineName.Contains("Pikafish", StringComparison.OrdinalIgnoreCase)
+        ?? false;
 
     // ─── Pikafish 設定 ─────────────────────────────────────────────────────
 
@@ -309,9 +316,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         private set
         {
             if (SetProperty(ref isTimedMode, value))
-            {
                 OnPropertyChanged(nameof(IsSearchTimeEditable));
-            }
         }
     }
 
@@ -334,7 +339,6 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     // ─── 命令 ─────────────────────────────────────────────────────────────
 
-    public ICommand BrowseEngineCommand { get; }
     public ICommand ApplyEngineCommand { get; }
     public ICommand DisconnectEngineCommand { get; }
     public ICommand BrowseNnueModelCommand { get; }
@@ -365,7 +369,6 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     /// <summary>套用難度預設（新手、業餘、進階、專家）。</summary>
     public void ApplyPreset(int depth, int timeSec)
     {
-        // 直接設定 backing fields 避免多次觸發 SyncDifficultyToService
         SetProperty(ref searchDepth, Math.Clamp(depth, 1, 10), nameof(SearchDepth));
         SetProperty(ref searchTimeSeconds, Math.Clamp(timeSec, 1, 120), nameof(SearchTimeSeconds));
         SyncDifficultyToService();
@@ -379,7 +382,6 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
         if (engineType == AiEngineType.External && adapter != null)
         {
-            // 外部引擎模式
             if (Color == PieceColor.Red)
                 engineProvider.SetRedExternalEngine(adapter);
             else
@@ -387,7 +389,6 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         }
         else
         {
-            // 內部引擎模式：清除外部引擎
             if (Color == PieceColor.Red)
                 engineProvider.SetRedExternalEngine(null);
             else
@@ -406,15 +407,27 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         bool isRed = Color == PieceColor.Red;
 
         // 還原引擎類型、搜索深度、時間、評估器、NNUE 路徑
-        engineType = isRed ? saved.RedAiEngineType : saved.BlackAiEngineType;
-        searchDepth = isRed ? saved.RedSearchDepth : saved.BlackSearchDepth;
-        searchTimeSeconds = isRed ? saved.RedSearchTimeSeconds : saved.BlackSearchTimeSeconds;
-        evaluatorType = isRed ? saved.RedEvaluatorType : saved.BlackEvaluatorType;
-        nnueModelPath = isRed ? saved.RedNnueModelPath : saved.BlackNnueModelPath;
+        engineType         = isRed ? saved.RedAiEngineType    : saved.BlackAiEngineType;
+        searchDepth        = isRed ? saved.RedSearchDepth     : saved.BlackSearchDepth;
+        searchTimeSeconds  = isRed ? saved.RedSearchTimeSeconds : saved.BlackSearchTimeSeconds;
+        evaluatorType      = isRed ? saved.RedEvaluatorType   : saved.BlackEvaluatorType;
+        nnueModelPath      = isRed ? saved.RedNnueModelPath   : saved.BlackNnueModelPath;
 
-        // 還原外部引擎設定
-        enginePath = isRed ? saved.RedEnginePath : saved.BlackEnginePath;
-        protocol = isRed ? saved.RedProtocol : saved.BlackProtocol;
+        // 還原選取的引擎 ID（新版）
+        selectedEngineId = isRed ? saved.RedEngineId : saved.BlackEngineId;
+
+        // 向後相容：舊版只有路徑，嘗試在 Registry 中比對
+        if (selectedEngineId == null)
+        {
+            var legacyPath = isRed ? saved.RedEnginePath : saved.BlackEnginePath;
+            if (!string.IsNullOrEmpty(legacyPath))
+            {
+                selectedEngineId = registry.Engines
+                    .FirstOrDefault(e => string.Equals(
+                        e.ExecutablePath, legacyPath, StringComparison.OrdinalIgnoreCase))
+                    ?.Id;
+            }
+        }
 
         // 還原 Pikafish 設定
         var pf = isRed ? saved.RedPikafish : saved.BlackPikafish;
@@ -426,32 +439,37 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     /// <summary>將目前完整狀態快照至設定物件（供持久化使用）。</summary>
     public void CaptureToSettings(ExternalEngineSettings target)
     {
-        bool isRed = Color == PieceColor.Red;
+        bool isRed      = Color == PieceColor.Red;
         bool useExternal = engineType == AiEngineType.External;
+
+        // 向後相容：同步寫入路徑欄位，方便舊版 code 讀取（新版優先讀 RedEngineId）
+        var engineInfo = selectedEngineId != null ? registry.GetEngineInfo(selectedEngineId) : null;
 
         if (isRed)
         {
-            target.RedAiEngineType = engineType;
-            target.RedSearchDepth = searchDepth;
-            target.RedSearchTimeSeconds = searchTimeSeconds;
-            target.RedEvaluatorType = evaluatorType;
-            target.RedNnueModelPath = nnueModelPath;
-            target.UseRedExternalEngine = useExternal;
-            target.RedEnginePath = enginePath;
-            target.RedProtocol = protocol;
-            target.RedPikafish = CapturePikafishSettings();
+            target.RedAiEngineType       = engineType;
+            target.RedSearchDepth        = searchDepth;
+            target.RedSearchTimeSeconds  = searchTimeSeconds;
+            target.RedEvaluatorType      = evaluatorType;
+            target.RedNnueModelPath      = nnueModelPath;
+            target.UseRedExternalEngine  = useExternal;
+            target.RedEngineId           = selectedEngineId;
+            target.RedEnginePath         = engineInfo?.ExecutablePath ?? string.Empty;
+            target.RedProtocol           = engineInfo?.Protocol ?? EngineProtocol.Ucci;
+            target.RedPikafish           = CapturePikafishSettings();
         }
         else
         {
-            target.BlackAiEngineType = engineType;
-            target.BlackSearchDepth = searchDepth;
+            target.BlackAiEngineType      = engineType;
+            target.BlackSearchDepth       = searchDepth;
             target.BlackSearchTimeSeconds = searchTimeSeconds;
-            target.BlackEvaluatorType = evaluatorType;
-            target.BlackNnueModelPath = nnueModelPath;
+            target.BlackEvaluatorType     = evaluatorType;
+            target.BlackNnueModelPath     = nnueModelPath;
             target.UseBlackExternalEngine = useExternal;
-            target.BlackEnginePath = enginePath;
-            target.BlackProtocol = protocol;
-            target.BlackPikafish = CapturePikafishSettings();
+            target.BlackEngineId          = selectedEngineId;
+            target.BlackEnginePath        = engineInfo?.ExecutablePath ?? string.Empty;
+            target.BlackProtocol          = engineInfo?.Protocol ?? EngineProtocol.Ucci;
+            target.BlackPikafish          = CapturePikafishSettings();
         }
     }
 
@@ -466,63 +484,41 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
             gameService.SetBlackAiDifficulty(searchDepth, timeMs);
     }
 
-    private void BrowseEngine()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Title = $"選擇{DisplayName}引擎",
-            Filter = "可執行檔|*.exe|所有檔案|*.*"
-        };
-        if (dialog.ShowDialog() == true)
-            EnginePath = dialog.FileName;
-    }
-
     private async Task ApplyEngineAsync()
     {
-        if (string.IsNullOrWhiteSpace(enginePath))
+        if (string.IsNullOrEmpty(selectedEngineId))
         {
-            EngineStatus = "請先選擇引擎執行檔";
+            EngineStatus = "請先至 NNUE Tab 選擇引擎";
             return;
         }
 
-        EngineStatus = "初始化中...";
-
-        var newAdapter = new ExternalEngineAdapter(enginePath, protocol);
-        try
+        var activeAdapter = registry.GetActiveAdapter(selectedEngineId);
+        if (activeAdapter == null)
         {
-            using var cts = new CancellationTokenSource(10_000);
-            await newAdapter.InitializeAsync(cts.Token);
-
-            // 設定成功：替換 adapter（先 Dispose 舊的，避免洩漏子進程）
-            var oldAdapter = adapter;
-            adapter = newAdapter;
-            if (oldAdapter != null && !ReferenceEquals(oldAdapter, newAdapter))
-                (oldAdapter as IDisposable)?.Dispose();
-            OnPropertyChanged(nameof(IsPikafish));
-            OnPropertyChanged(nameof(UciEloEnabled));
-            OnPropertyChanged(nameof(Rule60MaxPlyEnabled));
-
-            EngineStatus = newAdapter.IsPikafish
-                ? $"已載入（{newAdapter.EngineName}）"
-                : $"已載入（{protocol}）";
-
-            // 自動切換至外部引擎模式（直接設 backing field 避免 setter 重複觸發）
-            engineType = AiEngineType.External;
-            OnPropertyChanged(nameof(EngineType));
-            OnPropertyChanged(nameof(IsInternalEngine));
-            OnPropertyChanged(nameof(IsExternalEngine));
-
-            if (newAdapter.IsPikafish)
-                await ApplyPikafishSettingsAsync();
-
-            SyncToService();
-            SettingsChanged?.Invoke();
+            EngineStatus = "引擎尚未連線，請至 NNUE Tab 重新載入";
+            return;
         }
-        catch (Exception ex)
-        {
-            newAdapter.Dispose();
-            EngineStatus = $"初始化失敗：{ex.Message}";
-        }
+
+        adapter = activeAdapter;
+
+        OnPropertyChanged(nameof(IsPikafish));
+        OnPropertyChanged(nameof(UciEloEnabled));
+        OnPropertyChanged(nameof(Rule60MaxPlyEnabled));
+
+        var info = registry.GetEngineInfo(selectedEngineId);
+        EngineStatus = $"已連接：{info?.DisplayName ?? activeAdapter.EngineName}";
+
+        // 自動切換至外部引擎模式
+        engineType = AiEngineType.External;
+        OnPropertyChanged(nameof(EngineType));
+        OnPropertyChanged(nameof(IsInternalEngine));
+        OnPropertyChanged(nameof(IsExternalEngine));
+
+        if (activeAdapter.IsPikafish)
+            await ApplyPikafishSettingsAsync();
+
+        SyncToService();
+        SettingsChanged?.Invoke();
     }
 
     private void DisconnectEngine()
@@ -532,13 +528,13 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         else
             engineProvider.SetBlackExternalEngine(null);
 
-        adapter = null;
+        adapter = null;  // 不 Dispose，由 Registry 管理
         EngineStatus = "已中斷連線";
         OnPropertyChanged(nameof(IsPikafish));
         OnPropertyChanged(nameof(UciEloEnabled));
         OnPropertyChanged(nameof(Rule60MaxPlyEnabled));
 
-        // 自動切換回內部引擎（直接設 backing field 避免 setter 重複觸發）
+        // 切換回內部引擎模式
         engineType = AiEngineType.Internal;
         OnPropertyChanged(nameof(EngineType));
         OnPropertyChanged(nameof(IsInternalEngine));
@@ -547,26 +543,52 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         SettingsChanged?.Invoke();
     }
 
+    private void OnRegistryEnginesChanged()
+    {
+        // EnginesChanged 可能由背景執行緒觸發，dispatch 至 UI 執行緒
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            // 若選取的引擎已被移除，自動清除選取並斷線
+            if (selectedEngineId != null && registry.GetEngineInfo(selectedEngineId) == null)
+            {
+                selectedEngineId = null;
+                adapter = null;
+                if (engineType == AiEngineType.External)
+                {
+                    engineType = AiEngineType.Internal;
+                    SyncToService();
+                }
+                EngineStatus = "已選引擎已被卸載";
+                NotifyAllPropertiesChanged();
+            }
+            else
+            {
+                OnPropertyChanged(nameof(AvailableEngines));
+                OnPropertyChanged(nameof(HasNoEngines));
+            }
+        });
+    }
+
     private async Task ApplyPikafishSettingsAsync()
     {
         if (adapter == null) return;
         await SendPikafishOptionsToAdapterAsync(adapter, CapturePikafishSettings());
     }
 
-    private static async Task SendPikafishOptionsToAdapterAsync(IExternalEngineAdapter adapter, PikafishSettings s)
+    private static async Task SendPikafishOptionsToAdapterAsync(IExternalEngineAdapter adpt, PikafishSettings s)
     {
-        await adapter.SendOptionAsync("MultiPV", s.MultiPv.ToString());
-        await adapter.SendOptionAsync("Skill Level", s.SkillLevel.ToString());
-        await adapter.SendOptionAsync("UCI_LimitStrength", s.UciLimitStrength ? "true" : "false");
-        await adapter.SendOptionAsync("UCI_Elo", s.UciElo.ToString());
-        await adapter.SendOptionAsync("Sixty Move Rule", s.SixtyMoveRule ? "true" : "false");
-        await adapter.SendOptionAsync("Rule60MaxPly", s.Rule60MaxPly.ToString());
-        await adapter.SendOptionAsync("MateThreatDepth", s.MateThreatDepth.ToString());
-        await adapter.SendOptionAsync("ScoreType", s.ScoreType.ToString());
-        await adapter.SendOptionAsync("LU_Output", s.LuOutput ? "true" : "false");
-        await adapter.SendOptionAsync("DrawRule", s.DrawRule.ToString());
+        await adpt.SendOptionAsync("MultiPV", s.MultiPv.ToString());
+        await adpt.SendOptionAsync("Skill Level", s.SkillLevel.ToString());
+        await adpt.SendOptionAsync("UCI_LimitStrength", s.UciLimitStrength ? "true" : "false");
+        await adpt.SendOptionAsync("UCI_Elo", s.UciElo.ToString());
+        await adpt.SendOptionAsync("Sixty Move Rule", s.SixtyMoveRule ? "true" : "false");
+        await adpt.SendOptionAsync("Rule60MaxPly", s.Rule60MaxPly.ToString());
+        await adpt.SendOptionAsync("MateThreatDepth", s.MateThreatDepth.ToString());
+        await adpt.SendOptionAsync("ScoreType", s.ScoreType.ToString());
+        await adpt.SendOptionAsync("LU_Output", s.LuOutput ? "true" : "false");
+        await adpt.SendOptionAsync("DrawRule", s.DrawRule.ToString());
         if (!string.IsNullOrWhiteSpace(s.EvalFile))
-            await adapter.SendOptionAsync("EvalFile", s.EvalFile);
+            await adpt.SendOptionAsync("EvalFile", s.EvalFile);
     }
 
     private async Task ClearHashAsync()
@@ -579,7 +601,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     {
         var dialog = new OpenFileDialog
         {
-            Title = $"選取{DisplayName} NNUE 模型檔",
+            Title  = $"選取{DisplayName} NNUE 模型檔",
             Filter = "NNUE 模型 (*.nnue)|*.nnue|所有檔案|*.*",
         };
         if (dialog.ShowDialog() == true)
@@ -590,7 +612,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     {
         var dialog = new OpenFileDialog
         {
-            Title = $"選擇{DisplayName} EvalFile",
+            Title  = $"選擇{DisplayName} EvalFile",
             Filter = "NNUE 評估檔|*.nnue|所有檔案|*.*"
         };
         if (dialog.ShowDialog() == true)
@@ -599,32 +621,32 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     private PikafishSettings CapturePikafishSettings() => new()
     {
-        MultiPv = multiPv,
-        SkillLevel = skillLevel,
+        MultiPv          = multiPv,
+        SkillLevel       = skillLevel,
         UciLimitStrength = uciLimitStrength,
-        UciElo = uciElo,
-        SixtyMoveRule = sixtyMoveRule,
-        Rule60MaxPly = rule60MaxPly,
-        MateThreatDepth = mateThreatDepth,
-        ScoreType = scoreType,
-        LuOutput = luOutput,
-        DrawRule = drawRule,
-        EvalFile = evalFile
+        UciElo           = uciElo,
+        SixtyMoveRule    = sixtyMoveRule,
+        Rule60MaxPly     = rule60MaxPly,
+        MateThreatDepth  = mateThreatDepth,
+        ScoreType        = scoreType,
+        LuOutput         = luOutput,
+        DrawRule         = drawRule,
+        EvalFile         = evalFile
     };
 
     private void RestorePikafishSettings(PikafishSettings pf)
     {
-        multiPv = pf.MultiPv;
-        skillLevel = pf.SkillLevel;
+        multiPv          = pf.MultiPv;
+        skillLevel       = pf.SkillLevel;
         uciLimitStrength = pf.UciLimitStrength;
-        uciElo = pf.UciElo;
-        sixtyMoveRule = pf.SixtyMoveRule;
-        rule60MaxPly = pf.Rule60MaxPly;
-        mateThreatDepth = pf.MateThreatDepth;
-        scoreType = pf.ScoreType;
-        luOutput = pf.LuOutput;
-        drawRule = pf.DrawRule;
-        evalFile = pf.EvalFile;
+        uciElo           = pf.UciElo;
+        sixtyMoveRule    = pf.SixtyMoveRule;
+        rule60MaxPly     = pf.Rule60MaxPly;
+        mateThreatDepth  = pf.MateThreatDepth;
+        scoreType        = pf.ScoreType;
+        luOutput         = pf.LuOutput;
+        drawRule         = pf.DrawRule;
+        evalFile         = pf.EvalFile;
     }
 
     /// <summary>通知所有屬性已變更（WPF 慣例：傳入空字串表示全部重新綁定）。</summary>
@@ -633,7 +655,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     /// <summary>啟動時自動連接已設定的外部引擎。</summary>
     public async Task AutoConnectIfNeededAsync()
     {
-        if (engineType == AiEngineType.External && !string.IsNullOrWhiteSpace(enginePath))
+        if (engineType == AiEngineType.External && !string.IsNullOrEmpty(selectedEngineId))
         {
             try
             {
@@ -649,10 +671,6 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     // ─── 每方獨立 NNUE 引擎支援 ──────────────────────────────────────────
 
-    /// <summary>
-    /// 套用目前的評估器設定至 EngineProvider。
-    /// 需在兩方都設定完畢後由父 ViewModel 統一呼叫一次 EngineProvider.ApplyPerPlayerNnueAsync。
-    /// </summary>
     public NnueEngineConfig? BuildNnueConfig()
     {
         if (engineType != AiEngineType.Internal)
@@ -664,7 +682,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
         return new NnueEngineConfig
         {
-            ModelFilePath = nnueModelPath,
+            ModelFilePath  = nnueModelPath,
             EvaluationMode = NnueEvaluationMode.Composite,
         };
     }
@@ -673,7 +691,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        (adapter as IDisposable)?.Dispose();
-        adapter = null;
+        registry.EnginesChanged -= OnRegistryEnginesChanged;
+        adapter = null;  // adapter 由 Registry 管理，不在此 Dispose
     }
 }

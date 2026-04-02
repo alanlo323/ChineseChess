@@ -34,9 +34,20 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
     private bool initialized;
     private bool disposed;
     private string engineName = string.Empty;
+    private string engineAuthor = string.Empty;
+    private int? eloRating;
 
     /// <summary>握手後解析到的引擎名稱（如 "Pikafish 2026-01-02"）。</summary>
     public string EngineName => engineName;
+
+    /// <summary>握手後解析到的引擎作者。</summary>
+    public string EngineAuthor => engineAuthor;
+
+    /// <summary>握手後解析到的預設 ELO（來自 UCI_Elo option 的 default 值）。</summary>
+    public int? EloRating => eloRating;
+
+    /// <summary>建構時指定的引擎協議。</summary>
+    public EngineProtocol DetectedProtocol => protocol;
 
     /// <summary>引擎是否為 Pikafish（大小寫不敏感）。</summary>
     public bool IsPikafish => engineName.Contains("Pikafish", StringComparison.OrdinalIgnoreCase);
@@ -50,6 +61,36 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
     {
         this.executablePath = executablePath ?? throw new ArgumentNullException(nameof(executablePath));
         this.protocol = protocol;
+    }
+
+    // ─── 靜態 Factory：自動偵測協議（UCCI 優先）────────────────────────────
+
+    /// <summary>
+    /// 自動偵測協議並連線：先嘗試 UCCI（5 秒超時），失敗則嘗試 UCI。
+    /// 成功返回已初始化的 adapter；兩者都失敗則拋出最後一個例外。
+    /// UCCI 優先是因為本專案主要支援中國象棋引擎（如 Pikafish），預設使用 UCCI 協議。
+    /// </summary>
+    public static async Task<ExternalEngineAdapter> DetectAndConnectAsync(
+        string executablePath, CancellationToken ct = default)
+    {
+        // 嘗試 UCCI
+        var ucciAdapter = new ExternalEngineAdapter(executablePath, EngineProtocol.Ucci);
+        try
+        {
+            using var ucciCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            ucciCts.CancelAfter(TimeSpan.FromSeconds(5));
+            await ucciAdapter.InitializeAsync(ucciCts.Token);
+            return ucciAdapter;
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            ucciAdapter.Dispose();
+        }
+
+        // 嘗試 UCI
+        var uciAdapter = new ExternalEngineAdapter(executablePath, EngineProtocol.Uci);
+        await uciAdapter.InitializeAsync(ct);
+        return uciAdapter;
     }
 
     // ─── 初始化 ───────────────────────────────────────────────────────────
@@ -288,6 +329,19 @@ public sealed class ExternalEngineAdapter : IExternalEngineAdapter, IDisposable
         {
             if (line.StartsWith("id name ", StringComparison.Ordinal))
                 engineName = line["id name ".Length..].Trim();
+
+            if (line.StartsWith("id author ", StringComparison.Ordinal))
+                engineAuthor = line["id author ".Length..].Trim();
+
+            // 解析 UCI_Elo：取 "option name UCI_Elo type spin default <N>" 中的 default 值
+            if (line.StartsWith("option name UCI_Elo ", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = line.Split(' ');
+                int defaultIdx = Array.IndexOf(parts, "default");
+                if (defaultIdx >= 0 && defaultIdx + 1 < parts.Length
+                    && int.TryParse(parts[defaultIdx + 1], out int elo))
+                    eloRating = elo;
+            }
         });
 
     /// <summary>向引擎發送 setoption name X value Y 命令。</summary>

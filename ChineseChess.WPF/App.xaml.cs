@@ -120,12 +120,22 @@ public partial class App : System.Windows.Application
         // 必須使用 Singleton（非 Transient），防止 Singleton NnueViewModel 的 Lazy<> 欄位
         // 每次解析到不同實例，導致 IDisposable 逸出（Captive Dependency 問題）。
         services.AddSingleton<NnueTrainingViewModel>();
+        // 已載入引擎的持久化服務與 Registry
+        services.AddSingleton<ILoadedEngineListSettingsService, JsonLoadedEngineListSettingsService>();
+        services.AddSingleton<ILoadedEngineRegistry>(sp =>
+            new LoadedEngineRegistry(
+                sp.GetRequiredService<ILoadedEngineListSettingsService>(),
+                sp.GetRequiredService<IEngineProvider>()));
+        services.AddSingleton<LoadedEngineListViewModel>(sp =>
+            new LoadedEngineListViewModel(sp.GetRequiredService<ILoadedEngineRegistry>()));
+
         services.AddSingleton<NnueViewModel>(sp =>
             new NnueViewModel(
                 sp.GetRequiredService<INnueNetwork>(),
                 sp.GetRequiredService<INnueSettingsService>(),
                 sp.GetRequiredService<IEngineProvider>(),
-                new Lazy<NnueTrainingViewModel>(() => sp.GetRequiredService<NnueTrainingViewModel>())));
+                new Lazy<NnueTrainingViewModel>(() => sp.GetRequiredService<NnueTrainingViewModel>()),
+                sp.GetRequiredService<LoadedEngineListViewModel>()));
         services.AddSingleton<EndgameTablebViewModel>(sp =>
             new EndgameTablebViewModel(
                 sp.GetRequiredService<ITablebaseService>(),
@@ -145,14 +155,15 @@ public partial class App : System.Windows.Application
         // Per-player AI 設定 ViewModel（紅方 / 黑方各一個實例，透過 Holder 包裝以便 DI 解析）
         services.AddSingleton(sp =>
         {
-            var gameService = sp.GetRequiredService<IGameService>();
+            var gameService    = sp.GetRequiredService<IGameService>();
             var engineProvider = sp.GetRequiredService<IEngineProvider>();
-            var engineFactory = sp.GetRequiredService<IAiEngineFactory>();
+            var engineFactory  = sp.GetRequiredService<IAiEngineFactory>();
+            var registry       = sp.GetRequiredService<ILoadedEngineRegistry>();
             return new AiPlayerSettingsHolder(
                 new AiPlayerSettingsViewModel(
-                    Domain.Enums.PieceColor.Red, gameService, engineProvider, engineFactory),
+                    Domain.Enums.PieceColor.Red, gameService, engineProvider, registry, engineFactory),
                 new AiPlayerSettingsViewModel(
-                    Domain.Enums.PieceColor.Black, gameService, engineProvider, engineFactory));
+                    Domain.Enums.PieceColor.Black, gameService, engineProvider, registry, engineFactory));
         });
 
         services.AddTransient<ControlPanelViewModel>(sp =>

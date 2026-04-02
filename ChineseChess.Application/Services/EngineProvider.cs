@@ -42,13 +42,13 @@ public sealed class EngineProvider : IEngineProvider, IDisposable
 
     public void SetRedExternalEngine(IAiEngine? engine)
     {
-        DisposeIfDifferent(redExternal, engine);
+        // 不 Dispose 舊引擎：外部引擎的生命週期由 LoadedEngineRegistry 管理
         redExternal = engine;
     }
 
     public void SetBlackExternalEngine(IAiEngine? engine)
     {
-        DisposeIfDifferent(blackExternal, engine);
+        // 不 Dispose 舊引擎：外部引擎的生命週期由 LoadedEngineRegistry 管理
         blackExternal = engine;
     }
 
@@ -88,11 +88,13 @@ public sealed class EngineProvider : IEngineProvider, IDisposable
 
     // ─── IDisposable ──────────────────────────────────────────────────────
 
-    /// <summary>釋放外部引擎與每方 NNUE 引擎資源（builtinEngine 由 DI 容器管理，不在此 Dispose）。</summary>
+    /// <summary>
+    /// 釋放每方 NNUE 引擎資源。
+    /// 外部引擎（redExternal / blackExternal）由 LoadedEngineRegistry 管理，不在此 Dispose。
+    /// builtinEngine 由 DI 容器管理，不在此 Dispose。
+    /// </summary>
     public void Dispose()
     {
-        (redExternal as IDisposable)?.Dispose();
-        (blackExternal as IDisposable)?.Dispose();
         (redNnueBuiltin as IDisposable)?.Dispose();
         (blackNnueBuiltin as IDisposable)?.Dispose();
     }

@@ -41,4 +41,9 @@ public class ExternalEngineSettings
     public int BlackSearchTimeSeconds { get; set; } = 3;
     public InternalEvaluatorType BlackEvaluatorType { get; set; } = InternalEvaluatorType.Handcrafted;
     public string BlackNnueModelPath { get; set; } = string.Empty;
+
+    // ─── 已載入引擎 ID（新版：從引擎登錄選取）────────────────────────────
+    // null = 尚未選取或使用舊版路徑方式（向後相容）
+    public string? RedEngineId { get; set; } = null;
+    public string? BlackEngineId { get; set; } = null;
 }

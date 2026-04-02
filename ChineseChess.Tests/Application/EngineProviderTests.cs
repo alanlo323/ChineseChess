@@ -131,11 +131,13 @@ public class EngineProviderTests
         Assert.False(provider.IsBlackExternal);
     }
 
-    // ─── 替換時舊引擎被 Dispose ───────────────────────────────────────────
+    // ─── 替換時舊引擎不被 Dispose（生命週期由 LoadedEngineRegistry 管理）────
 
     [Fact]
-    public void SetRedExternalEngine_WhenReplacing_DisposesOldEngine()
+    public void SetRedExternalEngine_WhenReplacing_DoesNotDisposeOldEngine()
     {
+        // EngineProvider 不再擁有外部引擎生命週期，改由 LoadedEngineRegistry 負責。
+        // 替換時舊引擎不應被 EngineProvider Dispose，以免 registry 持有 dead reference。
         var builtin  = new FakeEngine();
         var first    = new FakeEngine();
         var second   = new FakeEngine();
@@ -144,12 +146,12 @@ public class EngineProviderTests
         provider.SetRedExternalEngine(first);
         provider.SetRedExternalEngine(second);
 
-        Assert.True(first.Disposed,   "舊引擎應被 Dispose");
+        Assert.False(first.Disposed,  "外部引擎應由 Registry 管理，EngineProvider 不應 Dispose");
         Assert.False(second.Disposed, "新引擎不應被 Dispose");
     }
 
     [Fact]
-    public void SetBlackExternalEngine_WhenReplacing_DisposesOldEngine()
+    public void SetBlackExternalEngine_WhenReplacing_DoesNotDisposeOldEngine()
     {
         var builtin  = new FakeEngine();
         var first    = new FakeEngine();
@@ -159,7 +161,7 @@ public class EngineProviderTests
         provider.SetBlackExternalEngine(first);
         provider.SetBlackExternalEngine(second);
 
-        Assert.True(first.Disposed);
-        Assert.False(second.Disposed);
+        Assert.False(first.Disposed,  "外部引擎應由 Registry 管理，EngineProvider 不應 Dispose");
+        Assert.False(second.Disposed, "新引擎不應被 Dispose");
     }
 }
