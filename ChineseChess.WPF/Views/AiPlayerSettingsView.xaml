@@ -148,26 +148,19 @@
                            Margin="0,0,0,4"
                            Visibility="{Binding HasNoEngines, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                <!-- 連接 / 中斷 / 狀態 -->
+                <!-- 中斷 / 狀態（選取引擎後自動連線）-->
                 <Grid Margin="0,0,0,4">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0"
-                            Content="連接引擎"
-                            Command="{Binding ApplyEngineCommand}"
-                            Style="{StaticResource CompactButtonStyle}"
-                            Width="70"
-                            Margin="0,0,6,0" />
-                    <Button Grid.Column="1"
                             Content="中斷"
                             Command="{Binding DisconnectEngineCommand}"
                             Style="{StaticResource CompactButtonStyle}"
                             Width="44"
                             Margin="0,0,8,0" />
-                    <TextBlock Grid.Column="2"
+                    <TextBlock Grid.Column="1"
                                Text="{Binding EngineStatus}"
                                Style="{StaticResource StatusTextStyle}"
                                VerticalAlignment="Center"

@@ -193,6 +193,8 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(Rule60MaxPlyEnabled));
                 OnPropertyChanged(nameof(HasEngineConfig));
                 SettingsChanged?.Invoke();
+                // 選取引擎後自動連線，免去手動按「連接引擎」
+                _ = ApplyEngineAsync();
             }
         }
     }
