@@ -4,8 +4,14 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vm="clr-namespace:ChineseChess.WPF.ViewModels"
+             xmlns:converters="clr-namespace:ChineseChess.WPF.Converters"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:AiPlayerSettingsViewModel}">
+
+    <UserControl.Resources>
+        <converters:AiEngineTypeDisplayConverter x:Key="AiEngineTypeDisplayConverter" />
+        <converters:InternalEvaluatorTypeDisplayConverter x:Key="InternalEvaluatorTypeDisplayConverter" />
+    </UserControl.Resources>
 
     <Border BorderBrush="{StaticResource WoodDarkBrush}"
             BorderThickness="1"
@@ -33,7 +39,13 @@
                 <ComboBox Grid.Column="1"
                           ItemsSource="{Binding EngineTypes}"
                           SelectedItem="{Binding EngineType}"
-                          Style="{StaticResource InputControlStyle}" />
+                          Style="{StaticResource InputControlStyle}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Converter={StaticResource AiEngineTypeDisplayConverter}}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </Grid>
 
             <!-- ═══════════════════════════════════════════════════ -->
@@ -78,7 +90,13 @@
                     <ComboBox Grid.Column="1"
                               ItemsSource="{Binding EvaluatorTypes}"
                               SelectedItem="{Binding EvaluatorType}"
-                              Style="{StaticResource InputControlStyle}" />
+                              Style="{StaticResource InputControlStyle}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Converter={StaticResource InternalEvaluatorTypeDisplayConverter}}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                 </Grid>
 
                 <!-- NNUE 模型路徑（EvaluatorType == Nnue 時顯示） -->
