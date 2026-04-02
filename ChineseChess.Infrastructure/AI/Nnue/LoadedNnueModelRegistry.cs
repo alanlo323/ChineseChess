@@ -19,9 +19,11 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
     private readonly ILoadedNnueModelListSettingsService settingsService;
 
     private readonly Dictionary<string, LoadedNnueModelInfo> models = [];
-    // NnueWeights 是不可變的 init-only 物件，多個 NnueNetwork 可安全共享同一實例
+    // NnueWeights 的屬性引用為 init-only；目前所有消費者均為唯讀存取，可安全共享。
+    // 注意：陣列內容本身不受 init 保護，勿對 NnueWeights 的陣列欄位執行寫入。
     private readonly Dictionary<string, NnueWeights> weightsCache = [];
     private readonly object modelsLock = new();
+    private readonly CancellationTokenSource disposeCts = new();
     private bool disposed;
 
     public event Action? ModelsChanged;
@@ -38,8 +40,8 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
                 models[info.Id] = info with { FilePath = Path.GetFullPath(info.FilePath) };
         }
 
-        // 背景預載所有已儲存模型的權重
-        _ = AutoLoadAllAsync().ContinueWith(
+        // 背景預載所有已儲存模型的權重（disposeCts 用於 Dispose 時取消）
+        _ = AutoLoadAllAsync(disposeCts.Token).ContinueWith(
             t => Trace.TraceError($"AutoLoadAllAsync 發生未預期錯誤：{t.Exception}"),
             TaskContinuationOptions.OnlyOnFaulted);
     }
@@ -86,6 +88,9 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
 
         lock (modelsLock)
         {
+            // 在 insert lock 內再檢查一次，防止並發呼叫繞過上方的快速檢查（TOCTOU）
+            if (models.Values.Any(m => string.Equals(m.FilePath, canonical, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"模型已載入：{Path.GetFileName(filePath)}");
             models[info.Id] = info;
             weightsCache[canonical] = weights;
         }
@@ -149,6 +154,9 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         if (disposed) return;
         disposed = true;
 
+        disposeCts.Cancel();
+        disposeCts.Dispose();
+
         lock (modelsLock)
         {
             models.Clear();
@@ -168,7 +176,7 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
             settingsService.SaveSettings(new LoadedNnueModelListSettings { Models = snapshot }));
     }
 
-    private async Task AutoLoadAllAsync()
+    private async Task AutoLoadAllAsync(CancellationToken ct)
     {
         List<(string id, LoadedNnueModelInfo info)> toLoad;
         lock (modelsLock)
@@ -183,13 +191,17 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
             try
             {
                 var weights = await Task.Run(
-                    () => NnueFileFormat.LoadWeights(item.info.FilePath)).ConfigureAwait(false);
+                    () => NnueFileFormat.LoadWeights(item.info.FilePath), ct).ConfigureAwait(false);
                 lock (modelsLock)
                 {
                     if (models.ContainsKey(item.id))
                         weightsCache[item.info.FilePath] = weights;
                 }
                 return true;
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
             }
             catch (Exception ex)
             {
@@ -199,7 +211,7 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         });
 
         var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-        if (Array.Exists(results, r => r))
+        if (!ct.IsCancellationRequested && Array.Exists(results, r => r))
             ModelsChanged?.Invoke();
     }
 }
