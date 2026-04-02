@@ -33,8 +33,9 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         var saved = settingsService.LoadSettings();
         lock (modelsLock)
         {
+            // 規範化路徑於載入時完成，後續操作無需再呼叫 Path.GetFullPath
             foreach (var info in saved.Models)
-                models[info.Id] = info;
+                models[info.Id] = info with { FilePath = Path.GetFullPath(info.FilePath) };
         }
 
         // 背景預載所有已儲存模型的權重
@@ -64,7 +65,7 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         lock (modelsLock)
         {
             if (models.Values.Any(m => string.Equals(
-                    Path.GetFullPath(m.FilePath), canonical, StringComparison.OrdinalIgnoreCase)))
+                    m.FilePath, canonical, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException($"模型已載入：{Path.GetFileName(filePath)}");
         }
 
@@ -89,7 +90,7 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
             weightsCache[canonical] = weights;
         }
 
-        PersistModels();
+        _ = PersistModelsAsync();
         ModelsChanged?.Invoke();
         return info;
     }
@@ -104,15 +105,14 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
 
             models.Remove(modelId);
 
-            var canonical = Path.GetFullPath(info.FilePath);
-            // 若沒有其他模型仍指向同一路徑，才移除快取
+            // 路徑已於存入時規範化，無需再呼叫 Path.GetFullPath
             bool stillUsed = models.Values.Any(m =>
-                string.Equals(Path.GetFullPath(m.FilePath), canonical, StringComparison.OrdinalIgnoreCase));
+                string.Equals(m.FilePath, info.FilePath, StringComparison.OrdinalIgnoreCase));
             if (!stillUsed)
-                weightsCache.Remove(canonical);
+                weightsCache.Remove(info.FilePath);
         }
 
-        PersistModels();
+        _ = PersistModelsAsync();
         ModelsChanged?.Invoke();
     }
 
@@ -127,7 +127,7 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         lock (modelsLock)
         {
             if (!models.TryGetValue(modelId, out var info)) return false;
-            return weightsCache.ContainsKey(Path.GetFullPath(info.FilePath));
+            return weightsCache.ContainsKey(info.FilePath);
         }
     }
 
@@ -140,7 +140,7 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         lock (modelsLock)
         {
             if (!models.TryGetValue(modelId, out var info)) return null;
-            return weightsCache.GetValueOrDefault(Path.GetFullPath(info.FilePath));
+            return weightsCache.GetValueOrDefault(info.FilePath);
         }
     }
 
@@ -158,13 +158,14 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
 
     // ── 私有輔助 ──────────────────────────────────────────────────────────
 
-    private void PersistModels()
+    private Task PersistModelsAsync()
     {
         List<LoadedNnueModelInfo> snapshot;
         lock (modelsLock)
             snapshot = models.Values.ToList();
 
-        settingsService.SaveSettings(new LoadedNnueModelListSettings { Models = snapshot });
+        return Task.Run(() =>
+            settingsService.SaveSettings(new LoadedNnueModelListSettings { Models = snapshot }));
     }
 
     private async Task AutoLoadAllAsync()
@@ -172,33 +173,33 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         List<(string id, LoadedNnueModelInfo info)> toLoad;
         lock (modelsLock)
             toLoad = models
-                .Where(kv => !weightsCache.ContainsKey(Path.GetFullPath(kv.Value.FilePath)))
+                .Where(kv => !weightsCache.ContainsKey(kv.Value.FilePath))
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList();
 
-        bool anyLoaded = false;
-        foreach (var (id, info) in toLoad)
+        // 並行載入所有模型（各 ~17MB 的獨立 I/O，無競爭）
+        var tasks = toLoad.Select(async item =>
         {
-            var canonical = Path.GetFullPath(info.FilePath);
             try
             {
-                var weights = await Task.Run(() => NnueFileFormat.LoadWeights(canonical)).ConfigureAwait(false);
+                var weights = await Task.Run(
+                    () => NnueFileFormat.LoadWeights(item.info.FilePath)).ConfigureAwait(false);
                 lock (modelsLock)
                 {
-                    if (models.ContainsKey(id))
-                    {
-                        weightsCache[canonical] = weights;
-                        anyLoaded = true;
-                    }
+                    if (models.ContainsKey(item.id))
+                        weightsCache[item.info.FilePath] = weights;
                 }
+                return true;
             }
             catch (Exception ex)
             {
-                Trace.TraceWarning($"自動載入 NNUE 模型失敗（{info.FileName}）：{ex.Message}");
+                Trace.TraceWarning($"自動載入 NNUE 模型失敗（{item.info.FileName}）：{ex.Message}");
+                return false;
             }
-        }
+        });
 
-        if (anyLoaded)
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+        if (Array.Exists(results, r => r))
             ModelsChanged?.Invoke();
     }
 }

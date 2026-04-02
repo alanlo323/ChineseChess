@@ -166,9 +166,7 @@ public sealed class LoadedNnueModelItemViewModel : ObservableObject
         private set => SetProperty(ref loadedAt, value);
     }
 
-    public string DisplayName => string.IsNullOrEmpty(Description)
-        ? FileName
-        : $"{FileName}（{Description}）";
+    public string DisplayName => registry.GetModelInfo(ModelId)?.DisplayName ?? FileName;
 
     public bool IsWeightsLoaded => registry.IsModelLoaded(ModelId);
 

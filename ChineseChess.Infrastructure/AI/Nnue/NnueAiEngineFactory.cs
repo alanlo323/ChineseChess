@@ -42,7 +42,7 @@ public sealed class NnueAiEngineFactory : IAiEngineFactory
         // 優先使用 Registry 的共享權重（相同 .nnue 檔只佔一份 ~17MB 記憶體）
         if (!string.IsNullOrEmpty(config.ModelId) && nnueModelRegistry != null)
         {
-            var weights  = nnueModelRegistry.GetWeights(config.ModelId);
+            var weights       = nnueModelRegistry.GetWeights(config.ModelId);
             var modelInfoData = nnueModelRegistry.GetModelInfo(config.ModelId);
             if (weights != null && modelInfoData != null)
             {
@@ -53,9 +53,7 @@ public sealed class NnueAiEngineFactory : IAiEngineFactory
                     FileSizeBytes = modelInfoData.FileSizeBytes,
                     LoadedAt      = modelInfoData.LoadedAt,
                 });
-                var evaluator2   = new CompositeEvaluator(network);
-                var searchEngine2 = new SearchEngine(gameSettings, evaluator2);
-                return new OpeningBookEngineDecorator(searchEngine2, openingBook, openingBookSettings);
+                return WrapNetwork(network);
             }
         }
 
@@ -64,17 +62,21 @@ public sealed class NnueAiEngineFactory : IAiEngineFactory
             System.Diagnostics.Trace.TraceWarning(
                 $"NnueAiEngineFactory: ModelId={config.ModelId} 的 weights 未就緒，退化到讀檔路徑");
         await network.LoadFromFileAsync(config.ModelFilePath, ct).ConfigureAwait(false);
-
-        var evaluator   = new CompositeEvaluator(network);
-        var searchEngine = new SearchEngine(gameSettings, evaluator);
-        return new OpeningBookEngineDecorator(searchEngine, openingBook, openingBookSettings);
+        return WrapNetwork(network);
     }
 
     /// <inheritdoc/>
     public IAiEngine CreateWithHandcrafted()
-    {
-        var evaluator    = new HandcraftedEvaluator();
-        var searchEngine = new SearchEngine(gameSettings, evaluator);
-        return new OpeningBookEngineDecorator(searchEngine, openingBook, openingBookSettings);
-    }
+        => WrapEvaluator(new HandcraftedEvaluator());
+
+    // ── 私有輔助 ──────────────────────────────────────────────────────────
+
+    private IAiEngine WrapNetwork(NnueNetwork network)
+        => WrapEvaluator(new CompositeEvaluator(network));
+
+    private IAiEngine WrapEvaluator(IEvaluator evaluator)
+        => new OpeningBookEngineDecorator(
+            new SearchEngine(gameSettings, evaluator),
+            openingBook,
+            openingBookSettings);
 }
