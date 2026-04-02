@@ -23,6 +23,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     private readonly IGameService gameService;
     private readonly IEngineProvider engineProvider;
     private readonly ILoadedEngineRegistry registry;
+    private readonly ILoadedNnueModelRegistry nnueRegistry;
     private readonly IAiEngineFactory? engineFactory;
 
     // ─── 引擎類型 ─────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     // ─── 內部引擎設定 ──────────────────────────────────────────────────────
     private int searchDepth = 6;
     private InternalEvaluatorType evaluatorType = InternalEvaluatorType.Handcrafted;
-    private string nnueModelPath = string.Empty;
+    private string? selectedNnueModelId;
 
     // ─── 外部引擎設定（從 Registry 選取）─────────────────────────────────
     private string? selectedEngineId;
@@ -64,26 +65,28 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         IGameService gameService,
         IEngineProvider engineProvider,
         ILoadedEngineRegistry loadedEngineRegistry,
+        ILoadedNnueModelRegistry loadedNnueModelRegistry,
         IAiEngineFactory? engineFactory = null)
     {
         Color = color;
-        this.gameService = gameService ?? throw new ArgumentNullException(nameof(gameService));
-        this.engineProvider = engineProvider ?? throw new ArgumentNullException(nameof(engineProvider));
-        this.registry = loadedEngineRegistry ?? throw new ArgumentNullException(nameof(loadedEngineRegistry));
-        this.engineFactory = engineFactory;
+        this.gameService   = gameService            ?? throw new ArgumentNullException(nameof(gameService));
+        this.engineProvider = engineProvider         ?? throw new ArgumentNullException(nameof(engineProvider));
+        this.registry       = loadedEngineRegistry   ?? throw new ArgumentNullException(nameof(loadedEngineRegistry));
+        this.nnueRegistry   = loadedNnueModelRegistry ?? throw new ArgumentNullException(nameof(loadedNnueModelRegistry));
+        this.engineFactory  = engineFactory;
 
-        ApplyEngineCommand    = new AsyncRelayCommand(async _ => await ApplyEngineAsync());
+        ApplyEngineCommand      = new AsyncRelayCommand(async _ => await ApplyEngineAsync());
         DisconnectEngineCommand = new RelayCommand(_ => DisconnectEngine());
-        BrowseNnueModelCommand = new RelayCommand(_ => BrowseNnueModel());
-        ApplyPikafishCommand = new AsyncRelayCommand(async _ =>
+        ApplyPikafishCommand    = new AsyncRelayCommand(async _ =>
         {
             await ApplyPikafishSettingsAsync();
             SettingsChanged?.Invoke();
         });
-        ClearHashCommand = new AsyncRelayCommand(async _ => await ClearHashAsync());
+        ClearHashCommand      = new AsyncRelayCommand(async _ => await ClearHashAsync());
         BrowseEvalFileCommand = new RelayCommand(_ => BrowseEvalFile());
 
-        registry.EnginesChanged += OnRegistryEnginesChanged;
+        registry.EnginesChanged       += OnRegistryEnginesChanged;
+        nnueRegistry.ModelsChanged    += OnNnueModelsChanged;
     }
 
     // ─── 唯讀識別 ─────────────────────────────────────────────────────────
@@ -153,22 +156,21 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     public IEnumerable<InternalEvaluatorType> EvaluatorTypes => Enum.GetValues<InternalEvaluatorType>();
 
-    // ─── 內部引擎：NNUE 模型路徑 ──────────────────────────────────────────
+    // ─── 內部引擎：NNUE 模型選取（從已載入列表 ComboBox 選取）────────────
 
-    public string NnueModelPath
+    public IReadOnlyList<LoadedNnueModelInfo> AvailableNnueModels => nnueRegistry.Models;
+
+    public bool HasNoNnueModels => nnueRegistry.Models.Count == 0;
+
+    public string? SelectedNnueModelId
     {
-        get => nnueModelPath;
+        get => selectedNnueModelId;
         set
         {
-            if (SetProperty(ref nnueModelPath, value))
-            {
-                OnPropertyChanged(nameof(NnueModelFileExists));
+            if (SetProperty(ref selectedNnueModelId, value))
                 SettingsChanged?.Invoke();
-            }
         }
     }
-
-    public bool NnueModelFileExists => !string.IsNullOrEmpty(nnueModelPath) && File.Exists(nnueModelPath);
 
     // ─── 外部引擎：從 Registry 選取 ──────────────────────────────────────
 
@@ -341,7 +343,6 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     public ICommand ApplyEngineCommand { get; }
     public ICommand DisconnectEngineCommand { get; }
-    public ICommand BrowseNnueModelCommand { get; }
     public ICommand ApplyPikafishCommand { get; }
     public ICommand ClearHashCommand { get; }
     public ICommand BrowseEvalFileCommand { get; }
@@ -406,12 +407,11 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
     {
         bool isRed = Color == PieceColor.Red;
 
-        // 還原引擎類型、搜索深度、時間、評估器、NNUE 路徑
-        engineType         = isRed ? saved.RedAiEngineType    : saved.BlackAiEngineType;
-        searchDepth        = isRed ? saved.RedSearchDepth     : saved.BlackSearchDepth;
-        searchTimeSeconds  = isRed ? saved.RedSearchTimeSeconds : saved.BlackSearchTimeSeconds;
-        evaluatorType      = isRed ? saved.RedEvaluatorType   : saved.BlackEvaluatorType;
-        nnueModelPath      = isRed ? saved.RedNnueModelPath   : saved.BlackNnueModelPath;
+        // 還原引擎類型、搜索深度、時間、評估器
+        engineType        = isRed ? saved.RedAiEngineType      : saved.BlackAiEngineType;
+        searchDepth       = isRed ? saved.RedSearchDepth       : saved.BlackSearchDepth;
+        searchTimeSeconds = isRed ? saved.RedSearchTimeSeconds : saved.BlackSearchTimeSeconds;
+        evaluatorType     = isRed ? saved.RedEvaluatorType     : saved.BlackEvaluatorType;
 
         // 還原選取的引擎 ID（新版）
         selectedEngineId = isRed ? saved.RedEngineId : saved.BlackEngineId;
@@ -425,6 +425,22 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
                 selectedEngineId = registry.Engines
                     .FirstOrDefault(e => string.Equals(
                         e.ExecutablePath, legacyPath, StringComparison.OrdinalIgnoreCase))
+                    ?.Id;
+            }
+        }
+
+        // 還原 NNUE 模型 ID（新版）
+        selectedNnueModelId = isRed ? saved.RedNnueModelId : saved.BlackNnueModelId;
+
+        // 向後相容：舊版只有路徑，嘗試在 NNUE Registry 中比對
+        if (selectedNnueModelId == null)
+        {
+            var legacyNnuePath = isRed ? saved.RedNnueModelPath : saved.BlackNnueModelPath;
+            if (!string.IsNullOrEmpty(legacyNnuePath))
+            {
+                selectedNnueModelId = nnueRegistry.Models
+                    .FirstOrDefault(m => string.Equals(
+                        m.FilePath, legacyNnuePath, StringComparison.OrdinalIgnoreCase))
                     ?.Id;
             }
         }
@@ -445,13 +461,16 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         // 向後相容：同步寫入路徑欄位，方便舊版 code 讀取（新版優先讀 RedEngineId）
         var engineInfo = selectedEngineId != null ? registry.GetEngineInfo(selectedEngineId) : null;
 
+        var nnueInfo = selectedNnueModelId != null ? nnueRegistry.GetModelInfo(selectedNnueModelId) : null;
+
         if (isRed)
         {
             target.RedAiEngineType       = engineType;
             target.RedSearchDepth        = searchDepth;
             target.RedSearchTimeSeconds  = searchTimeSeconds;
             target.RedEvaluatorType      = evaluatorType;
-            target.RedNnueModelPath      = nnueModelPath;
+            target.RedNnueModelPath      = nnueInfo?.FilePath ?? string.Empty;
+            target.RedNnueModelId        = selectedNnueModelId;
             target.UseRedExternalEngine  = useExternal;
             target.RedEngineId           = selectedEngineId;
             target.RedEnginePath         = engineInfo?.ExecutablePath ?? string.Empty;
@@ -464,7 +483,8 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
             target.BlackSearchDepth       = searchDepth;
             target.BlackSearchTimeSeconds = searchTimeSeconds;
             target.BlackEvaluatorType     = evaluatorType;
-            target.BlackNnueModelPath     = nnueModelPath;
+            target.BlackNnueModelPath     = nnueInfo?.FilePath ?? string.Empty;
+            target.BlackNnueModelId       = selectedNnueModelId;
             target.UseBlackExternalEngine = useExternal;
             target.BlackEngineId          = selectedEngineId;
             target.BlackEnginePath        = engineInfo?.ExecutablePath ?? string.Empty;
@@ -593,15 +613,19 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
         await adapter.SendButtonOptionAsync("Clear Hash");
     }
 
-    private void BrowseNnueModel()
+    private void OnNnueModelsChanged()
     {
-        var dialog = new OpenFileDialog
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            Title  = $"選取{DisplayName} NNUE 模型檔",
-            Filter = "NNUE 模型 (*.nnue)|*.nnue|所有檔案|*.*",
-        };
-        if (dialog.ShowDialog() == true)
-            NnueModelPath = dialog.FileName;
+            if (selectedNnueModelId != null && nnueRegistry.GetModelInfo(selectedNnueModelId) == null)
+            {
+                selectedNnueModelId = null;
+                SettingsChanged?.Invoke();
+                OnPropertyChanged(nameof(SelectedNnueModelId));
+            }
+            OnPropertyChanged(nameof(AvailableNnueModels));
+            OnPropertyChanged(nameof(HasNoNnueModels));
+        });
     }
 
     private void BrowseEvalFile()
@@ -677,16 +701,17 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     public NnueEngineConfig? BuildNnueConfig()
     {
-        if (engineType != AiEngineType.Internal)
-            return null;
-        if (evaluatorType != InternalEvaluatorType.Nnue)
-            return null;
-        if (string.IsNullOrEmpty(nnueModelPath) || !File.Exists(nnueModelPath))
-            return null;
+        if (engineType != AiEngineType.Internal) return null;
+        if (evaluatorType != InternalEvaluatorType.Nnue) return null;
+        if (string.IsNullOrEmpty(selectedNnueModelId)) return null;
+
+        var info = nnueRegistry.GetModelInfo(selectedNnueModelId);
+        if (info == null) return null;
 
         return new NnueEngineConfig
         {
-            ModelFilePath  = nnueModelPath,
+            ModelId        = selectedNnueModelId,
+            ModelFilePath  = info.FilePath,
             EvaluationMode = NnueEvaluationMode.Composite,
         };
     }
@@ -695,7 +720,8 @@ public sealed class AiPlayerSettingsViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        registry.EnginesChanged -= OnRegistryEnginesChanged;
+        registry.EnginesChanged    -= OnRegistryEnginesChanged;
+        nnueRegistry.ModelsChanged -= OnNnueModelsChanged;
         adapter = null;  // adapter 由 Registry 管理，不在此 Dispose
     }
 }

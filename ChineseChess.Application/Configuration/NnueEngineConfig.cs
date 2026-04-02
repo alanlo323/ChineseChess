@@ -7,8 +7,11 @@ namespace ChineseChess.Application.Configuration;
 /// </summary>
 public class NnueEngineConfig
 {
-    /// <summary>.nnue 模型檔路徑。</summary>
+    /// <summary>.nnue 模型檔路徑（直接指定路徑；ModelId 優先）。</summary>
     public string ModelFilePath { get; init; } = string.Empty;
+
+    /// <summary>從已載入模型 Registry 選取的模型 ID（優先使用，可共享記憶體中的權重）。</summary>
+    public string? ModelId { get; init; }
 
     /// <summary>評估模式。</summary>
     public NnueEvaluationMode EvaluationMode { get; init; } = NnueEvaluationMode.Composite;

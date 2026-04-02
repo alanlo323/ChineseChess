@@ -61,6 +61,17 @@ public sealed class NnueNetwork : INnueNetwork
         weights = loaded;
     }
 
+    /// <summary>
+    /// 從已快取的 NnueWeights 物件直接設定（不重新讀檔）。
+    /// 供 LoadedNnueModelRegistry 共享權重時使用，節省重複載入 ~17MB 記憶體。
+    /// </summary>
+    public void LoadFromWeights(NnueWeights sharedWeights, NnueModelInfo info)
+    {
+        // 先設定 modelInfo 再設定 weights，確保讀端在看到 weights != null 時 ModelInfo 已就緒
+        modelInfo = info;
+        weights   = sharedWeights;
+    }
+
     public void Unload()
     {
         weights   = null;

@@ -12,9 +12,24 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="0,8">
 
+            <!-- ─── NNUE 模型管理 ────────────────────────────────────── -->
+            <Expander Header="NNUE 模型管理"
+                      IsExpanded="True"
+                      Foreground="{StaticResource InkBrush}"
+                      Margin="0,0,0,8">
+                <Border Margin="0,4,0,0"
+                        BorderBrush="{StaticResource WoodDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Background="{StaticResource PanelBackgroundBrush}"
+                        Padding="8,6">
+                    <views:LoadedNnueModelListView DataContext="{Binding LoadedNnueModelList}" />
+                </Border>
+            </Expander>
+
             <!-- ─── 外部引擎管理 ─────────────────────────────────────── -->
             <Expander Header="外部引擎管理"
-                      IsExpanded="True"
+                      IsExpanded="False"
                       Foreground="{StaticResource InkBrush}"
                       Margin="0,0,0,8">
                 <Border Margin="0,4,0,0"
@@ -28,8 +43,8 @@
             </Expander>
             <Separator Margin="0,0,0,8" />
 
-            <!-- ─── 模型狀態 ──────────────────────────────────────────── -->
-            <TextBlock Text="NNUE 模型"
+            <!-- ─── 全域 NNUE 模型選取 ──────────────────────────────── -->
+            <TextBlock Text="全域 NNUE 模型"
                        Style="{StaticResource SectionTitleStyle}"
                        Margin="0,0,0,6" />
 
@@ -37,35 +52,35 @@
             <TextBlock Text="{Binding StatusMessage}"
                        Foreground="{StaticResource InkBrush}"
                        FontStyle="Italic"
-                       Margin="0,0,0,8"
+                       Margin="0,0,0,6"
                        TextWrapping="Wrap" />
 
-            <!-- 模型路徑 -->
+            <!-- 模型選取 ComboBox -->
             <Grid Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0"
-                         Text="{Binding ModelPath, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="NNUE 模型檔路徑（.nnue）" />
+                <ComboBox Grid.Column="0"
+                          ItemsSource="{Binding AvailableModels}"
+                          SelectedValue="{Binding SelectedGlobalModelId}"
+                          SelectedValuePath="Id"
+                          DisplayMemberPath="DisplayName"
+                          Style="{StaticResource InputControlStyle}"
+                          ToolTip="從已載入模型列表選取全域 NNUE 模型" />
                 <Button Grid.Column="1"
-                        Content="瀏覽…"
-                        Command="{Binding BrowseModelCommand}"
+                        Content="卸載"
+                        Command="{Binding UnloadModelCommand}"
                         Style="{StaticResource ActionButtonStyle}"
                         Margin="4,0,0,0" />
             </Grid>
 
-            <!-- 載入 / 卸載按鈕 -->
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                <Button Content="載入模型"
-                        Command="{Binding LoadModelCommand}"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Margin="0,0,6,0" />
-                <Button Content="卸載模型"
-                        Command="{Binding UnloadModelCommand}"
-                        Style="{StaticResource ActionButtonStyle}" />
-            </StackPanel>
+            <!-- 無可用模型提示 -->
+            <TextBlock Text="請先於上方「NNUE 模型管理」新增 .nnue 模型"
+                       FontSize="11"
+                       Foreground="#C0392B"
+                       Margin="0,0,0,8"
+                       Visibility="{Binding HasNoModels, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <!-- ─── 模型資訊（已載入時顯示）─────────────────────────── -->
             <GroupBox Header="模型資訊"

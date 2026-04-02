@@ -26,6 +26,7 @@ public class CompositeEvaluatorTests
         public NnueWeights? Weights => null;
         public Task LoadFromFileAsync(string filePath, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+        public void LoadFromWeights(NnueWeights sharedWeights, NnueModelInfo info) { }
         public void Unload() { }
         public int Evaluate(IBoard board, NnueAccumulator accumulator)
             => throw new InvalidOperationException("NNUE 未載入，不應呼叫 Evaluate");

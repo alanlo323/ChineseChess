@@ -99,27 +99,20 @@
                     </ComboBox>
                 </Grid>
 
-                <!-- NNUE 模型路徑（EvaluatorType == Nnue 時顯示） -->
+                <!-- NNUE 模型選取（EvaluatorType == Nnue 時顯示） -->
                 <StackPanel Visibility="{Binding IsNnueEvaluator, Converter={StaticResource BooleanToVisibilityConverter}}"
                             Margin="16,0,0,4">
-                    <Grid Margin="0,0,0,4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0"
-                                 Text="{Binding NnueModelPath, UpdateSourceTrigger=PropertyChanged}"
-                                 Margin="0,0,6,0" />
-                        <Button Grid.Column="1"
-                                Content="瀏覽..."
-                                Command="{Binding BrowseNnueModelCommand}"
-                                Style="{StaticResource CompactButtonStyle}"
-                                Width="50" />
-                    </Grid>
-                    <TextBlock Text="模型檔不存在"
+                    <ComboBox ItemsSource="{Binding AvailableNnueModels}"
+                              SelectedValue="{Binding SelectedNnueModelId}"
+                              SelectedValuePath="Id"
+                              DisplayMemberPath="DisplayName"
+                              Style="{StaticResource InputControlStyle}"
+                              Margin="0,0,0,4"
+                              ToolTip="從已載入模型列表選取" />
+                    <TextBlock Text="尚無可用模型，請至 NNUE Tab 載入 .nnue 模型"
                                Foreground="#C0392B"
                                FontSize="11"
-                               Visibility="{Binding NnueModelFileExists, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                               Visibility="{Binding HasNoNnueModels, Converter={StaticResource BooleanToVisibilityConverter}}"
                                Margin="0,0,0,2" />
                 </StackPanel>
 

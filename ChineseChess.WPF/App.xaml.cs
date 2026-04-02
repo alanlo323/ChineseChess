@@ -83,12 +83,23 @@ public partial class App : System.Windows.Application
             new ChessEngineServer(sp.GetRequiredService<SearchEngine>()));
         services.AddSingleton<IUserSettingsService, JsonUserSettingsService>();
 
+        // 已載入 NNUE 模型的持久化服務與 Registry
+        services.AddSingleton<ILoadedNnueModelListSettingsService, JsonLoadedNnueModelListSettingsService>();
+        services.AddSingleton<LoadedNnueModelRegistry>(sp =>
+            new LoadedNnueModelRegistry(
+                sp.GetRequiredService<ILoadedNnueModelListSettingsService>()));
+        services.AddSingleton<ILoadedNnueModelRegistry>(sp =>
+            sp.GetRequiredService<LoadedNnueModelRegistry>());
+        services.AddSingleton<LoadedNnueModelListViewModel>(sp =>
+            new LoadedNnueModelListViewModel(sp.GetRequiredService<ILoadedNnueModelRegistry>()));
+
         // NNUE 引擎工廠（Infrastructure → Application 介面的橋接）
         services.AddSingleton<IAiEngineFactory>(sp =>
             new NnueAiEngineFactory(
                 sp.GetRequiredService<GameSettings>(),
                 sp.GetRequiredService<IOpeningBook>(),
-                sp.GetRequiredService<OpeningBookSettings>()));
+                sp.GetRequiredService<OpeningBookSettings>(),
+                sp.GetRequiredService<LoadedNnueModelRegistry>()));
 
         // 應用層（Application）
         services.AddSingleton<IEngineProvider>(sp =>
@@ -135,7 +146,9 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<INnueSettingsService>(),
                 sp.GetRequiredService<IEngineProvider>(),
                 new Lazy<NnueTrainingViewModel>(() => sp.GetRequiredService<NnueTrainingViewModel>()),
-                sp.GetRequiredService<LoadedEngineListViewModel>()));
+                sp.GetRequiredService<LoadedEngineListViewModel>(),
+                sp.GetRequiredService<LoadedNnueModelListViewModel>(),
+                sp.GetRequiredService<LoadedNnueModelRegistry>()));
         services.AddSingleton<EndgameTablebViewModel>(sp =>
             new EndgameTablebViewModel(
                 sp.GetRequiredService<ITablebaseService>(),
@@ -159,11 +172,12 @@ public partial class App : System.Windows.Application
             var engineProvider = sp.GetRequiredService<IEngineProvider>();
             var engineFactory  = sp.GetRequiredService<IAiEngineFactory>();
             var registry       = sp.GetRequiredService<ILoadedEngineRegistry>();
+            var nnueRegistry   = sp.GetRequiredService<ILoadedNnueModelRegistry>();
             return new AiPlayerSettingsHolder(
                 new AiPlayerSettingsViewModel(
-                    Domain.Enums.PieceColor.Red, gameService, engineProvider, registry, engineFactory),
+                    Domain.Enums.PieceColor.Red, gameService, engineProvider, registry, nnueRegistry, engineFactory),
                 new AiPlayerSettingsViewModel(
-                    Domain.Enums.PieceColor.Black, gameService, engineProvider, registry, engineFactory));
+                    Domain.Enums.PieceColor.Black, gameService, engineProvider, registry, nnueRegistry, engineFactory));
         });
 
         services.AddTransient<ControlPanelViewModel>(sp =>

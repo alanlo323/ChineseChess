@@ -24,6 +24,9 @@ public interface INnueNetwork
     /// <exception cref="FileNotFoundException">檔案不存在。</exception>
     Task LoadFromFileAsync(string filePath, CancellationToken cancellationToken = default);
 
+    /// <summary>從已快取的 NnueWeights 物件直接設定（不重新讀檔，共享記憶體）。</summary>
+    void LoadFromWeights(NnueWeights sharedWeights, NnueModelInfo info);
+
     /// <summary>卸載目前模型，釋放佔用記憶體。</summary>
     void Unload();
 

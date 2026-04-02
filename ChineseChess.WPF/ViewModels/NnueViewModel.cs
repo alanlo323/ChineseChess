@@ -1,20 +1,20 @@
 using ChineseChess.Application.Configuration;
 using ChineseChess.Application.Interfaces;
+using ChineseChess.Infrastructure.AI.Nnue;
 using ChineseChess.Infrastructure.AI.Nnue.Network;
 using ChineseChess.WPF.Core;
-using Microsoft.Win32;
-using System.IO;
 using System.Windows.Input;
 
 namespace ChineseChess.WPF.ViewModels;
 
 /// <summary>
 /// NNUE 設定頁 ViewModel：
-///   - 全域模型載入 / 卸載（PlayerVsAI 及 AIvsAI 共用模式）
+///   - 全域模型從已載入列表以 ComboBox 選取（取代舊版路徑 TextBox + 載入按鈕）
 ///   - 顯示模型元數據（路徑、大小、描述）
 ///   - 評估模式切換
 ///   - AIvsAI 每方獨立 NNUE 設定（UsePerPlayerNnue）
-///   - 本機訓練面板（Training）
+///   - 外部引擎管理（LoadedEngineList）
+///   - NNUE 模型管理（LoadedNnueModelList）
 ///   - 設定持久化（nnue-user-settings.json）
 /// </summary>
 public sealed class NnueViewModel : ObservableObject
@@ -22,11 +22,11 @@ public sealed class NnueViewModel : ObservableObject
     private readonly INnueNetwork network;
     private readonly INnueSettingsService settingsService;
     private readonly IEngineProvider engineProvider;
+    private readonly LoadedNnueModelRegistry nnueModelRegistry;
     private readonly Lazy<NnueTrainingViewModel> lazyTraining;
 
-    private string modelPath     = string.Empty;
+    private string? selectedGlobalModelId;
     private string statusMessage = "尚未載入模型";
-    private bool isLoading;
     private NnueEvaluationMode evaluationMode = NnueEvaluationMode.Composite;
     private bool usePerPlayerNnue;
     private string perPlayerStatusMessage = string.Empty;
@@ -37,53 +37,60 @@ public sealed class NnueViewModel : ObservableObject
         INnueSettingsService settingsService,
         IEngineProvider engineProvider,
         Lazy<NnueTrainingViewModel> lazyTraining,
-        LoadedEngineListViewModel loadedEngineList)
+        LoadedEngineListViewModel loadedEngineList,
+        LoadedNnueModelListViewModel loadedNnueModelList,
+        LoadedNnueModelRegistry nnueModelRegistry)
     {
-        this.network         = network;
-        this.settingsService = settingsService;
-        this.engineProvider  = engineProvider;
-        this.lazyTraining    = lazyTraining;
-        LoadedEngineList     = loadedEngineList ?? throw new ArgumentNullException(nameof(loadedEngineList));
+        this.network           = network;
+        this.settingsService   = settingsService;
+        this.engineProvider    = engineProvider;
+        this.nnueModelRegistry = nnueModelRegistry;
+        this.lazyTraining      = lazyTraining;
+        LoadedEngineList     = loadedEngineList    ?? throw new ArgumentNullException(nameof(loadedEngineList));
+        LoadedNnueModelList  = loadedNnueModelList ?? throw new ArgumentNullException(nameof(loadedNnueModelList));
 
-        RedPlayer   = new NnuePlayerViewModel();
-        BlackPlayer = new NnuePlayerViewModel();
+        RedPlayer   = new NnuePlayerViewModel(nnueModelRegistry);
+        BlackPlayer = new NnuePlayerViewModel(nnueModelRegistry);
 
-        // 載入已儲存設定
         var saved = settingsService.LoadNnueSettings();
-        modelPath      = saved.ModelFilePath;
-        evaluationMode = saved.EvaluationMode;
-        usePerPlayerNnue = saved.UsePerPlayerNnue;
+        evaluationMode       = saved.EvaluationMode;
+        usePerPlayerNnue     = saved.UsePerPlayerNnue;
+        selectedGlobalModelId = saved.SelectedModelId;
         RedPlayer.LoadFrom(saved.RedPlayerSettings);
         BlackPlayer.LoadFrom(saved.BlackPlayerSettings);
 
-        BrowseModelCommand             = new RelayCommand(_ => BrowseModel());
-        LoadModelCommand               = new RelayCommand(_ => _ = LoadModelAsync(), _ => !isLoading && File.Exists(ModelPath));
-        UnloadModelCommand             = new RelayCommand(_ => UnloadModel(), _ => network.IsLoaded);
-        ApplyPerPlayerSettingsCommand  = new RelayCommand(_ => _ = ApplyPerPlayerSettingsAsync(), _ => !isApplyingPerPlayer);
+        UnloadModelCommand            = new RelayCommand(_ => UnloadModel(), _ => network.IsLoaded);
+        ApplyPerPlayerSettingsCommand = new RelayCommand(_ => _ = ApplyPerPlayerSettingsAsync(), _ => !isApplyingPerPlayer);
 
-        // 若上次已設定模型路徑且模式非停用，啟動時自動嘗試載入全域模型
-        if (!string.IsNullOrEmpty(modelPath)
-            && File.Exists(modelPath)
+        nnueModelRegistry.ModelsChanged += OnModelsChanged;
+
+        // 若上次已選取模型，啟動時自動套用至全域 network
+        if (!string.IsNullOrEmpty(selectedGlobalModelId)
             && evaluationMode != NnueEvaluationMode.Disabled)
         {
             _ = TryAutoLoadModelAsync();
         }
 
-        // 若上次已啟用每方獨立設定，啟動時自動套用
         if (usePerPlayerNnue)
             _ = AutoApplyPerPlayerAsync();
     }
 
     // ── 全域 NNUE 屬性 ───────────────────────────────────────────────
 
-    public string ModelPath
+    /// <summary>可選的已載入模型列表（全域 ComboBox 資料來源）。</summary>
+    public IReadOnlyList<LoadedNnueModelInfo> AvailableModels => nnueModelRegistry.Models;
+
+    public bool HasNoModels => nnueModelRegistry.Models.Count == 0;
+
+    /// <summary>全域模型選取（ComboBox SelectedValue）。選取時立即套用至全域 INnueNetwork。</summary>
+    public string? SelectedGlobalModelId
     {
-        get => modelPath;
+        get => selectedGlobalModelId;
         set
         {
-            if (SetProperty(ref modelPath, value))
+            if (SetProperty(ref selectedGlobalModelId, value))
             {
-                OnPropertyChanged(nameof(CanLoad));
+                _ = ApplyGlobalModelAsync(value);
                 SaveSettings();
             }
         }
@@ -95,8 +102,7 @@ public sealed class NnueViewModel : ObservableObject
         private set => SetProperty(ref statusMessage, value);
     }
 
-    public bool IsLoaded       => network.IsLoaded;
-    public bool CanLoad        => !isLoading && File.Exists(ModelPath);
+    public bool IsLoaded  => network.IsLoaded;
 
     public NnueModelInfo? ModelInfo => network.ModelInfo;
 
@@ -119,7 +125,6 @@ public sealed class NnueViewModel : ObservableObject
 
     // ── 每方獨立 NNUE 屬性 ───────────────────────────────────────────
 
-    /// <summary>是否啟用 AIvsAI 每方獨立 NNUE 設定。</summary>
     public bool UsePerPlayerNnue
     {
         get => usePerPlayerNnue;
@@ -140,11 +145,13 @@ public sealed class NnueViewModel : ObservableObject
     public NnuePlayerViewModel RedPlayer   { get; }
     public NnuePlayerViewModel BlackPlayer { get; }
 
-    /// <summary>引擎管理面板 ViewModel（在 NNUE Tab 上方顯示）。</summary>
+    /// <summary>外部引擎管理面板（在 NNUE Tab 顯示）。</summary>
     public LoadedEngineListViewModel LoadedEngineList { get; }
 
-    /// <summary>本機訓練面板 ViewModel（首次存取時才建立，避免預先配置記憶體）。</summary>
-    public NnueTrainingViewModel Training  => lazyTraining.Value;
+    /// <summary>NNUE 模型管理面板（在 NNUE Tab 顯示）。</summary>
+    public LoadedNnueModelListViewModel LoadedNnueModelList { get; }
+
+    public NnueTrainingViewModel Training => lazyTraining.Value;
 
     public string PerPlayerStatusMessage
     {
@@ -154,91 +161,114 @@ public sealed class NnueViewModel : ObservableObject
 
     // ── 指令 ─────────────────────────────────────────────────────────
 
-    public ICommand BrowseModelCommand            { get; }
-    public ICommand LoadModelCommand              { get; }
     public ICommand UnloadModelCommand            { get; }
     public ICommand ApplyPerPlayerSettingsCommand { get; }
 
     // ── 私有邏輯（全域模型） ─────────────────────────────────────────
 
-    private void BrowseModel()
+    private async Task ApplyGlobalModelAsync(string? modelId)
     {
-        var dlg = new OpenFileDialog
+        if (string.IsNullOrEmpty(modelId))
         {
-            Title  = "選取 NNUE 模型檔",
-            Filter = "NNUE 模型 (*.nnue)|*.nnue|所有檔案|*.*",
-        };
-        if (dlg.ShowDialog() == true)
-            ModelPath = dlg.FileName;
-    }
-
-    private async Task LoadModelAsync()
-    {
-        if (!File.Exists(ModelPath))
-        {
-            StatusMessage = $"檔案不存在：{ModelPath}";
+            network.Unload();
+            StatusMessage = "模型已清除";
+            NotifyModelChanged();
             return;
         }
 
-        isLoading = true;
-        StatusMessage = "載入中…";
-        OnPropertyChanged(nameof(CanLoad));
+        // 優先使用已快取的 weights（不重新讀檔）
+        var weights  = nnueModelRegistry.GetWeights(modelId);
+        var modelData = nnueModelRegistry.GetModelInfo(modelId);
 
-        try
+        if (weights != null && modelData != null)
         {
-            await network.LoadFromFileAsync(ModelPath);
-            StatusMessage = $"已載入：{Path.GetFileName(ModelPath)}";
-            SaveSettings();
+            network.LoadFromWeights(weights, new NnueModelInfo
+            {
+                FilePath      = modelData.FilePath,
+                Description   = modelData.Description,
+                FileSizeBytes = modelData.FileSizeBytes,
+                LoadedAt      = modelData.LoadedAt,
+            });
+            StatusMessage = $"已套用：{modelData.DisplayName}";
         }
-        catch (Exception ex)
+        else if (modelData != null)
         {
-            StatusMessage = $"載入失敗：{ex.Message}";
+            // weights 尚未載入完成（registry 仍在背景載入中），改從檔案載入
+            StatusMessage = "載入中…";
+            try
+            {
+                await network.LoadFromFileAsync(modelData.FilePath);
+                StatusMessage = $"已載入：{modelData.DisplayName}";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"載入失敗：{ex.Message}";
+            }
         }
-        finally
+        else
         {
-            isLoading = false;
-            NotifyModelChanged();
+            StatusMessage = "找不到選取的模型";
         }
+
+        NotifyModelChanged();
     }
 
     private async Task TryAutoLoadModelAsync()
     {
-        isLoading = true;
-        StatusMessage = "自動載入中…";
-        OnPropertyChanged(nameof(CanLoad));
-
-        try
+        // 等待 registry 背景載入完成（最多重試幾次）
+        for (int retry = 0; retry < 5; retry++)
         {
-            await network.LoadFromFileAsync(modelPath);
-            StatusMessage = $"已自動載入：{Path.GetFileName(modelPath)}";
-            SaveSettings();
+            if (!string.IsNullOrEmpty(selectedGlobalModelId)
+                && nnueModelRegistry.IsModelLoaded(selectedGlobalModelId))
+            {
+                await ApplyGlobalModelAsync(selectedGlobalModelId);
+                return;
+            }
+            await Task.Delay(500);
         }
-        catch (Exception ex)
-        {
-            StatusMessage = $"自動載入失敗：{ex.Message}";
-        }
-        finally
-        {
-            isLoading = false;
-            NotifyModelChanged();
-        }
+        // 最後嘗試：即使 weights 未就緒也嘗試套用（會退化到讀檔）
+        if (!string.IsNullOrEmpty(selectedGlobalModelId))
+            await ApplyGlobalModelAsync(selectedGlobalModelId);
     }
 
     private void UnloadModel()
     {
         network.Unload();
+        selectedGlobalModelId = null;
+        OnPropertyChanged(nameof(SelectedGlobalModelId));
         StatusMessage = "模型已卸載";
+        SaveSettings();
         NotifyModelChanged();
     }
 
     private void NotifyModelChanged()
     {
         OnPropertyChanged(nameof(IsLoaded));
-        OnPropertyChanged(nameof(CanLoad));
         OnPropertyChanged(nameof(ModelInfo));
         OnPropertyChanged(nameof(ModelDescription));
         OnPropertyChanged(nameof(ModelFileSizeText));
         OnPropertyChanged(nameof(ModelLoadedAt));
+    }
+
+    private void OnModelsChanged()
+    {
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            // 若選取的全域模型已被移除
+            if (selectedGlobalModelId != null
+                && nnueModelRegistry.GetModelInfo(selectedGlobalModelId) == null)
+            {
+                selectedGlobalModelId = null;
+                network.Unload();
+                StatusMessage = "已選模型已被移除";
+                NotifyModelChanged();
+                OnPropertyChanged(nameof(SelectedGlobalModelId));
+                SaveSettings();
+            }
+
+            OnPropertyChanged(nameof(AvailableModels));
+            OnPropertyChanged(nameof(HasNoModels));
+        });
     }
 
     // ── 私有邏輯（每方獨立 NNUE） ────────────────────────────────────
@@ -256,8 +286,12 @@ public sealed class NnueViewModel : ObservableObject
 
             await engineProvider.ApplyPerPlayerNnueAsync(redConfig, blackConfig);
 
-            var redDesc   = redConfig   != null ? Path.GetFileName(redConfig.ModelFilePath)   : "手工評估";
-            var blackDesc = blackConfig != null ? Path.GetFileName(blackConfig.ModelFilePath) : "手工評估";
+            var redDesc   = redConfig   != null
+                ? (nnueModelRegistry.GetModelInfo(redConfig.ModelId ?? string.Empty)?.DisplayName ?? redConfig.ModelFilePath)
+                : "手工評估";
+            var blackDesc = blackConfig != null
+                ? (nnueModelRegistry.GetModelInfo(blackConfig.ModelId ?? string.Empty)?.DisplayName ?? blackConfig.ModelFilePath)
+                : "手工評估";
             PerPlayerStatusMessage = $"已套用：紅方={redDesc}，黑方={blackDesc}。下局起生效。";
             SaveSettings();
         }
@@ -281,10 +315,7 @@ public sealed class NnueViewModel : ObservableObject
             if (redConfig == null && blackConfig == null) return;
 
             await engineProvider.ApplyPerPlayerNnueAsync(redConfig, blackConfig);
-
-            var redDesc   = redConfig   != null ? Path.GetFileName(redConfig.ModelFilePath)   : "手工評估";
-            var blackDesc = blackConfig != null ? Path.GetFileName(blackConfig.ModelFilePath) : "手工評估";
-            PerPlayerStatusMessage = $"已自動套用：紅方={redDesc}，黑方={blackDesc}。";
+            PerPlayerStatusMessage = "已自動套用每方獨立設定。";
         }
         catch (Exception ex)
         {
@@ -297,7 +328,8 @@ public sealed class NnueViewModel : ObservableObject
         settingsService.SaveNnueSettings(new NnueSettings
         {
             IsEnabled        = network.IsLoaded,
-            ModelFilePath    = ModelPath,
+            SelectedModelId  = selectedGlobalModelId,
+            ModelFilePath    = network.ModelInfo?.FilePath ?? string.Empty,
             EvaluationMode   = EvaluationMode,
             UsePerPlayerNnue = usePerPlayerNnue,
             RedPlayerSettings   = usePerPlayerNnue ? RedPlayer.ToSettings()   : null,

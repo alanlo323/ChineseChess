@@ -46,4 +46,9 @@ public class ExternalEngineSettings
     // null = 尚未選取或使用舊版路徑方式（向後相容）
     public string? RedEngineId { get; set; } = null;
     public string? BlackEngineId { get; set; } = null;
+
+    // ─── 每方 NNUE 模型 ID（從已載入 NNUE 模型列表選取）─────────────────
+    // null = 尚未選取或使用舊版路徑方式（向後相容）
+    public string? RedNnueModelId { get; set; } = null;
+    public string? BlackNnueModelId { get; set; } = null;
 }

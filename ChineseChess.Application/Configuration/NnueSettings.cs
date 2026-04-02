@@ -8,8 +8,11 @@ public class NnueSettings
     /// <summary>是否啟用 NNUE 評估（若模型未載入則自動 fallback 至手工評估）。</summary>
     public bool IsEnabled { get; set; } = false;
 
-    /// <summary>上次成功載入的 .nnue 模型檔路徑（空字串表示未設定）。</summary>
+    /// <summary>上次成功載入的 .nnue 模型檔路徑（空字串表示未設定，向後相容用）。</summary>
     public string ModelFilePath { get; set; } = string.Empty;
+
+    /// <summary>從已載入模型 Registry 選取的全域模型 ID（null 表示未設定）。</summary>
+    public string? SelectedModelId { get; set; }
 
     /// <summary>評估模式。</summary>
     public NnueEvaluationMode EvaluationMode { get; set; } = NnueEvaluationMode.Composite;
