@@ -13,131 +13,19 @@
         <StackPanel Margin="0,8">
 
             <!-- ─── NNUE 模型管理 ────────────────────────────────────── -->
-            <Expander Header="NNUE 模型管理"
-                      IsExpanded="True"
-                      Foreground="{StaticResource InkBrush}"
-                      Margin="0,0,0,8">
-                <Border Margin="0,4,0,0"
-                        BorderBrush="{StaticResource WoodDarkBrush}"
-                        BorderThickness="1"
-                        CornerRadius="3"
-                        Background="{StaticResource PanelBackgroundBrush}"
-                        Padding="8,6">
-                    <views:LoadedNnueModelListView DataContext="{Binding LoadedNnueModelList}" />
-                </Border>
-            </Expander>
-
-            <Separator Margin="0,0,0,8" />
-
-            <!-- ─── 全域 NNUE 模型選取 ──────────────────────────────── -->
-            <TextBlock Text="全域 NNUE 模型"
+            <TextBlock Text="NNUE 模型管理"
                        Style="{StaticResource SectionTitleStyle}"
                        Margin="0,0,0,6" />
+            <Border BorderBrush="{StaticResource WoodDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Background="{StaticResource PanelBackgroundBrush}"
+                    Padding="8,6"
+                    Margin="0,0,0,8">
+                <views:LoadedNnueModelListView DataContext="{Binding LoadedNnueModelList}" />
+            </Border>
 
-            <!-- 狀態文字 -->
-            <TextBlock Text="{Binding StatusMessage}"
-                       Foreground="{StaticResource InkBrush}"
-                       FontStyle="Italic"
-                       Margin="0,0,0,6"
-                       TextWrapping="Wrap" />
-
-            <!-- 模型選取 ComboBox -->
-            <Grid Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ComboBox Grid.Column="0"
-                          ItemsSource="{Binding AvailableModels}"
-                          SelectedValue="{Binding SelectedGlobalModelId}"
-                          SelectedValuePath="Id"
-                          DisplayMemberPath="DisplayName"
-                          Style="{StaticResource InputControlStyle}"
-                          ToolTip="從已載入模型列表選取全域 NNUE 模型" />
-                <Button Grid.Column="1"
-                        Content="卸載"
-                        Command="{Binding UnloadModelCommand}"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Margin="4,0,0,0" />
-            </Grid>
-
-            <!-- 無可用模型提示 -->
-            <TextBlock Text="請先於上方「NNUE 模型管理」新增 .nnue 模型"
-                       FontSize="11"
-                       Foreground="#C0392B"
-                       Margin="0,0,0,8"
-                       Visibility="{Binding HasNoModels, Converter={StaticResource BooleanToVisibilityConverter}}" />
-
-            <!-- ─── 模型資訊（已載入時顯示）─────────────────────────── -->
-            <GroupBox Header="模型資訊"
-                      Visibility="{Binding IsLoaded, Converter={StaticResource BooleanToVisibilityConverter}}"
-                      Margin="0,0,0,8"
-                      Padding="8">
-                <StackPanel>
-                    <Grid Margin="0,0,0,2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="80" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="描述："
-                                   Style="{StaticResource FormLabelStyle}" />
-                        <TextBlock Grid.Column="1" Text="{Binding ModelDescription}"
-                                   Foreground="{StaticResource InkBrush}"
-                                   TextWrapping="Wrap" />
-                    </Grid>
-                    <Grid Margin="0,0,0,2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="80" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="大小："
-                                   Style="{StaticResource FormLabelStyle}" />
-                        <TextBlock Grid.Column="1" Text="{Binding ModelFileSizeText}"
-                                   Foreground="{StaticResource InkBrush}" />
-                    </Grid>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="80" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="載入時間："
-                                   Style="{StaticResource FormLabelStyle}" />
-                        <TextBlock Grid.Column="1" Text="{Binding ModelLoadedAt}"
-                                   Foreground="{StaticResource InkBrush}" />
-                    </Grid>
-                </StackPanel>
-            </GroupBox>
-
-            <!-- ─── 評估模式 ─────────────────────────────────────────── -->
-            <TextBlock Text="評估模式"
-                       Style="{StaticResource SectionTitleStyle}"
-                       Margin="0,4,0,6" />
-
-            <ComboBox ItemsSource="{Binding EvaluationModes}"
-                      SelectedItem="{Binding EvaluationMode}"
-                      Style="{StaticResource InputControlStyle}"
-                      Margin="0,0,0,4" />
-
-            <TextBlock Text="Composite：NNUE 已載入時使用 NNUE，否則自動退回手工評估"
-                       Foreground="{StaticResource InkBrush}"
-                       FontSize="11"
-                       TextWrapping="Wrap"
-                       Margin="0,0,0,2" />
-            <TextBlock Text="PureNnue：強制使用 NNUE（未載入時拋出例外）"
-                       Foreground="{StaticResource InkBrush}"
-                       FontSize="11"
-                       TextWrapping="Wrap"
-                       Margin="0,0,0,2" />
-            <TextBlock Text="Disabled：停用 NNUE，始終使用手工評估"
-                       Foreground="{StaticResource InkBrush}"
-                       FontSize="11"
-                       TextWrapping="Wrap"
-                       Margin="0,0,0,8" />
-
-            <TextBlock Text="每方獨立 NNUE 設定已移至「設定」頁的 AI 設定面板"
-                       Style="{StaticResource FormLabelStyle}"
-                       TextWrapping="Wrap"
-                       Margin="0,4,0,8" />
+            <Separator Margin="0,0,0,8" />
 
             <!-- ─── 本機訓練 ─────────────────────────────────────────── -->
             <views:NnueTrainingView DataContext="{Binding Training}" />

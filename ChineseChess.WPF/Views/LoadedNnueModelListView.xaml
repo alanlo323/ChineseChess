@@ -39,35 +39,22 @@
                  Margin="0,0,0,6">
             <ListBox.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:LoadedNnueModelItemViewModel}">
-                    <Grid Margin="2,4">
+                    <Grid Margin="2,3">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-
-                        <!-- 模型名稱 + 大小 -->
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding FileName}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource InkBrush}" />
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding FormattedFileSize}"
-                                           FontSize="11"
-                                           Foreground="{StaticResource InkMutedBrush}"
-                                           Margin="0,0,8,0" />
-                                <TextBlock Text="{Binding Description}"
-                                           FontSize="11"
-                                           Foreground="{StaticResource InkMutedBrush}" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- 卸載按鈕 -->
-                        <Button Grid.Column="2"
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding DisplayName}"
+                                   Foreground="{StaticResource InkBrush}"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Button Grid.Column="1"
                                 Content="移除"
                                 Command="{Binding RemoveCommand}"
                                 Style="{StaticResource CompactButtonStyle}"
-                                Width="40" />
+                                Width="40"
+                                Margin="6,0,0,0" />
                     </Grid>
                 </DataTemplate>
             </ListBox.ItemTemplate>
@@ -123,6 +110,19 @@
                                Style="{StaticResource FormLabelStyle}" />
                     <TextBlock Grid.Column="1"
                                Text="{Binding SelectedModel.FormattedFileSize}"
+                               Foreground="{StaticResource InkBrush}"
+                               FontSize="11" />
+                </Grid>
+
+                <Grid Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Elo："
+                               Style="{StaticResource FormLabelStyle}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding SelectedModel.EloText}"
                                Foreground="{StaticResource InkBrush}"
                                FontSize="11" />
                 </Grid>

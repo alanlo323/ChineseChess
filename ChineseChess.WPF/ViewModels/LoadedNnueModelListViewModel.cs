@@ -167,6 +167,7 @@ public sealed class LoadedNnueModelItemViewModel : ObservableObject
     }
 
     public string DisplayName => registry.GetModelInfo(ModelId)?.DisplayName ?? FileName;
+    public string EloText     => registry.GetModelInfo(ModelId)?.EloText ?? "?";
 
     public bool IsWeightsLoaded => registry.IsModelLoaded(ModelId);
 
@@ -184,6 +185,7 @@ public sealed class LoadedNnueModelItemViewModel : ObservableObject
         FormattedFileSize = info.FormattedFileSize;
         LoadedAt          = info.LoadedAt;
         OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(EloText));
         OnPropertyChanged(nameof(IsWeightsLoaded));
     }
 }

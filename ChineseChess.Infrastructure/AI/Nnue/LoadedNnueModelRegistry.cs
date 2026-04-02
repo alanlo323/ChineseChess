@@ -37,7 +37,12 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         {
             // 規範化路徑於載入時完成，後續操作無需再呼叫 Path.GetFullPath
             foreach (var info in saved.Models)
-                models[info.Id] = info with { FilePath = Path.GetFullPath(info.FilePath) };
+            {
+                var canonical = Path.GetFullPath(info.FilePath);
+                // 舊版儲存的記錄可能沒有 Elo，補齊解析
+                var elo = info.Elo ?? LoadedNnueModelInfo.ParseEloFromFileName(info.FileName);
+                models[info.Id] = info with { FilePath = canonical, Elo = elo };
+            }
         }
 
         // 背景預載所有已儲存模型的權重（disposeCts 用於 Dispose 時取消）
@@ -78,12 +83,14 @@ public sealed class LoadedNnueModelRegistry : ILoadedNnueModelRegistry, IDisposa
         // 在 Task.Run 內載入，避免阻塞 UI 執行緒
         var weights = await Task.Run(() => NnueFileFormat.LoadWeights(canonical), ct).ConfigureAwait(false);
 
+        var fileName = Path.GetFileName(canonical);
         var info = new LoadedNnueModelInfo
         {
             FilePath      = canonical,
-            FileName      = Path.GetFileName(canonical),
+            FileName      = fileName,
             Description   = weights.Description,
             FileSizeBytes = fileInfo.Length,
+            Elo           = LoadedNnueModelInfo.ParseEloFromFileName(fileName),
         };
 
         lock (modelsLock)

@@ -143,7 +143,6 @@ public partial class App : System.Windows.Application
 
         services.AddSingleton<NnueViewModel>(sp =>
             new NnueViewModel(
-                sp.GetRequiredService<INnueNetwork>(),
                 sp.GetRequiredService<INnueSettingsService>(),
                 sp.GetRequiredService<IEngineProvider>(),
                 new Lazy<NnueTrainingViewModel>(() => sp.GetRequiredService<NnueTrainingViewModel>()),
